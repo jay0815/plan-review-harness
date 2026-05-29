@@ -1,0 +1,24 @@
+package.json
+  14bd3cf55b9a827c 7-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "1df6f7c51d01addfd667d2f98700812abf2b6a6b",
+  "prompts": {
+    "14bd3cf55b9a827c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e6dff-dc8b-74b3-98f7-ea022065831e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 2,
+      "accepted_lines": 6,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/85308ccdf9d44e33d8bcdd9fbdc976e7805fb496739e9888b1639c62c3dfb36e"
+    }
+  }
+}
