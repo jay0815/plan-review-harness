@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Human Score",
+  "type": "object",
+  "required": ["case_id", "model", "probe", "score", "total"],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "probe": {
+      "type": "string"
+    },
+    "score": {
+      "type": "object",
+      "required": ["hit_rate", "novel_value", "actionability", "evidence_discipline", "false_positive_cost"],
+      "properties": {
+        "hit_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "novel_value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "actionability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "evidence_discipline": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "false_positive_cost": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        }
+      }
+    },
+    "total": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "matched_known_issues": {
+      "type": "array"
+    },
+    "missed_known_issues": {
+      "type": "array"
+    },
+    "valuable_new_findings": {
+      "type": "array"
+    },
+    "false_positives": {
+      "type": "array"
+    },
+    "failure_modes": {
+      "type": "array"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "suggested_roles": {
+      "type": "array"
+    },
+    "unsuitable_roles": {
+      "type": "array"
+    }
+  },
+  "additionalProperties": true
+}

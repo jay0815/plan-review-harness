@@ -4,7 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "calibration:create-case": "node model-role-calibration/scripts/create-case.js",
+    "calibration:generate-prompts": "node model-role-calibration/scripts/generate-prompts.js",
+    "calibration:ingest-output": "node model-role-calibration/scripts/ingest-output.js",
+    "calibration:score-output": "node model-role-calibration/scripts/score-output.js",
+    "calibration:summarize-results": "node model-role-calibration/scripts/summarize-results.js",
+    "test": "node --check model-role-calibration/scripts/lib.js && node --check model-role-calibration/scripts/create-case.js && node --check model-role-calibration/scripts/generate-prompts.js && node --check model-role-calibration/scripts/ingest-output.js && node --check model-role-calibration/scripts/score-output.js && node --check model-role-calibration/scripts/summarize-results.js"
   },
   "keywords": [],
   "author": "",

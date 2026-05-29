@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Synthesis Probe Model Output",
+  "type": "object",
+  "required": ["probe", "consensus_issues", "disagreements", "likely_false_positives", "revision_instructions"],
+  "properties": {
+    "probe": {
+      "const": "synthesis"
+    },
+    "consensus_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "merged_from", "severity", "reason", "suggested_fix"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "merged_from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "severity": {
+            "enum": ["low", "medium", "high", "blocker"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "suggested_fix": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "disagreements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "positions", "level", "needs_human_decision", "decision_options"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["source", "position", "reason"],
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "level": {
+            "enum": ["L1_preference", "L2_local_change", "L3_direction_decision"]
+          },
+          "needs_human_decision": {
+            "type": "boolean"
+          },
+          "decision_options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "likely_false_positives": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "revision_instructions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
