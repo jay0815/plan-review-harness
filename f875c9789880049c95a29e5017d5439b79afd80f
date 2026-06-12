@@ -1,0 +1,129 @@
+model-role-calibration/prompts/probe-execution.md
+  1e05bb5b3bcb8fa2 5-8,15-21,23-28
+model-role-calibration/README.md
+  6e96b94b23e76e20 299-303,306,309-310,313,316-321,324-326,329-334,337-343,346-347
+  66cd19a98c15556e 311-312,344,355
+  089341eeb2838d2b 292,345
+  ca0095183b23ef25 5,10,14,18,20-22,24,28-31,33-34,49,52-55,58,60-63,65,72,133-134,143-150,152-154,157-163,170-173,183-185,225-228,231,239-240,247,256-257,265-266,269,271,273,276,278-279,282,285-289,294-298,304-305,349-354,356,359-360,362,364-368,371,373,375,377-379,382,385-386,389,393,398-401,407-408,420-422,428,434,457-460,484,492-497
+  1e05bb5b3bcb8fa2 9,40,75-96,99-128,155,212-218,277,361,374,376,380,466,469,474
+  8f9ea4704a671427 307-308
+model-role-calibration/prompts/probe-rebuttal.md
+  1e05bb5b3bcb8fa2 5-8,17-27
+model-role-calibration/prompts/probe-risk.md
+  1e05bb5b3bcb8fa2 5-8,16,18-21,23-27,29
+model-role-calibration/prompts/probe-architecture.md
+  1e05bb5b3bcb8fa2 5-8,15-18,20-28
+model-role-calibration/scripts/test-runtime-integration.js
+  1e05bb5b3bcb8fa2 63,78,82,193,213,222,226-271,313
+model-role-calibration/scripts/run-agent-pool.js
+  1e05bb5b3bcb8fa2 22
+model-role-calibration/prompts/probe-synthesis.md
+  1e05bb5b3bcb8fa2 5-8,20-34
+model-role-calibration/scripts/test-calibration.js
+  1e05bb5b3bcb8fa2 32
+model-role-calibration/prompts/probe-planner.md
+  1e05bb5b3bcb8fa2 5-8,15-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "f875c9789880049c95a29e5017d5439b79afd80f",
+  "prompts": {
+    "089341eeb2838d2b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb618-fe4f-73c0-a55c-e9af8d05a4cb",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 2,
+      "accepted_lines": 2,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/f22f6de5c61d07b3c906ab1bc77f9e4fd283800a402ec1e8b397ef1e4d7ef894"
+    },
+    "14bd3cf55b9a827c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e6dff-dc8b-74b3-98f7-ea022065831e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 73,
+      "total_deletions": 32,
+      "accepted_lines": 3,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/a9646aa01a8e243f92c8688ce824abfbd5581e1ded32087200dc243c38a28231"
+    },
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 231,
+      "total_deletions": 43,
+      "accepted_lines": 227,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/2f20c2125d5a033a78add94b6b32f02f3df390bfd373adb39d6cf16626c88fb0"
+    },
+    "66cd19a98c15556e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb585-2155-70c1-a95f-728729bd89ea",
+        "model": "unknown"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 0,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "6e96b94b23e76e20": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0e1-5799-7803-b135-f6d556fb3891",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 3,
+      "accepted_lines": 41,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/0d6552720c4bf391cde399b0e38dfe22982dd80f0aad0ed973f51be3aa9c2d27"
+    },
+    "8f9ea4704a671427": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb57f-4b2f-75a3-ade2-5a26000645e3",
+        "model": "unknown"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "ca0095183b23ef25": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eab80-22a9-7a60-877a-580a70e8ff8c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 175,
+      "total_deletions": 194,
+      "accepted_lines": 139,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/3c8f908d69fc09df6b14f92cf44142e4807a24e4fe8917541a4911c72503b20e"
+    }
+  }
+}
