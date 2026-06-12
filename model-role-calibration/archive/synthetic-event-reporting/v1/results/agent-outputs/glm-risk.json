@@ -1,0 +1,71 @@
+{
+  "probe": "risk",
+  "issues": [
+    {
+      "title": "await reportEvent 直接违反「上报失败不能阻塞支付成功页」约束",
+      "type": "scope",
+      "severity": "blocker",
+      "evidence": "方案第3条：\"支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页\"；需求背景：\"上报失败不能阻塞支付成功页，也不能改变支付结果\"",
+      "why_it_matters": "await 会阻塞 UI 渲染直到上报完成（含3次重试），网络慢或失败时支付成功页被延迟或卡住，与硬性约束直接冲突",
+      "suggested_fix": "改为 fire-and-check：先渲染支付成功页，后台异步上报；用本地持久化保证事件最终送达而非阻塞 UI",
+      "confidence": 0.95
+    },
+    {
+      "title": "is_realtime 写入 payload 但原生桥从事件对象顶层读取——层级可能不匹配",
+      "type": "compatibility",
+      "severity": "high",
+      "evidence": "方案第1条：\"在 payload 中增加 { \"is_realtime\": true }\"；方案第2条：\"原生桥从事件对象顶层读取 is_realtime\"",
+      "why_it_matters": "reportEvent(name, payload) 的 name 和 payload 是两个参数，原生桥收到的事件对象大概率是 { name, payload } 结构，is_realtime 在 payload.is_realtime 而非顶层，原生桥将永远读不到该标志，所有事件仍走批量队列",
+      "suggested_fix": "明确事件对象在原生桥侧的完整结构；要么把 is_realtime 提升到与 name 同级，要么让原生桥从 payload 字段内部读取",
+      "confidence": 0.85
+    },
+    {
+      "title": "三团队同一版本窗口联合发布，但线上有旧客户端和两个服务端版本",
+      "type": "rollback",
+      "severity": "high",
+      "evidence": "方案第5条：\"JS、原生和服务端在同一个版本窗口一起发布\"；需求背景：\"线上存在旧客户端和两个服务端版本\"",
+      "why_it_matters": "旧客户端没有 is_realtime 读取逻辑，即使 JS 层发了 is_realtime=true 也会被忽略，事件仍走批量；联合发布一旦任一团队延期，其他两个的代码在生产中可能产生不一致行为，且回滚牵连三方",
+      "suggested_fix": "为原生桥增加 is_realtime 的向后兼容策略（如不识别则默认批量）；制定分阶段发布计划及独立回滚方案",
+      "confidence": 0.8
+    },
+    {
+      "title": "实时上传+3次重试的耗时在 await 模式下叠加阻塞",
+      "type": "risk",
+      "severity": "high",
+      "evidence": "方案第3条：\"await reportEvent\"；方案第4条：\"实时上传失败时立即重试三次\"",
+      "why_it_matters": "最差路径：1次实时尝试+3次重试=4次网络请求，每次可能数秒超时，总耗时可达10+秒，支付成功页完全卡住",
+      "suggested_fix": "如果保留 await，必须设置总超时上限（如3秒），超时后立即展示页面并将事件降级入批量队列",
+      "confidence": 0.9
+    },
+    {
+      "title": "实时失败降级入批量队列后 event_id 去重未明确",
+      "type": "data",
+      "severity": "medium",
+      "evidence": "需求背景：\"服务端仅对带有 event_id 的事件去重\"；方案第4条：\"仍失败则重新放入批量队列\"",
+      "why_it_matters": "如果实时上报成功但重试阶段又触发了批量队列提交，同一 event_id 可能被服务端去重忽略；如果降级时未保留原 event_id，则可能产生重复事件",
+      "suggested_fix": "明确降级入批量队列时必须携带与首次尝试相同的 event_id，并在服务端确认去重逻辑对同一 event_id 的多次到达只记录一次",
+      "confidence": 0.7
+    },
+    {
+      "title": "验收仅覆盖开发环境，缺少生产侧边缘场景验证",
+      "type": "observability",
+      "severity": "low",
+      "evidence": "方案第6条：\"验收方式：开发环境能看到支付成功事件请求立即发出，普通事件仍进入批量队列\"",
+      "why_it_matters": "未验证旧客户端下 is_realtime 被忽略的降级行为、网络失败时重试+降级的完整路径、服务端去重是否正确工作",
+      "suggested_fix": "补充灰度/生产环境验收项：旧客户端行为、弱网重试降级路径、服务端 event_id 去重",
+      "confidence": 0.65
+    }
+  ],
+  "missing_questions": [
+    "原生桥收到的事件对象完整 JSON 结构是什么？is_realtime 在该结构中的实际层级位置？",
+    "实时上传的超时阈值是多少？重试间隔是多少？总超时上限是否有定义？",
+    "降级入批量队列的事件是否保留原始 event_id？服务端去重对同一 event_id 的迟到事件如何处理？",
+    "旧客户端遇到 payload 中的 is_realtime 字段是否会报错或静默忽略？"
+  ],
+  "false_positive_risks": [
+    {
+      "concern": "is_realtime 作为 payload 内字段而非顶层字段可能只是实现偏好",
+      "why_likely_false_positive": "不是偏好；原文明确说「原生桥从事件对象顶层读取」，与写入位置之间存在结构性矛盾，可能导致功能完全失效而非仅仅是代码风格差异"
+    }
+  ]
+}

@@ -26,7 +26,7 @@ function main() {
     probe,
     score: {
       hit_rate: 0,
-      novel_value: 0,
+      contract_closure: 0,
       actionability: 0,
       evidence_discipline: 0,
       false_positive_cost: 0

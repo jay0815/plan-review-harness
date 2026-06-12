@@ -1,0 +1,85 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 17,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "覆盖非阻塞、发布耦合、event_id 幂等和验收缺口，但遗漏了最直接的字段层级错位。",
+      "evidence": [
+        "准确识别 await 与重试阻塞支付结果页。",
+        "明确指出实时和批量链路必须复用 event_id。",
+        "补充弱网、旧客户端和双服务端兼容验收。",
+        "没有指出 payload.is_realtime 与事件顶层 is_realtime 不一致。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "event_id 契约闭合较好，但没有确定 is_realtime 的唯一 wire shape，并提出了多个备选接口方向。",
+      "evidence": [
+        "明确 event_id 应在每次 reportEvent 调用生成并贯穿重试与批量回落。",
+        "建议新增 options 参数或保留 _meta 命名空间，没有先修正现有字段层级错位。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "问题可直接转化为方案修订和验收清单，但仍缺少指标、灰度退出条件及回滚机制。",
+      "evidence": [
+        "列出弱网降级、旧客户端、双服务端和页面响应上限的验收场景。",
+        "没有明确上线观测指标和回滚路径。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要结论有事实支撑，但引入了未确认的 feature flag、服务端能力检测和重复支付后果。",
+      "evidence": [
+        "建议客户端检测服务端能力或通过 feature flag 启用实时模式。",
+        "将页面等待推导为用户可能重复支付，输入未确认该业务行为。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "没有引入新消息平台或数据库，整体成本可控，但公共 API 调整和能力检测超出了最小修订范围。",
+      "evidence": [
+        "建议修改 reportEvent 签名或增加 _meta。",
+        "建议增加 feature flag 和服务端能力检测。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 和重试阻塞支付成功页。",
+    "实时重试与批量回落存在 event_id 去重风险。",
+    "三端同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径和兼容矩阵。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层，实时分支无法触发。",
+    "缺少上线指标、灰度退出条件和回滚方式。"
+  ],
+  "valuable_new_findings": [
+    "将弱网降级、旧客户端、双服务端和页面响应上限转化为验收场景。",
+    "明确实时和批量链路必须使用同一个 event_id。"
+  ],
+  "false_positives": [
+    "假设存在或需要 feature flag。",
+    "假设客户端需要检测服务端能力。",
+    "把页面阻塞进一步推导为用户可能重复支付。"
+  ],
+  "failure_modes": [
+    "遗漏最直接的跨层字段位置不一致。",
+    "通过未确认的发布控制机制扩大修订范围。"
+  ],
+  "notes": "四个模型中 Architecture 角色适配度最高，覆盖和可执行性较强；仍需加强 wire contract 精确检查并约束未经确认的机制设计。",
+  "suggested_roles": [
+    "architecture"
+  ],
+  "unsuitable_roles": []
+}

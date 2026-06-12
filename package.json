@@ -6,10 +6,13 @@
   "scripts": {
     "calibration:create-case": "node model-role-calibration/scripts/create-case.js",
     "calibration:generate-prompts": "node model-role-calibration/scripts/generate-prompts.js",
+    "calibration:run": "node model-role-calibration/scripts/run-calibration.js",
+    "calibration:run-model": "node model-role-calibration/scripts/run-model.js",
+    "calibration:run-pool": "node model-role-calibration/scripts/run-agent-pool.js",
     "calibration:ingest-output": "node model-role-calibration/scripts/ingest-output.js",
     "calibration:score-output": "node model-role-calibration/scripts/score-output.js",
     "calibration:summarize-results": "node model-role-calibration/scripts/summarize-results.js",
-    "test": "node --check model-role-calibration/scripts/lib.js && node --check model-role-calibration/scripts/create-case.js && node --check model-role-calibration/scripts/generate-prompts.js && node --check model-role-calibration/scripts/ingest-output.js && node --check model-role-calibration/scripts/score-output.js && node --check model-role-calibration/scripts/summarize-results.js"
+    "test": "node --check model-role-calibration/scripts/lib.js && node --check model-role-calibration/scripts/create-case.js && node --check model-role-calibration/scripts/generate-prompts.js && node --check model-role-calibration/scripts/run-calibration.js && node --check model-role-calibration/scripts/run-model.js && node --check model-role-calibration/scripts/run-agent-pool.js && node --check model-role-calibration/scripts/ingest-output.js && node --check model-role-calibration/scripts/score-output.js && node --check model-role-calibration/scripts/summarize-results.js && node --check model-role-calibration/scripts/validate-fixtures.js && node --check model-role-calibration/scripts/json-validator-mcp.js && node --check model-role-calibration/scripts/test-calibration.js && node --check model-role-calibration/scripts/test-runtime-integration.js && node model-role-calibration/scripts/validate-fixtures.js && node model-role-calibration/scripts/test-calibration.js && node model-role-calibration/scripts/test-runtime-integration.js"
   },
   "keywords": [],
   "author": "",

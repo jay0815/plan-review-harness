@@ -1,0 +1,83 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 2
+  },
+  "total": 17,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "主要风险覆盖较完整，但没有明确指出实时模式回滚开关缺失，并把合理的失败降级部分误判为需求冲突。",
+      "evidence": [
+        "识别了字段断层、支付页阻塞、event_id、同步发布和验收不足。",
+        "没有明确提出可快速关闭实时模式的回滚开关。",
+        "将失败后进入批量队列判断为违背尽快上报诉求。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "具备字段归属和跨版本契约意识，但没有明确要求收敛为唯一契约。",
+      "evidence": [
+        "识别了 payload.is_realtime 与顶层 is_realtime 的字段位置冲突。",
+        "对字段位置同时给出 JS 提升到顶层和原生读取 payload 两个方向。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "风险说明具体，可用于修改计划，但夹杂了较多自行设计的修复方案。",
+      "evidence": [
+        "明确指出需要补充兼容、失败、去重和线上灰度验收。",
+        "自行引入本地状态机、页面生命周期和高优先级补发。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "Risk Reviewer 引入了明显自作主张的修复方案，没有基于未知事实提出问题并停在风险判断层。",
+      "evidence": [
+        "建议使用本地状态机或页面生命周期兜底。",
+        "建议批量队列支持高优先级快速补发。",
+        "把旧端忽略新字段作为兼容方案的一部分，而不是待确认事实。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "超出风险识别职责，加入多项无输入依据的实现建议，增加了不必要的方案范围。",
+      "evidence": [
+        "引入本地状态机和页面生命周期机制。",
+        "引入批量队列高优先级能力。",
+        "把失败后降级到批量队列本身视为风险。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "实时重试和批量回落缺少 event_id 去重保障。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少兼容和失败路径。"
+  ],
+  "missed_known_issues": [
+    "没有明确指出缺少实时模式回滚开关。"
+  ],
+  "valuable_new_findings": [
+    "强调需要按客户端版本验证实时能力覆盖情况。"
+  ],
+  "false_positives": [
+    "把失败后降级到批量队列本身判断为违背尽快上报。",
+    "建议使用本地状态机或页面生命周期兜底。",
+    "建议批量队列增加高优先级快速补发。"
+  ],
+  "failure_modes": [
+    "Risk Reviewer 越界设计修复方案。",
+    "遇到未知能力时直接给出实现，而不是提出待确认问题。"
+  ],
+  "notes": "核心风险识别较好，但修复方案存在明显自作主张，降低了证据纪律和误报成本表现。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

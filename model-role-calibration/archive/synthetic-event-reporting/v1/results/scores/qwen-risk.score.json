@@ -1,0 +1,83 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 5,
+    "contract_closure": 4,
+    "actionability": 5,
+    "evidence_discipline": 2,
+    "false_positive_cost": 3
+  },
+  "total": 19,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 5,
+      "rationale": "完整覆盖协议、阻塞、幂等、兼容发布、异常验收和回滚问题。",
+      "evidence": [
+        "识别了字段层级不一致和 await 阻塞。",
+        "覆盖 event_id、跨版本组合、重试、验收和回滚策略缺失。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "风险链路整体闭合，但部分修复建议没有遵从唯一一致的方向。",
+      "evidence": [
+        "对 is_realtime 字段位置同时提出独立参数和从 payload 读取两种修复方向。"
+      ]
+    },
+    "actionability": {
+      "score": 5,
+      "rationale": "问题与修订方向清晰，覆盖失败路径、兼容矩阵、去重验证和回滚操作。",
+      "evidence": [
+        "给出异常、兼容、去重和阻塞上限的验收清单。",
+        "明确指出需要无需重新发版的实时模式回滚能力。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "存在大量自行脑补的影响和运行环境。遇到输入未说明的事实时应停止推断或列为问题，不应直接形成结论。",
+      "evidence": [
+        "将重复遥测事件推导为可能触发重复发货通知。",
+        "假设客户端发布需要应用商店审核。",
+        "推测新客户端命中旧服务端时实时接口会返回 404。",
+        "假设可以使用远程配置系统关闭实时模式。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "核心问题准确，但无依据假设增加了噪音和额外实现成本。",
+      "evidence": [
+        "把输入未提供的业务后果和发布环境写成确定影响。",
+        "建议引入输入未说明的远程配置能力。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "重试和批量回落存在 event_id 去重风险。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径、兼容矩阵、观测和回滚。"
+  ],
+  "missed_known_issues": [],
+  "valuable_new_findings": [
+    "明确列出异常、兼容、去重和页面阻塞上限的验收场景。",
+    "明确识别实时模式回滚能力缺失。"
+  ],
+  "false_positives": [
+    "将重复遥测事件推导为可能触发重复发货通知。",
+    "假设客户端发布必须经过应用商店审核。",
+    "推测旧服务端实时接口会返回 404。",
+    "假设已有远程配置能力。"
+  ],
+  "failure_modes": [
+    "遇到未知事实时自行补全业务影响和运行环境。",
+    "通过无依据假设增加方案修订范围。"
+  ],
+  "notes": "命中率和可执行性很强，但证据纪律明显不足；不确定事实不提或列入问题，比自行猜测更好。",
+  "suggested_roles": [
+    "risk"
+  ],
+  "unsuitable_roles": []
+}

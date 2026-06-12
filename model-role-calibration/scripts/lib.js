@@ -4,7 +4,9 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const PROBES = ["risk", "architecture", "execution", "rebuttal", "synthesis"];
+const CONFIG_FILE = path.join(ROOT, "calibration.config.json");
+const PROBES = ["planner", "risk", "architecture", "execution", "rebuttal", "synthesis"];
+const REVIEW_PROBES = new Set(["risk", "architecture", "execution", "rebuttal"]);
 
 function parseArgs(argv) {
   const args = {};
@@ -45,12 +47,36 @@ function writeFileNew(file, content) {
     throw new Error(`Refusing to overwrite existing file: ${file}`);
   }
   ensureDir(path.dirname(file));
-  fs.writeFileSync(file, content);
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`
+  );
+  fs.writeFileSync(tempFile, content, { flag: "wx" });
+  try {
+    fs.linkSync(tempFile, file);
+  } catch (error) {
+    if (error.code === "EEXIST") {
+      throw new Error(`Refusing to overwrite existing file: ${file}`);
+    }
+    throw error;
+  } finally {
+    fs.unlinkSync(tempFile);
+  }
 }
 
 function writeGenerated(file, content) {
   ensureDir(path.dirname(file));
-  fs.writeFileSync(file, content);
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`
+  );
+  fs.writeFileSync(tempFile, content, { flag: "wx" });
+  try {
+    fs.renameSync(tempFile, file);
+  } catch (error) {
+    fs.unlinkSync(tempFile);
+    throw error;
+  }
 }
 
 function assertSafeCaseId(caseId) {
@@ -73,9 +99,7 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-function loadCaseInput(caseId) {
-  assertSafeCaseId(caseId);
-  const caseDir = path.join(ROOT, "cases", caseId);
+function loadLegacyCaseInput(caseDir) {
   const inputFile = path.join(caseDir, "input.md");
   const contextFile = path.join(caseDir, "context.md");
   if (!fs.existsSync(inputFile)) {
@@ -86,14 +110,72 @@ function loadCaseInput(caseId) {
   return context ? `${context}\n\n---\n\n${input}\n` : `${input}\n`;
 }
 
+function loadCaseInput(caseId, probe) {
+  assertSafeCaseId(caseId);
+  assertProbe(probe);
+  const caseDir = path.join(ROOT, "cases", caseId);
+  const inputsDir = path.join(caseDir, "inputs");
+  let inputName;
+  if (probe === "planner") {
+    inputName = "planner.md";
+  } else if (probe === "synthesis") {
+    inputName = "synthesis.md";
+  } else if (REVIEW_PROBES.has(probe)) {
+    inputName = "review.md";
+  }
+
+  const probeInput = inputName ? path.join(inputsDir, inputName) : null;
+  if (probeInput && fs.existsSync(probeInput)) {
+    return `${readText(probeInput).trim()}\n`;
+  }
+  if (fs.existsSync(inputsDir)) {
+    throw new Error(`Missing ${probe} input: ${probeInput}`);
+  }
+
+  return loadLegacyCaseInput(caseDir);
+}
+
 function parseJsonFile(file) {
   return JSON.parse(readText(file));
+}
+
+function loadConfig() {
+  return parseJsonFile(CONFIG_FILE);
+}
+
+function schemaForProbe(probe) {
+  assertProbe(probe);
+  if (probe === "planner") {
+    return path.join(ROOT, "schemas", "planner-output.schema.json");
+  }
+  if (probe === "risk") {
+    return path.join(ROOT, "schemas", "risk-output.schema.json");
+  }
+  if (probe === "synthesis") {
+    return path.join(ROOT, "schemas", "synthesis-output.schema.json");
+  }
+  return path.join(ROOT, "schemas", "model-output.schema.json");
+}
+
+function agentOutputPaths(run, caseId, model, probe) {
+  assertSafeCaseId(caseId);
+  assertProbe(probe);
+  const baseName = `${slug(model)}-${probe}`;
+  const outputDir = path.join(ROOT, "runs", run, caseId, "agent-outputs");
+  return {
+    outputDir,
+    baseName,
+    resultFile: path.join(outputDir, `${baseName}.json`),
+    rawFile: path.join(outputDir, `${baseName}.cli.json`),
+    metadataFile: path.join(outputDir, `${baseName}.meta.json`),
+    attemptsDir: path.join(outputDir, "attempts", baseName)
+  };
 }
 
 function sumScore(score) {
   const values = [
     score.hit_rate,
-    score.novel_value,
+    score.contract_closure,
     score.actionability,
     score.evidence_discipline,
     score.false_positive_cost
@@ -131,6 +213,9 @@ module.exports = {
   timestamp,
   loadCaseInput,
   parseJsonFile,
+  loadConfig,
+  schemaForProbe,
+  agentOutputPaths,
   sumScore,
   walk
 };

@@ -1,0 +1,83 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 2,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 2
+  },
+  "total": 13,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "准确覆盖非阻塞、职责错位和发布耦合，但遗漏 wire shape、event_id 闭环以及观测回滚。",
+      "evidence": [
+        "正确指出页面展示不应依赖上传和重试结果。",
+        "正确识别重试与降级属于上报基础设施职责。",
+        "没有把 event_id 缺失形成明确问题。"
+      ]
+    },
+    "contract_closure": {
+      "score": 2,
+      "rationale": "没有识别当前字段层级不一致，也没有明确 event_id 的生成和复用责任，契约闭合度较弱。",
+      "evidence": [
+        "将 is_realtime 讨论为 payload 边界泄漏，但未指出原生桥读取不到该字段。",
+        "仅在 missing_questions 中询问实时事件是否有 event_id。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "解耦和分阶段发布方向清楚，但未覆盖完整验证、观测和回滚，且部分建议需要额外机制。",
+      "evidence": [
+        "建议先发布兼容的服务端和原生桥，再灰度 JS。",
+        "没有给出 event_id 验收、兼容矩阵、指标和回滚要求。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要结论有原文依据，但将未来传输模式扩展和能力协商作为当前结构要求，存在设计推演。",
+      "evidence": [
+        "把布尔字段无法支持未来 WiFi、优先级等模式作为独立问题。",
+        "提出 capability 握手，但输入未说明已有或需要该机制。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "倾向于通过新增公开 API、能力握手和策略枚举解决问题，明显超过当前方案的最小修订范围。",
+      "evidence": [
+        "建议新增 options 参数或 reportRealtimeEvent 公共 API。",
+        "建议增加客户端与服务端 capability 协商。",
+        "将传输布尔值扩展性列为独立架构问题。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "调用方与上报基础设施的时序职责错位。",
+    "三端同窗口发布缺少跨版本兼容顺序。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层，实时分支无法触发。",
+    "实时重试和批量回落需要稳定 event_id 去重。",
+    "验收缺少指标、失败路径和回滚方式。"
+  ],
+  "valuable_new_findings": [
+    "明确指出重试策略调整不应改变支付页面展示时机。"
+  ],
+  "false_positives": [
+    "把未确认的未来传输模式作为当前架构扩展性要求。",
+    "要求新增公共 API、能力握手和策略枚举。"
+  ],
+  "failure_modes": [
+    "用偏好的 API 重构替代对现有 wire contract 的精确审查。",
+    "对未知未来扩展需求进行过度设计。"
+  ],
+  "notes": "依赖方向和职责分析较强，但契约检查不足且容易过度设计。适合审查模块职责，不适合独立裁决最小协议方案。",
+  "suggested_roles": [
+    "architecture"
+  ],
+  "unsuitable_roles": []
+}

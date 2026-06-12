@@ -1,0 +1,89 @@
+{
+  "probe": "execution",
+  "issues": [
+    {
+      "title": "支付成功页 await 阻塞与需求冲突",
+      "type": "acceptance",
+      "severity": "blocker",
+      "evidence": "步骤3要求：支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页；需求背景要求：上报失败不能阻塞支付成功页",
+      "why_it_matters": "该实现会直接导致支付成功页的展示依赖网络请求结果，违反核心需求约束，在弱网或上报接口异常时造成页面卡顿甚至无法展示",
+      "suggested_fix": "移除 await，采用 fire-and-forget 模式上报；在后台异步完成实时上传与失败降级，通过状态机或回调保证支付页不阻塞",
+      "confidence": 0.95
+    },
+    {
+      "title": "is_realtime 字段层级不一致",
+      "type": "ambiguity",
+      "severity": "high",
+      "evidence": "步骤1要求调用方在 payload 中增加 is_realtime，步骤2要求原生桥从事件对象顶层读取 is_realtime",
+      "why_it_matters": "原生桥按当前描述无法读取到嵌套在 payload 内的字段，会导致所有实时事件被误判为批量事件，功能失效",
+      "suggested_fix": "明确由 JS 层在调用原生桥前将 is_realtime 提取到事件对象顶层，或修改原生桥从 payload 中解析该字段",
+      "confidence": 0.9
+    },
+    {
+      "title": "缺少服务端去重所需的 event_id 设计",
+      "type": "input",
+      "severity": "high",
+      "evidence": "需求背景说明：服务端仅对带有 event_id 的事件去重；方案全文未提及 event_id 的生成与传递",
+      "why_it_matters": "支付成功事件若不上报 event_id，服务端无法去重，网络抖动或重试时可能导致重复统计，影响核心业务数据准确性",
+      "suggested_fix": "明确 event_id 的生成策略（如 UUID）、生成层级（JS 或原生）以及在实时上传接口中的传参方式",
+      "confidence": 0.9
+    },
+    {
+      "title": "旧客户端与多服务端版本兼容性方案缺失",
+      "type": "dependency",
+      "severity": "high",
+      "evidence": "需求背景：线上存在旧客户端和两个服务端版本；方案第5步要求 JS、原生和服务端在同一个版本窗口一起发布",
+      "why_it_matters": "无法保证线上所有客户端和服务端同时升级，旧客户端可能丢弃未知字段或调用旧接口，导致事件丢失或异常",
+      "suggested_fix": "补充旧客户端对未知 payload 字段的兼容处理、服务端新旧接口兼容策略（如动态降级或透传）",
+      "confidence": 0.85
+    },
+    {
+      "title": "实时上传重试策略关键细节未定义",
+      "type": "ambiguity",
+      "severity": "medium",
+      "evidence": "步骤4：实时上传失败时立即重试三次；仍失败则重新放入批量队列；未定义重试间隔、超时上限及是否阻塞调用方",
+      "why_it_matters": "若同步阻塞重试三次，在弱网环境下可能耗时数秒，叠加支付页的异步逻辑仍会产生明显阻塞；且批量队列可能无法兼容实时数据结构",
+      "suggested_fix": "明确重试间隔（如指数退避）、单次超时时间、最大总超时、重试过程中的线程/异步模型，以及批量队列的数据兼容性",
+      "confidence": 0.85
+    },
+    {
+      "title": "缺少接口定义与文件修改清单",
+      "type": "file",
+      "severity": "medium",
+      "evidence": "方案未提供任何具体文件名、接口路径、配置项、类型定义或代码文件列表",
+      "why_it_matters": "工程 Agent 无法定位具体修改点，无法评估影响范围，也无法生成准确的代码变更",
+      "suggested_fix": "列出涉及的 JS SDK 文件、原生桥接口定义、服务端 API 接口路径、配置文件及类型声明文件",
+      "confidence": 0.8
+    },
+    {
+      "title": "验收标准仅覆盖开发环境且缺少负面 Case",
+      "type": "acceptance",
+      "severity": "medium",
+      "evidence": "验收方式仅提及：开发环境能看到支付成功事件请求立即发出，普通事件仍进入批量队列",
+      "why_it_matters": "未验证失败降级、批量队列兜底、旧版本兼容、服务端去重等关键场景，无法保证线上质量",
+      "suggested_fix": "补充失败三次降级到批量队列的测试用例、旧客户端兼容性测试、服务端去重验证、线上灰度与监控方案",
+      "confidence": 0.8
+    },
+    {
+      "title": "三端同时发布缺少回滚与开关策略",
+      "type": "dependency",
+      "severity": "medium",
+      "evidence": "第5步要求 JS、原生和服务端在同一个版本窗口一起发布，但未提供回滚方案或功能开关",
+      "why_it_matters": "多团队协同发布容易出现版本错配，一旦实时上报出现问题，缺少快速降级手段将影响线上支付事件采集",
+      "suggested_fix": "增加远程配置开关或功能灰度标志，支持按端、按版本、按用户灰度发布，并制定回滚预案",
+      "confidence": 0.75
+    }
+  ],
+  "missing_questions": [
+    "event_id 由哪一层生成，格式与传递方式是什么？",
+    "旧客户端收到含 is_realtime 的 payload 会如何处理，是否会导致崩溃或事件丢弃？",
+    "服务端旧版本是否兼容新的实时上传接口，降级策略是什么？",
+    "实时上传的具体接口地址、协议、超时配置是什么？",
+    "批量队列的数据结构是否兼容实时事件的字段，入队列前是否需要转换？",
+    "支付成功事件丢失的可接受阈值是多少，如何监控与告警？"
+  ],
+  "false_positive_risks": [
+    "可能误将需求明确排除的独立消息平台建设视为缺失，但需求背景已说明第一版不建设新的消息平台或数据库",
+    "可能误将多团队协同发布视为绝对不可执行，但此风险属于组织协调范畴，而非当前计划步骤本身无法执行"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 18,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "准确挑战非阻塞、字段错位、event_id 和版本兼容问题，并发现 Promise 结算语义缺口，但没有完整覆盖生产观测和回滚。",
+      "evidence": [
+        "识别 await 与非阻塞硬约束直接矛盾。",
+        "识别 payload.is_realtime 与事件顶层读取位置错位。",
+        "指出实时失败回落批量队列后 Promise resolve 或 reject 未定义。",
+        "未将生产指标和快速回滚缺失列为明确问题。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "字段路径、event_id 生命周期和 Promise 结算分析较完整，但修复方向仍存在有限等待和多个字段位置选择。",
+      "evidence": [
+        "要求明确事件对象序列化结构。",
+        "要求重试和批量回落复用同一个 event_id。",
+        "指出实时失败转入批量队列时调用方语义不清。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "多数问题可直接转化为方案修订项，但有限等待建议仍违反硬约束，且缺少完整的观测与回滚要求。",
+      "evidence": [
+        "能够给出协议、幂等、兼容和 Promise 语义的修订目标。",
+        "建议最多等待一秒。",
+        "未明确要求快速关闭实时模式。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要反驳有直接证据，但混入热更新、服务端报错、财务风险和 BI 数据污染等未确认推断。",
+      "evidence": [
+        "假设 JS 可能通过离线包或热更新先行。",
+        "将重复遥测推导为对账差异或财务风险。",
+        "假设服务端会持久化整个 payload 并污染 BI。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "整体没有为了反驳而大幅改造架构，但有限等待和数据污染问题增加了少量噪音。",
+      "evidence": [
+        "建议保留最多一秒等待。",
+        "将 is_realtime 数据污染列为独立风险。",
+        "对字段位置给出多个具体实现方向。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "实时重试和批量回落缺少稳定 event_id。",
+    "同窗口发布缺少跨版本兼容策略。",
+    "reportEvent 在实时失败并回落批量队列后的 Promise 语义不明确。"
+  ],
+  "missed_known_issues": [
+    "没有把生产观测指标缺失列为明确问题。",
+    "没有明确指出快速回滚和关闭实时模式的能力缺失。",
+    "没有完整覆盖失败与兼容验收矩阵。"
+  ],
+  "valuable_new_findings": [
+    "指出实时失败回落批量队列时 Promise 应如何结算尚未定义。",
+    "明确失败回落批量队列本身不是缺陷。"
+  ],
+  "false_positives": [
+    "假设 JS 通过离线包或热更新先行。",
+    "将重复遥测推导为财务风险。",
+    "假设 is_realtime 会污染服务端存储和 BI。",
+    "建议保留有限时长的 await。"
+  ],
+  "failure_modes": [
+    "用有限等待折中明确的非阻塞硬约束。",
+    "将输入未提供的业务后果和数据处理方式写入反驳。"
+  ],
+  "notes": "角色判断：适合作为 Rebuttal Reviewer。独立性和契约检查较强，尤其擅长发现异步结算语义缺口；需要禁止有限等待折中，并限制推测性业务后果。",
+  "suggested_roles": [
+    "rebuttal"
+  ],
+  "unsuitable_roles": []
+}

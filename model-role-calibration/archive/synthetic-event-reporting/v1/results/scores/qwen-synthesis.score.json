@@ -1,0 +1,92 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 2,
+    "false_positive_cost": 3
+  },
+  "total": 16,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "覆盖非阻塞、幂等、发布兼容、观测和回滚，也正确降权 Kafka，但未裁决字段错位且遗漏来源边界。",
+      "evidence": [
+        "合并全部主要修订问题。",
+        "正确识别 API 拆分为 L3 方向决策。",
+        "将字段错位保留为可接受现状的人工选项。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "能要求唯一 JSON path 和 event_id 跨路径一致，但允许字段位置继续不统一，并直接决定客户端生成 event_id。",
+      "evidence": [
+        "要求统一 is_realtime 字段位置。",
+        "决策选项包含接受现状不统一。",
+        "修订指令直接指定客户端侧生成 event_id。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "修订指令最完整，但部分内容依赖新增 feature flag、Promise.race 和未确认的具体实现。",
+      "evidence": [
+        "覆盖发布顺序、兼容矩阵、验收、指标和回滚。",
+        "建议服务端 feature flag。",
+        "建议使用 Promise.race 超时降级。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "存在错误来源归因，并新增 CDN、限流、数据丢失和具体基础设施机制等来源中不存在的事实。",
+      "evidence": [
+        "将 event_id 问题归因给未提出该问题的 Architecture Reviewer。",
+        "新增 CDN 故障和限流场景。",
+        "将版本编排缺失推导为数据丢失。",
+        "假设服务端可下发 feature flag。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "正确丢弃 Kafka 和独立数据库，但加入 feature flag、Promise.race 和客户端 event_id 决策等额外实现。",
+      "evidence": [
+        "充分降权 Kafka 和独立数据库。",
+        "引入服务端 feature flag。",
+        "引入 Promise.race 和具体 event_id 生成责任。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付结果页。",
+    "实时重试和批量回落存在 event_id 幂等缺口。",
+    "同窗口发布缺少跨版本兼容顺序和验收矩阵。",
+    "缺少生产观测指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。",
+    "两个公开 API 与复用 reportEvent 构成 L3 方向分歧。"
+  ],
+  "missed_known_issues": [
+    "没有将 is_realtime 写入和读取位置不一致裁决为确定缺陷。",
+    "没有保持所有合并来源的准确归因。"
+  ],
+  "valuable_new_findings": [
+    "对 Kafka 和独立数据库给出充分的证据与范围降权理由。",
+    "修订指令完整覆盖协议、幂等、发布、验收、观测和回滚。"
+  ],
+  "false_positives": [
+    "错误将 event_id 问题归因给 Architecture Reviewer。",
+    "新增 CDN 故障、限流和数据丢失推断。",
+    "假设存在服务端 feature flag。",
+    "建议使用 Promise.race。",
+    "直接指定客户端生成 event_id。"
+  ],
+  "failure_modes": [
+    "在合成过程中新增来源中不存在的事实和机制。",
+    "来源归因不准确。",
+    "没有裁决确定的字段协议错误。"
+  ],
+  "notes": "角色判断：适合作为辅助 Synthesizer。覆盖和表达能力强，但来源保真不足，容易在合成中自行补充事实、业务影响和实现机制。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

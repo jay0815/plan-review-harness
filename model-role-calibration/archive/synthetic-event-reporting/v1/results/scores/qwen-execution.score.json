@@ -1,0 +1,93 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 2,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 12,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "识别非阻塞、接口、兼容、重试、验收、event_id 和调用位置问题，但遗漏字段层级错位、发布顺序和快速回滚。",
+      "evidence": [
+        "识别支付页面阻塞和验收不可量化。",
+        "识别 event_id 生成责任缺失。",
+        "没有指出 payload.is_realtime 与事件顶层读取不一致。"
+      ]
+    },
+    "contract_closure": {
+      "score": 2,
+      "rationale": "遗漏主要 wire shape 错误，而且 event_id 的问题标题和建议在服务端生成与客户端生成之间不一致。",
+      "evidence": [
+        "问题标题为缺少服务端 event_id 生成逻辑。",
+        "建议内容又指定客户端生成 UUID。",
+        "未检查 is_realtime 的字段路径。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "提出接口规范和可测验收要求，但短时等待仍违反硬约束，且没有给出发布顺序和回滚补充项。",
+      "evidence": [
+        "要求补充请求、响应、错误语义和量化验收。",
+        "建议支付页面最多等待两秒。",
+        "未明确分阶段发布和快速回滚步骤。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "多次将输入未确认的专用接口、认证、服务端版本检测、feature flag 和字段剥离机制作为执行要求。",
+      "evidence": [
+        "要求 endpoint URL、认证方式和完整错误码，但输入未确认是否复用已有上传接口。",
+        "建议客户端检测服务端版本和引入 feature flag。",
+        "规定服务端应剥离 is_realtime 字段。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "通过专用接口规范、服务端版本检测、feature flag 和服务端字段处理扩大了计划范围。",
+      "evidence": [
+        "引入 feature flag 和服务端版本检测。",
+        "假设需要定义新的实时接口规范。",
+        "指定服务端剥离字段和下游处理行为。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "实时上传接口及成功失败语义不明确。",
+    "同窗口发布缺少旧客户端和双服务端兼容策略。",
+    "重试参数和总超时未定义。",
+    "event_id 生成和复用责任缺失。",
+    "验收标准不可量化。",
+    "调用位置和生产监控要求不足。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层。",
+    "缺少明确分阶段发布顺序和快速回滚步骤。"
+  ],
+  "valuable_new_findings": [
+    "指出验收中的立即没有量化定义。",
+    "指出需要确认实时上传是否复用现有接口及其成功失败语义。"
+  ],
+  "false_positives": [
+    "假设必须提供专用 endpoint、认证方式和完整错误码。",
+    "建议客户端检测服务端版本并引入 feature flag。",
+    "规定服务端剥离 is_realtime 字段。",
+    "建议支付页面保留两秒等待。"
+  ],
+  "failure_modes": [
+    "遗漏关键跨层字段契约错误。",
+    "event_id 责任判断内部不一致。",
+    "将未知系统机制直接变成执行要求。"
+  ],
+  "notes": "能够发现表面执行信息缺口，但契约准确性和事实纪律不足，当前不适合作为 Execution 主审。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "execution"
+  ]
+}

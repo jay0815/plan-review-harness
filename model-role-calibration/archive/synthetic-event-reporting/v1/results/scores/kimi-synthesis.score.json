@@ -1,0 +1,91 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 17,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "完整保留非阻塞、幂等、发布兼容、观测和回滚问题，并正确降权 Kafka，但没有把字段层级错位裁决为确定缺陷。",
+      "evidence": [
+        "合并 Architecture 与 Execution 的发布和兼容问题。",
+        "保留 await blocker、event_id 和生产观测问题。",
+        "将 is_realtime 字段错位放入 disagreements，而不是 consensus_issues。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "能要求统一协议和保留 API 方向分歧，但提供了接受当前字段差异的无效选项。",
+      "evidence": [
+        "修订指令要求明确 is_realtime 的最终协议层级。",
+        "分歧选项包含接受当前差异并记录为技术债。",
+        "正确识别 API 拆分与复用 reportEvent 的方向冲突。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "修订指令覆盖协议、非阻塞、发布、幂等、观测和回滚，但错误地将字段是否修复交给用户裁决。",
+      "evidence": [
+        "给出完整的分阶段发布和兼容矩阵修订要求。",
+        "要求补齐 event_id、指标和回滚能力。",
+        "字段分歧中保留了不修复选项。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "来源整体可追溯，但扩大了 Risk Reviewer 的立场，并引入旧客户端补丁和配置中心等未确认机制。",
+      "evidence": [
+        "声称 Risk Reviewer 认为当前字段不一致不会导致实质性故障。",
+        "建议为旧客户端提供补丁或降级策略。",
+        "建议在服务端或配置中心提供开关。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "正确丢弃 Kafka 和独立数据库，但旧客户端补丁、配置中心和字段不修复选项增加了额外成本与风险。",
+      "evidence": [
+        "明确将 Kafka 和独立数据库降权。",
+        "引入配置中心实现回滚开关。",
+        "建议考虑旧客户端补丁。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付结果页。",
+    "实时重试和批量回落存在 event_id 幂等缺口。",
+    "同窗口发布缺少跨版本兼容顺序和验收矩阵。",
+    "缺少生产观测指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。",
+    "两个公开 API 与复用 reportEvent 构成方向分歧。"
+  ],
+  "missed_known_issues": [
+    "没有将 is_realtime 写入和读取位置不一致裁决为确定缺陷。",
+    "没有明确说明字段统一是局部契约收敛，不必升级为 L3 决策。"
+  ],
+  "valuable_new_findings": [
+    "将发布耦合与执行层缺少接口、顺序和验收矩阵合并为一个完整问题。",
+    "明确 API 拆分需要修改原始需求前提。"
+  ],
+  "false_positives": [
+    "允许接受当前字段差异并仅记录为技术债。",
+    "建议为已发布旧客户端提供补丁。",
+    "假设可以使用配置中心实现回滚开关。",
+    "扩大 Risk Reviewer 对字段不一致的立场。"
+  ],
+  "failure_modes": [
+    "没有区分确定事实错误和可选设计方向。",
+    "在合成过程中加入来源未确认的实现机制。"
+  ],
+  "notes": "角色判断：可作为主 Synthesizer 候选。合并能力和修订清单较强；需要加强事实性冲突裁决、来源保真和人工决策等级控制。",
+  "suggested_roles": [
+    "synthesis"
+  ],
+  "unsuitable_roles": []
+}

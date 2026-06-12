@@ -1,0 +1,88 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 5,
+    "contract_closure": 4,
+    "actionability": 5,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 20,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 5,
+      "rationale": "完整覆盖协议错位、非阻塞、event_id、跨版本发布、重试、代码定位、验收和回滚等主要执行缺口。",
+      "evidence": [
+        "识别 payload.is_realtime 与事件顶层读取位置不一致。",
+        "识别支付页面等待上传结果违反硬约束。",
+        "覆盖 event_id、兼容发布、失败验收和回滚缺失。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "准确定位字段和幂等契约缺失，但没有单独闭合 reportEvent 原有返回类型及 Promise resolve 语义。",
+      "evidence": [
+        "要求明确 is_realtime 的唯一层级。",
+        "要求明确 event_id 的生成层级和传递方式。",
+        "未明确分析 reportEvent 当前返回值以及 await 是否真的等待网络结果。"
+      ]
+    },
+    "actionability": {
+      "score": 5,
+      "rationale": "输出可直接转化为 Planner 的补充清单，覆盖修改范围、接口、依赖、测试、灰度和回滚。",
+      "evidence": [
+        "指出需要补充 JS、原生桥和服务端的文件及接口定位。",
+        "列出失败降级、旧客户端兼容、去重和生产监控验收。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "核心问题均有输入依据，但混入了本地状态机、页面生命周期、旧端丢弃字段等未经确认的实现和行为。",
+      "evidence": [
+        "建议通过本地状态机或页面生命周期兜底。",
+        "将旧客户端可能丢弃未知字段写入影响分析。",
+        "建议远程配置和按用户灰度。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "整体聚焦执行缺口，但引入了状态机、远程配置和高优先级补发等额外机制。",
+      "evidence": [
+        "建议使用本地状态机。",
+        "建议增加远程配置开关和按用户灰度。",
+        "询问支付成功事件丢失阈值，略有可靠投递范围扩张。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "event_id 生成、传递和批量回落复用责任缺失。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径、兼容矩阵、指标和回滚。",
+    "计划缺少具体模块、接口和文件定位信息。"
+  ],
+  "missed_known_issues": [
+    "没有单独明确 reportEvent 当前返回类型和 Promise resolve 语义。"
+  ],
+  "valuable_new_findings": [
+    "指出批量队列的数据结构需要确认是否兼容实时事件字段。",
+    "指出工程 Agent 需要明确 JS、原生桥、服务端的修改位置。"
+  ],
+  "false_positives": [
+    "建议引入本地状态机或页面生命周期。",
+    "假设旧客户端可能丢弃未知字段。",
+    "建议引入远程配置和按用户灰度。"
+  ],
+  "failure_modes": [
+    "从执行缺口越界到具体实现机制设计。",
+    "把未知版本行为写入确定影响。"
+  ],
+  "notes": "四个模型中 Execution 覆盖最完整，输出可直接转化为计划补充项；需要限制无依据的具体机制设计。",
+  "suggested_roles": [
+    "execution"
+  ],
+  "unsuitable_roles": []
+}

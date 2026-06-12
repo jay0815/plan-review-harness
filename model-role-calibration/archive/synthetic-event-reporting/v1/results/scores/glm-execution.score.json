@@ -1,0 +1,89 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 16,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "覆盖非阻塞、文件定位、服务端职责、版本兼容、event_id 和验收，但遗漏最关键的字段层级错位及快速回滚。",
+      "evidence": [
+        "识别支付页面阻塞和 await resolve 条件不明。",
+        "识别服务端任务未定义和兼容矩阵缺失。",
+        "没有指出 payload.is_realtime 与事件顶层读取不一致。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "能够检查 await、重试、event_id 和服务端职责，但遗漏当前 wire shape 的直接矛盾。",
+      "evidence": [
+        "要求明确 await 的 resolve 条件。",
+        "要求批量回落保留原 event_id。",
+        "没有检查 is_realtime 的实际字段路径。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "对修改位置、团队职责、兼容矩阵和测试补充较具体，但没有形成快速回滚要求，并把非阻塞约束重新变成可讨论参数。",
+      "evidence": [
+        "要求列出 JS、iOS、Android 模块和服务端任务。",
+        "要求单元、集成和生产灰度验证。",
+        "询问最大可接受延迟以判断 await 是否可行。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要问题有依据，但自行假设十秒请求超时，并把明确禁止的 await 重新视为待确认事项。",
+      "evidence": [
+        "使用单次十秒、三次三十秒进行推演。",
+        "询问支付页面允许的最大延迟以决定 await 是否可行。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "总体聚焦执行完整性，但文件缺失严重性偏高，并加入具体超时和重试参数建议。",
+      "evidence": [
+        "将缺少文件路径标为 high。",
+        "建议指定两秒超时及具体重试间隔。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "reportEvent 的 await 与重试 resolve 语义不明确。",
+    "服务端发布任务和具体变更未定义。",
+    "同窗口发布缺少跨版本兼容矩阵。",
+    "event_id 在重试和批量回落中的复用责任缺失。",
+    "验收缺少自动化、失败路径和生产验证。",
+    "计划缺少具体模块和文件定位信息。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层。",
+    "缺少快速回滚能力和明确回滚步骤。"
+  ],
+  "valuable_new_findings": [
+    "指出要求服务端同步发布却没有定义任何服务端任务。",
+    "要求补充 JS、iOS、Android 和服务端的具体修改位置。"
+  ],
+  "false_positives": [
+    "使用未经输入确认的十秒请求超时进行推演。",
+    "把非阻塞硬约束重新变成最大可接受延迟问题。",
+    "对具体超时和重试参数进行设计。"
+  ],
+  "failure_modes": [
+    "遗漏最直接的跨层字段契约错误。",
+    "把已确定的硬约束重新开放为待决事项。"
+  ],
+  "notes": "计划完整性检查较强，但协议检查能力不足；适合交付物和依赖审查，不宜独立终审。",
+  "suggested_roles": [
+    "execution"
+  ],
+  "unsuitable_roles": []
+}

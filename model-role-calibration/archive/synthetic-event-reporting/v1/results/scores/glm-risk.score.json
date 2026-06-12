@@ -1,0 +1,86 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 1,
+    "contract_closure": 4,
+    "actionability": 2,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 13,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 1,
+      "rationale": "虽然识别了若干表面问题，但给出的方向明显违反需求，甚至会继续破坏原设计，未守住最核心的非阻塞目标。",
+      "evidence": [
+        "识别 await 阻塞后，仍提出保留 await 并设置总超时。",
+        "建议通过本地持久化保证最终送达，把尽力而为遥测改成可靠投递。",
+        "没有明确指出生产监控指标和实时模式回滚开关。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "能够识别字段层级冲突以及 event_id 在实时和批量路径中的一致性要求，具备较强契约意识。",
+      "evidence": [
+        "要求明确原生桥收到的完整事件结构。",
+        "指出降级进入批量队列时必须保留原 event_id。"
+      ]
+    },
+    "actionability": {
+      "score": 2,
+      "rationale": "输出看似给出可执行方向，但关键建议没有解除风险，反而延续页面阻塞并引入额外可靠投递建设。",
+      "evidence": [
+        "建议保留最长三秒的 await。",
+        "建议使用本地持久化保证最终送达。",
+        "缺少生产观测和快速回滚的可执行要求。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要问题有原文依据，但自行引入本地持久化和最终送达语义，没有基于输入事实提出疑问。",
+      "evidence": [
+        "需求没有提供本地持久化基础设施。",
+        "需求没有要求遥测事件最终必达。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "没有引入消息平台或新公共 API，但可靠投递建议和重复拆分阻塞问题增加了额外成本。",
+      "evidence": [
+        "建议增加本地持久化保证最终送达。",
+        "把 await 阻塞与重试放大阻塞拆成两个高严重性问题。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "批量回落需要复用原 event_id。",
+    "同窗口发布缺少跨版本策略。",
+    "验收缺少异常和兼容路径。"
+  ],
+  "missed_known_issues": [
+    "没有明确指出缺少生产监控指标。",
+    "没有明确指出缺少实时模式回滚开关。",
+    "没有坚持彻底解除支付页面与遥测网络结果的耦合。"
+  ],
+  "valuable_new_findings": [
+    "指出降级进入批量队列时必须复用原 event_id。"
+  ],
+  "false_positives": [
+    "建议保留有限时长的 await。",
+    "建议通过本地持久化保证最终送达。"
+  ],
+  "failure_modes": [
+    "给出的方案违反非阻塞硬约束。",
+    "通过可靠投递建设修复尽力而为遥测问题。",
+    "建议可能继续破坏原设计。"
+  ],
+  "notes": "具备契约分析能力，但核心修复方向明显违反需求，因此命中率和可执行性评分较低。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "risk"
+  ]
+}

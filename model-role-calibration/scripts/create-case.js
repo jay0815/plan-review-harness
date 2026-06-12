@@ -10,53 +10,69 @@ const {
 } = require("./lib");
 
 const FILES = {
-  "input.md": `# Input
+  "inputs/planner.md": `# 需求背景
 
-## Task Background
+待填写。
 
-TBD
+## 需求
 
-## Original Requirement
+待填写。
 
-TBD
+## 约束
 
-## Original Plan
-
-TBD
-
-## Constraints
-
-TBD
-
-## Existing Context
-
-TBD
+待填写。
 `,
-  "context.md": `# Context
+  "inputs/review.md": `# 需求背景
 
-Optional. Add only the extra background that should be visible to the tested model.
+待填写。
+
+## 待审查方案
+
+待填写。
 `,
-  "known-issues.md": `# Known Issues
+  "inputs/synthesis.md": `# 需求背景
 
-Only for human scoring. Do not include this file in probe prompts.
+待填写。
 
-- TBD
+## Architecture Reviewer
+
+待填写。
+
+## Execution Reviewer
+
+待填写。
+
+## Risk Reviewer
+
+待填写。
+
+## 合成任务
+
+合并重复问题，识别真正分歧，降权误报，并给出修订指令。
 `,
-  "expected-findings.md": `# Expected Findings
+  "rubric.md": `# 评分口径
 
-Only for human scoring.
+## 确定问题
 
-- TBD
-`,
-  "expected-bad-findings.md": `# Expected Bad Findings
+- 待填写。
 
-Findings that should be treated as false positives or low-value noise.
+## 高质量输出
 
-- TBD
-`,
-  "scoring-notes.md": `# Scoring Notes
+- 待填写。
 
-- TBD
+## 典型误报
+
+- 出现了待填写。
+
+## 五项评分锚点
+
+- \`hit_rate\`：
+- \`contract_closure\`：
+- \`actionability\`：
+- \`evidence_discipline\`：
+- \`false_positive_cost\`：
+
+每项 0 到 5 分，总分 25 分。
 `
 };
 

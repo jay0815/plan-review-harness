@@ -1,0 +1,61 @@
+{
+  "probe": "architecture",
+  "issues": [
+    {
+      "title": "await 与「不阻塞支付成功页」需求直接矛盾",
+      "type": "abstraction",
+      "severity": "blocker",
+      "evidence": "需求背景明确要求「上报失败不能阻塞支付成功页，也不能改变支付结果」，但方案第 3 条写「支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页，确保事件不会丢失」",
+      "why_it_matters": "await 意味着结果页渲染被网络请求的完成状态阻塞；一旦上传超时或失败，用户将卡在等待页面，直接违反核心需求约束。即使意图是保事件不丢失，await 的语义就是阻塞调用方，无法同时满足「不阻塞」与「确保上报后再展示」两个目标。",
+      "suggested_fix": "将 await 替换为 fire-and-remember 模式：支付成功页立即渲染结果页，reportEvent 以非阻塞方式触发实时上传；通过本地持久化（如写入磁盘队列）保证事件不丢失，而非依赖 UI 层的阻塞等待。",
+      "confidence": 0.95
+    },
+    {
+      "title": "传输策略字段泄漏到业务 payload",
+      "type": "boundary",
+      "severity": "high",
+      "evidence": "方案第 1 条「payload 中增加 { 'is_realtime': true }」；第 2 条「原生桥从事件对象顶层读取 is_realtime，为 true 时立即调用上传接口」",
+      "why_it_matters": "payload 是业务数据的载体，is_realtime 是传输层的路由指令。将路由策略嵌入业务数据打破了关注点分离：原生桥需要从业务字段推断传输行为，服务端接收到的数据混入了非业务语义的字段。跨团队（JS/原生/服务端）各自维护时，一方修改传输策略会无意影响另一方的数据契约。",
+      "suggested_fix": "将路由策略从 payload 中剥离。reportEvent 在 JS 层根据事件类型或显式参数决定传输模式，调用原生桥时通过独立参数（如 options.sendMode='realtime'）传递策略指令，payload 保持纯业务数据。",
+      "confidence": 0.88
+    },
+    {
+      "title": "三端同版本窗口发布造成部署耦合",
+      "type": "coupling",
+      "severity": "medium",
+      "evidence": "方案第 5 条「JS、原生和服务端在同一个版本窗口一起发布」；需求背景提到「线上存在旧客户端和两个服务端版本」",
+      "why_it_matters": "三端强制同步发布意味着任一端无法单独回滚或灰度，增加了交付风险。旧客户端不发送 is_realtime，旧服务端版本可能不识别该字段，但方案未描述兼容策略——若原生桥依赖 is_realtime 做路由决策，旧客户端的事件将永远走批量队列，这与「支付成功事件尽快上报」的目标相悖。",
+      "suggested_fix": "设计向后兼容方案：原生桥对不含 is_realtime 的事件使用默认批量行为；服务端不依赖 is_realtime（仅靠 event_id 去重）。各端可独立灰度发布，JS 层先上线，原生桥和服务端可渐进适配。",
+      "confidence": 0.82
+    },
+    {
+      "title": "await + 三次重试组合放大用户阻塞时长",
+      "type": "maintainability",
+      "severity": "high",
+      "evidence": "方案第 3 条「await reportEvent(...)，确认上传成功后再展示结果页」；第 4 条「实时上传失败时立即重试三次」",
+      "why_it_matters": "await 与三次立即重试叠加意味着最坏情况下用户等待时长 = 3 × 单次请求超时时间。若单次超时 10 秒，用户最多等 30 秒才能看到支付结果页。即使单次超时较短，移动端弱网环境下的累积延迟仍可能达到数秒到十余秒，严重影响用户体验。",
+      "suggested_fix": "去掉 await（见 blocker 级建议）。重试逻辑应在后台执行，不占用 UI 主线程等待时间。首次失败后立即将事件写入持久队列并渲染结果页，后台异步重试。",
+      "confidence": 0.78
+    },
+    {
+      "title": "实时失败回退批量队列后 is_realtime 标记残留",
+      "type": "maintainability",
+      "severity": "low",
+      "evidence": "方案第 4 条「仍失败则重新放入批量队列」——整个事件对象（含 is_realtime: true）被放入批量队列",
+      "why_it_matters": "回退批量队列的事件携带 is_realtime: true 到达服务端时，服务端看到的是「自称实时」但实际批量送达的事件。若后续有人依赖 is_realtime 做服务端逻辑（如优先处理、不同存储），会产生语义不一致。",
+      "suggested_fix": "回退批量队列前清除或重置 is_realtime 标记；或在设计上使服务端完全忽略 is_realtime（仅作为传输层指令，不入库）。明确文档约定 is_realtime 的生命周期仅限于客户端传输决策。",
+      "confidence": 0.65
+    }
+  ],
+  "missing_questions": [
+    "服务端是否需要区分实时与批量事件？如果不需要，is_realtime 的服务端含义是什么？如果需要，当前设计未描述服务端处理逻辑。",
+    "旧客户端上的支付成功事件如何保证尽快上报？是否需要原生桥基于事件名称（如包含 payment_success）做默认实时路由，而非仅依赖 JS 传入的 is_realtime？",
+    "每次重试的超时时间是多少？移动端弱网下单次超时与三次重试的总耗时上限是否经过评估？",
+    "用户在 await 期间关闭应用或切换页面，未完成的上报如何处理？本地是否有持久化机制保证事件最终送达？",
+    "两个服务端版本是否都需要适配？如果只有一个版本处理 is_realtime，事件路由到旧版本时会发生什么？"
+  ],
+  "false_positive_risks": [
+    "is_realtime 放入 payload 可能被视为第一版的 pragmatic 简化方案，而非架构问题。但如果跨团队长期维护且 payload 会持久化到服务端存储，这个简化会固化为契约的一部分，因此判定为结构性边界问题是合理的。",
+    "三端同窗口发布的严重性取决于各端是否真的有独立发布节奏。如果该项目三端历来同窗口发布且无灰度需求，耦合问题严重性可降为 low。但需求背景明确提到存在旧客户端和两个服务端版本，说明实际上存在版本碎片化，因此耦合风险是真实的。"
+  ]
+}

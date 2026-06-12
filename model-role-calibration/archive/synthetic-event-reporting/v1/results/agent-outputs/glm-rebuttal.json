@@ -1,0 +1,78 @@
+{
+  "probe": "rebuttal",
+  "issues": [
+    {
+      "title": "await reportEvent 阻塞支付成功页，直接违反需求约束",
+      "type": "contradiction",
+      "severity": "blocker",
+      "evidence": "需求明确声明「上报失败不能阻塞支付成功页，也不能改变支付结果」。但方案第3条写道「支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页」——结果页的展示被 await 门控，上报失败或超时时页面将无法展示，这与需求约束构成直接矛盾。",
+      "why_it_matters": "如果 await 在网络异常时长时间不 resolve/reject，用户将停留在空白或loading状态，体验等同于支付结果被改变；即使最终 reject，用户也比原来晚看到成功页。这是方案与需求之间最核心的对冲。",
+      "suggested_fix": "改为非阻塞模式：reportEvent 对实时路径返回 Promise 供调用方选择性监听，但支付成功页在调用后立即展示结果页，不 await。事件可靠性由原生桥的重试+批量回退机制保证，而非由 UI 层阻塞保证。",
+      "confidence": 0.95
+    },
+    {
+      "title": "is_realtime 字段位置：payload 内层 vs 事件对象顶层，描述不一致",
+      "type": "defect",
+      "severity": "medium",
+      "evidence": "第1条说在 payload 中增加 is_realtime，即结构为 {name, payload: {is_realtime: true, ...}}。第2条说原生桥「从事件对象顶层读取 is_realtime」。顶层指的是 {name, payload} 这一层，is_realtime 并不在该层——它在 payload 内部。两条描述指向了不同的结构层级。",
+      "why_it_matters": "如果原生桥实现者按第2条理解，在顶层找不到 is_realtime，所有事件都会走批量队列，实时路径完全不生效，验收不通过且线上无实时上报能力。",
+      "suggested_fix": "统一描述：明确声明原生桥从 payload 对象内部读取 is_realtime，或改为将 is_realtime 提升到与 name 同级的顶层字段，并相应修改第1条的调用示例。",
+      "confidence": 0.85
+    },
+    {
+      "title": "三次立即重试无退避策略，与 await 组合后阻塞时间不可控",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "第4条写「立即重试三次」，未指定重试间隔或单次超时。若每次请求超时为 10-30 秒（移动网络常见），三次串行重试总耗时可达 30-90 秒。配合第3条的 await，支付成功页将被阻塞最长近分钟级。",
+      "why_it_matters": "即使修复第3条的 await 矛盾，重试策略仍影响原生桥线程/连接资源占用。无退避的密集重试在弱网下可能加剧拥塞而非提升成功率。",
+      "suggested_fix": "增加指数退避（如 1s、2s、4s）和单次超时上限（如 5s）；明确总重试时间上限（如 15s），超时后直接回退批量队列。同时与第3条解耦——重试在原生桥内部异步执行，不阻塞 UI。",
+      "confidence": 0.8
+    },
+    {
+      "title": "实时上报重试+批量回退路径下 event_id 去重未被覆盖",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "需求声明服务端仅对带 event_id 的事件去重。方案未提及确保实时事件携带 event_id。当实时路径失败、重试后回退批量队列时，同一事件可能通过实时路径成功发出一次、再通过批量队列发出一次——若缺少 event_id 或 event_id 不一致，服务端将收到重复事件。",
+      "why_it_matters": "支付成功事件重复会导致下游数据统计偏差（如支付转化率虚高），且当前无新数据库/消息平台来二次清洗。",
+      "suggested_fix": "方案补充：(a) JS 层在构造 payload 时必须为实时事件生成唯一 event_id；(b) 原生桥在回退批量队列时保留原始 event_id；(c) 服务端去重逻辑覆盖同一 event_id 的实时与批量两种来源。",
+      "confidence": 0.75
+    },
+    {
+      "title": "三端同版本窗口发布带来协调风险，旧客户端兼容性未显式验证",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "需求提到线上存在旧客户端和两个服务端版本。方案第5条要求 JS、原生、服务端同一版本窗口发布。若任一端延期，其余两端要么回滚要么带不完整功能上线。旧客户端收到新 JS 后 payload 中多出 is_realtime 字段，旧原生桥不识别——虽属于优雅降级（走批量），但方案未显式声明这一兼容路径为预期行为。",
+      "why_it_matters": "未声明的隐式降级在验收和排障时会被误判为 bug（「为什么旧客户端支付成功事件还是批量上报？」）。三端耦合发布也增加上线摩擦。",
+      "suggested_fix": "方案显式声明旧客户端兼容预期：旧原生桥忽略 is_realtime → 事件走批量 → 可接受。降低发布耦合：JS 先上线（payload 新字段对旧原生桥无害），原生和服务端可在后续版本跟进，实时能力随客户端升级自然生效。",
+      "confidence": 0.7
+    },
+    {
+      "title": "验收标准缺少失败场景、兼容场景和生产监控维度",
+      "type": "missing_constraint",
+      "severity": "medium",
+      "evidence": "第6条验收仅覆盖正面场景（开发环境实时发出、普通事件批量）。未包含：(a) 实时上报失败后重试和批量回退是否正确执行；(b) 旧客户端+新 JS 的降级路径是否正常；(c) 生产环境实时上报成功率、延迟、回退率的监控指标。",
+      "why_it_matters": "仅验证正面场景的方案上线后，失败路径的缺陷将在生产环境首次暴露，且无监控难以发现。",
+      "suggested_fix": "补充验收项：(1) 模拟网络失败场景验证重试→批量回退完整链路；(2) 旧客户端+新 JS 的降级验证；(3) 生产监控：实时上报成功率、P99延迟、批量回退率、重复事件率。",
+      "confidence": 0.8
+    }
+  ],
+  "missing_questions": [
+    "await reportEvent 在实时上报失败且回退批量队列后，Promise 应 resolve 还是 reject？调用方如何处理？",
+    "is_realtime 字段是否会被发送到服务端？如果是，服务端是否需要识别和处理该字段？",
+    "旧客户端收到含 is_realtime 的 payload 后，该字段是否会污染服务端数据或触发未预期行为？",
+    "实时上报与批量上报是否走同一个 API endpoint？如果是，服务端是否能区分并做不同处理（如优先级）？",
+    "两个服务端版本是否都支持 event_id 去重？如果不都支持，实时路径的重复风险如何管控？"
+  ],
+  "false_positive_risks": [
+    {
+      "description": "is_realtime 位置矛盾：可能「事件对象」在原生桥内部已被展开为扁平结构（name + payload 所有字段合并到顶层），此时第1条和第2条实际一致。需要确认原生桥的事件对象具体结构。",
+      "affected_issue_index": 1,
+      "likelihood": "medium"
+    },
+    {
+      "description": "event_id 去重风险：如果现有系统已强制所有事件携带 event_id，且回退批量队列时保留原始 event_id，则重复问题不存在。需要确认当前 event_id 生成和保留机制。",
+      "affected_issue_index": 3,
+      "likelihood": "medium"
+    }
+  ]
+}

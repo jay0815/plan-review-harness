@@ -1,0 +1,92 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 15,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "准确覆盖协议、非阻塞、event_id 和版本兼容问题，但没有将验收、生产观测和回滚缺失列为正式 issue。",
+      "evidence": [
+        "识别 await、字段位置、event_id 和双版本兼容。",
+        "识别重试缺少失败边界。",
+        "仅在 false_positive_risks 中提及线上灰度和监控不足。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "字段路径和 event_id 跨路径一致性分析较清楚，但通过第三参数、版本探测等多个实现方向干扰了最小契约目标。",
+      "evidence": [
+        "要求明确 is_realtime 的确切 JSON path。",
+        "要求实时和批量使用同一 event_id。",
+        "建议增加第三个参数、接口探测或版本协商。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "核心反驳可以修订方案，但遗漏完整验收、生产指标和回滚要求，并通过可靠投递建设扩大行动范围。",
+      "evidence": [
+        "没有将失败验收和快速回滚列为 issue。",
+        "建议实时发送前本地持久化。",
+        "建议版本探测和灰度机制。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "将遥测重复或丢失推导为重复奖励、商户通知、订单状态和支付事实错误，明显超出输入证据。",
+      "evidence": [
+        "声称重复遥测可能造成重复发放奖励和资损。",
+        "声称遥测丢失会导致服务端无法记录支付结果和订单状态不一致。",
+        "假设本地队列能够保证持久化。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "引入本地持久化、SQLite 或文件存储、接口探测、版本协商和公共 API 调整，明显扩大第一版范围。",
+      "evidence": [
+        "建议新增本地持久化能力。",
+        "建议接口探测或版本协商。",
+        "建议增加第三个参数或 options。",
+        "指定具体超时和指数退避参数。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "实时重试和批量回落缺少稳定 event_id。",
+    "同窗口发布缺少跨版本兼容策略。",
+    "立即重试缺少明确失败边界。"
+  ],
+  "missed_known_issues": [
+    "没有将失败与兼容验收缺失列为明确 issue。",
+    "没有明确生产观测指标缺失。",
+    "没有明确快速回滚和实时模式关闭能力缺失。"
+  ],
+  "valuable_new_findings": [
+    "正确区分同步发布本身与缺少兼容措施。",
+    "明确指出字段位置必须形成唯一 JSON path。"
+  ],
+  "false_positives": [
+    "将重复遥测推导为重复奖励、商户通知和资损。",
+    "将遥测丢失推导为订单状态错误。",
+    "建议新增本地持久化、SQLite 或文件存储。",
+    "建议接口探测、版本协商和公共 API 调整。",
+    "假设本地队列保证持久化。"
+  ],
+  "failure_modes": [
+    "混淆遥测数据与支付业务事实来源。",
+    "为了强化反驳而扩展可靠投递和版本协商能力。",
+    "遗漏生产验收和回滚问题。"
+  ],
+  "notes": "角色判断：核心反驳能力较强，但业务影响脑补和可靠投递扩张明显。可作为辅助 Rebuttal Reviewer，不适合作为未经约束的主审。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

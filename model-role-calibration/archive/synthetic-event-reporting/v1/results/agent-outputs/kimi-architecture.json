@@ -1,0 +1,60 @@
+{
+  "probe": "architecture",
+  "issues": [
+    {
+      "title": "支付成功页被上报逻辑阻塞",
+      "type": "boundary",
+      "severity": "blocker",
+      "evidence": "支付成功页执行 `await reportEvent(...)`，确认上传成功后再展示结果页",
+      "why_it_matters": "需求明确要求\"上报失败不能阻塞支付成功页\"，但 `await` 强制结果页等待上传完成，在弱网或服务端故障时会导致支付结果页无法展示，直接违背核心约束。",
+      "suggested_fix": "改为异步非阻塞上报（fire-and-forget），通过页面生命周期钩子（如 beforeunload）或本地持久化队列保证事件不丢失，而非阻塞 UI。",
+      "confidence": 0.95
+    },
+    {
+      "title": "强制同步发布导致跨团队强耦合",
+      "type": "coupling",
+      "severity": "blocker",
+      "evidence": "JS、原生和服务端在同一个版本窗口一起发布",
+      "why_it_matters": "三个层由不同团队维护，且线上存在旧客户端和两个服务端版本，强制同步发布违背康威定律，导致任何一方延期或回滚都会拖垮整体发布，且旧版本在未定义行为下运行，丧失独立演进与安全灰度能力。",
+      "suggested_fix": "采用契约驱动与版本兼容设计：原生桥透传未知字段保证旧客户端兼容；服务端同时支持新旧协议；各团队独立灰度发布。",
+      "confidence": 0.9
+    },
+    {
+      "title": "传输策略侵入业务 Payload",
+      "type": "boundary",
+      "severity": "high",
+      "evidence": "支付成功调用方在 `payload` 中增加 `{ \\\"is_realtime\\\": true }`；原生桥从事件对象顶层读取 `is_realtime`",
+      "why_it_matters": "`is_realtime` 是路由策略而非业务属性，将其放入业务 payload 导致原生桥必须解析并依赖业务数据结构，造成 JS 业务层与原生传输层的职责混淆和耦合。",
+      "suggested_fix": "若签名不可变，应在 JS SDK 内部将策略标记转换为原生桥可识别的元数据字段（如独立 header 或 bridge 指令），避免污染业务 payload。",
+      "confidence": 0.85
+    },
+    {
+      "title": "实时链路降级导致核心需求失效",
+      "type": "maintainability",
+      "severity": "high",
+      "evidence": "实时上传失败时立即重试三次；仍失败则重新放入批量队列",
+      "why_it_matters": "支付成功事件的核心诉求是\"尽快上报\"，降级到批量队列意味着实时性承诺被静默破坏；且批量队列的延迟可能长达数分钟，导致关键业务数据无法及时到达。",
+      "suggested_fix": "实时链路失败时应在客户端本地持久化并启动指数退避重试，或在用户下一次打开应用时优先补发，而非混入普通批量队列。",
+      "confidence": 0.8
+    },
+    {
+      "title": "缺乏幂等性设计导致重复上报风险",
+      "type": "maintainability",
+      "severity": "high",
+      "evidence": "服务端仅对带有 `event_id` 的事件去重；方案未提及 `event_id` 的生成与保持机制",
+      "why_it_matters": "实时重试三次后降级到批量队列的过程中，若未携带稳定的 `event_id`，每次上传会被服务端视为不同事件，导致支付成功事件重复统计，影响核心业务数据准确性。",
+      "suggested_fix": "在事件生成时即分配全局唯一的 `event_id` 并随事件全生命周期保持，确保跨链路（实时/批量）重试均可被服务端去重。",
+      "confidence": 0.85
+    }
+  ],
+  "missing_questions": [
+    "旧客户端不认识 `is_realtime` 字段时是否会透传还是丢弃？服务端两个版本如何分别处理？",
+    "支付成功页关闭或杀进程时，正在实时上报的事件如何保证不丢失？",
+    "`reportEvent` 的 `await` 在原生桥侧具体 resolve 的条件是什么（网络层收到响应即成功，还是业务成功码）？"
+  ],
+  "false_positive_risks": [
+    "用户可能认为 `is_realtime` 放在 payload 中是签名受限下的合理折中，但架构上仍属于策略泄漏。",
+    "用户可能认为同步发布只是第一版的临时安排，但线上存在旧客户端和两个服务端版本的事实使其不可行。",
+    "用户可能认为 await 只在极短时间内阻塞，但弱网环境下这会直接违背不阻塞的硬性需求。"
+  ]
+}

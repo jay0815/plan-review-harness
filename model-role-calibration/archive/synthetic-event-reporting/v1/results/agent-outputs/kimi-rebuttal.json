@@ -1,0 +1,70 @@
+{
+  "probe": "rebuttal",
+  "issues": [
+    {
+      "title": "支付成功页 await reportEvent 与需求“不能阻塞支付成功页”直接矛盾",
+      "type": "contradiction",
+      "severity": "blocker",
+      "evidence": "需求明确“上报失败不能阻塞支付成功页”，方案第3步要求“支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页”。无论内部超时如何设置，await 语义本身会挂起后续代码执行，导致结果页展示被阻塞。",
+      "why_it_matters": "支付结果页延迟展示会直接损害用户体验，也与需求硬性约束冲突。",
+      "suggested_fix": "改为 fire-and-forget 或仅等待一个有限超时（如最多 1s），在超时或失败后直接展示结果页，后台继续重试或落入批量队列。",
+      "confidence": 0.95
+    },
+    {
+      "title": "payload 内嵌字段与原生桥“从顶层读取”存在结构错位",
+      "type": "defect",
+      "severity": "high",
+      "evidence": "方案第1步将 is_realtime 放在 payload 对象内部；方案第2步称原生桥从“事件对象顶层”读取 is_realtime。若事件对象结构为 {name, payload: {is_realtime: true}}，原生桥在顶层读取不到该字段，导致所有事件仍进入批量队列。",
+      "why_it_matters": "实时事件无法被识别，支付成功事件不能立即上报，核心需求失效。",
+      "suggested_fix": "明确事件对象序列化后的结构，或在 JS 层将 is_realtime 提升到事件对象顶层后再传递给原生桥；同时确保旧桥兼容。",
+      "confidence": 0.9
+    },
+    {
+      "title": "未为实时事件生成 event_id，重试与回退批量队列会导致重复上报",
+      "type": "risk",
+      "severity": "high",
+      "evidence": "需求说明“服务端仅对带有 event_id 的事件去重”，但方案未提及为支付成功等实时事件生成 event_id。方案第4步包含“立即重试三次；仍失败则重新放入批量队列”，此过程至少会产生 1~4 次相同内容的上报请求。",
+      "why_it_matters": "支付成功事件重复会导致订单量统计失真，可能触发对账差异或财务风险。",
+      "suggested_fix": "在 JS 层为所有事件统一生成全局唯一 event_id，并随事件一路透传至服务端；确保重试和批量回退均携带同一 event_id。",
+      "confidence": 0.9
+    },
+    {
+      "title": "旧客户端与多服务端版本兼容性未被覆盖",
+      "type": "risk",
+      "severity": "high",
+      "evidence": "需求指出“线上存在旧客户端和两个服务端版本”，方案第5步假设“JS、原生和服务端在同一个版本窗口一起发布”。旧客户端无法强制升级，若 JS 通过离线包/热更新先行升级而旧原生桥未识别 is_realtime，或旧服务端未兼容新字段，实时上报逻辑将降级或报错。",
+      "why_it_matters": "线上灰度和回滚场景下，跨版本调用可能导致崩溃、数据丢失或不符合预期的降级行为。",
+      "suggested_fix": "补充兼容性矩阵：旧客户端无 is_realtime 支持时应安全降级为批量队列；服务端需兼容带/不带 is_realtime 的两种请求；明确 JS、原生、服务端的最小兼容版本号。",
+      "confidence": 0.85
+    },
+    {
+      "title": "await 语义与失败回退批量队列的行为存在定义缺口",
+      "type": "defect",
+      "severity": "medium",
+      "evidence": "方案第3步要求 await 直到“确认上传成功”，但第4步允许实时上传失败后转入批量队列。若最终落入批量队列，Promise 应 resolve（未真正实时成功）还是 reject（调用方需 catch）？方案未定义，支付页无法正确处理后续流程。",
+      "why_it_matters": "语义不清会导致前端异常处理缺失或错误降级，可能抛出未捕获异常影响支付结果页逻辑。",
+      "suggested_fix": "明确 reportEvent 的 Promise 在实时失败但回退批量成功/失败时的结算规则；建议无论实时是否成功均在有限超时后 resolve，仅通过回调或状态码告知调用方实际路径。",
+      "confidence": 0.8
+    },
+    {
+      "title": "is_realtime 作为业务 payload 字段存在数据污染风险",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "方案将控制字段 is_realtime 与业务数据混放在同一 payload 对象中，未说明原生桥消费后是否会将其剔除。若服务端直接持久化整个 payload，该控制字段将被当作业务数据存储。",
+      "why_it_matters": "污染业务数据可能导致后续数据清洗成本，或使下游 BI 报表出现预期外字段。",
+      "suggested_fix": "在 JS 层或原生层在发送前剥离 is_realtime，仅使用其作为内部路由标记；或将其放到与 payload 并列的元数据字段中。",
+      "confidence": 0.75
+    }
+  ],
+  "missing_questions": [
+    "支付成功事件若实时上报在网络抖动场景下仍失败并进入批量队列，业务方可接受的最大延迟是多少？",
+    "实时上传失败后的三次重试是立即连续重试还是带退避策略？是否会在弱网环境下加剧耗电与流量消耗？",
+    "服务端对 is_realtime 为 true 的事件是否有与批量事件不同的接口或响应格式要求？",
+    "若支付成功页不允许阻塞，await 的超时阈值应设为多少？超时后是否需要给用户任何提示？"
+  ],
+  "false_positive_risks": [
+    "不要把“失败落入批量队列”当成缺陷——在需求已明确“第一版不建设新的消息平台或数据库”的前提下，这是合理的降级策略。",
+    "不要把“仅对 event_id 去重”当成服务端缺陷——这是已知约束，不应在方案审查中将其推翻。",
+    "不要把“同一个版本窗口一起发布”视为发布策略缺陷——虽然旧客户端兼容有风险，但协同发版本身是针对新版本的合理动作。"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 2,
+    "actionability": 2,
+    "evidence_discipline": 1,
+    "false_positive_cost": 1
+  },
+  "total": 9,
+  "matched_known_issues": [
+    "复用 reportEvent。",
+    "支付成功页非阻塞。",
+    "event_id、兼容性和灰度发布。"
+  ],
+  "missed_known_issues": [
+    "没有形成唯一权威的线上报文和发送路径。",
+    "关键设计选择未在实施前收敛。"
+  ],
+  "valuable_new_findings": [
+    "重试、原生行为和测试步骤较具体。"
+  ],
+  "false_positives": [
+    "引入新原生实时 API 和请求头。",
+    "引入 Kafka 或即时消费队列。",
+    "引入本地持久化、重启重放和接近零丢失语义。"
+  ],
+  "failure_modes": [
+    "多个互相竞争的协议和发送路径并存。",
+    "可靠投递和基础设施范围严重膨胀。"
+  ],
+  "notes": "角色判断：v1 不适合作为主 Planner。需要显著加强唯一契约、证据纪律和范围控制。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "planner"
+  ]
+}

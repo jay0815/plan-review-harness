@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 16,
+  "matched_known_issues": [
+    "非阻塞支付成功页。",
+    "event_id 与服务端去重。",
+    "跨版本兼容、灰度、监控和回滚。"
+  ],
+  "missed_known_issues": [
+    "线上报文封装和 JS、原生责任仍有重叠。"
+  ],
+  "valuable_new_findings": [
+    "使用 options 避免直接污染业务 payload。",
+    "覆盖功能开关、兼容性测试和回滚。"
+  ],
+  "false_positives": [
+    "假设旧服务端忽略未知字段。",
+    "引入输入未确认的远程配置和存储机制。",
+    "倾向于把遥测扩展为更强可靠性语义。"
+  ],
+  "failure_modes": [
+    "把未知兼容行为同时写入主方案和待决问题。",
+    "通过额外机制扩大第一版范围。"
+  ],
+  "notes": "角色判断：v1 Planner 首选。覆盖最完整，但必须加强事实纪律、唯一 wire contract 和范围控制。",
+  "suggested_roles": [
+    "planner"
+  ],
+  "unsuitable_roles": []
+}
