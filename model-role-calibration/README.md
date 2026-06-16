@@ -2,6 +2,18 @@
 
 本目录是一个本地、半自动的模型角色校准工具，用于评估不同模型更适合承担哪些规划和审查角色。
 
+将已校准角色作为 Claude Code MCP 使用的安装说明见：
+
+```text
+model-role-calibration/claude-code-mcp-integration.md
+```
+
+生成不依赖 marketplace 的 MCP + Skill 分发包：
+
+```bash
+npm run plan-review:package
+```
+
 当前版本不直接调用模型 API，也不接 LangGraph。模型通过本机 Claude Code wrapper CLI 运行：
 
 - 创建可编辑的校准 case。
@@ -104,6 +116,18 @@ node model-role-calibration/scripts/run-calibration.js \
 
 ```text
 model-role-calibration/archive/synthetic-event-reporting/v1/
+```
+
+v2 已完成并归档到：
+
+```text
+model-role-calibration/archive/synthetic-event-reporting/v2/
+```
+
+v1/v2 对比报告：
+
+```text
+model-role-calibration/archive/synthetic-event-reporting/v2/analysis/v1-v2-comparison.md
 ```
 
 v2 保持 case、rubric 和模型集合不变，主要调整六个角色的初始化 prompt。Risk 根据 v1 已确认的角色边界改用不含 `suggested_fix` 的独立 schema，其余角色 schema 不变。实验说明见：

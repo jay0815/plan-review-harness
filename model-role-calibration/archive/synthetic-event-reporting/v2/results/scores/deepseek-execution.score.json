@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 13,
+  "matched_known_issues": [
+    "await 与非阻塞硬约束冲突。",
+    "reportEvent 的 Promise 语义和批量回退后的返回契约不清。",
+    "event_id 生成责任未分配。",
+    "版本组合和正向验收覆盖不足。"
+  ],
+  "missed_known_issues": [
+    "错误把 is_realtime 字段位置冲突列为可能误报。",
+    "遗漏生产观测和明确回滚。"
+  ],
+  "valuable_new_findings": [
+    "对 Promise resolve、reject 和批量回退语义的分析较细。"
+  ],
+  "false_positives": [
+    "无依据断言现有 reportEvent 未暴露 Promise。",
+    "将具体重试间隔、endpoint 和触发时机列为问题。",
+    "建议依赖批量队列兜底，隐含未确认可靠性。"
+  ],
+  "failure_modes": [
+    "正文与 false_positive_risks 对字段路径的判断不一致。",
+    "异步语义分析较强，但核心 wire contract 判断失真。"
+  ],
+  "notes": "角色判断：仅适合辅助检查 Promise 语义，本轮不适合独立承担 Execution Reviewer；字段路径与事实判断必须由其他模型复核。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "execution"
+  ]
+}

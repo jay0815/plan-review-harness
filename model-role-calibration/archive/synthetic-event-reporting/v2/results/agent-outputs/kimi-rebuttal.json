@@ -1,0 +1,68 @@
+{
+  "probe": "rebuttal",
+  "issues": [
+    {
+      "title": "is_realtime 字段位置在 payload 与事件对象顶层之间存在歧义",
+      "type": "contradiction",
+      "severity": "medium",
+      "evidence": "步骤1要求调用方“在 payload 中增加 {is_realtime: true}”，步骤2又称“原生桥从事件对象顶层读取 is_realtime”。",
+      "why_it_matters": "若原生桥看到的事件对象结构为 {name, payload} 或包含额外元数据，is_realtime 位于 payload 内部而非顶层，原生桥读取顶层将无法识别实时事件，导致支付成功事件仍进入批量队列，违背“尽快上报”需求。",
+      "suggested_fix": "明确原生桥事件对象 schema，使 is_realtime 的写入位置与读取位置一致；或规定 payload 字段被平铺到事件对象顶层。",
+      "confidence": 0.8
+    },
+    {
+      "title": "await reportEvent 会阻塞支付成功页展示",
+      "type": "contradiction",
+      "severity": "blocker",
+      "evidence": "步骤3规定“支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页”；需求明确“上报失败不能阻塞支付成功页”。",
+      "why_it_matters": "await 会挂起支付成功页直到 reportEvent 完成；任何网络延迟或失败都会直接阻塞结果页展示，与“不得阻塞”的硬约束冲突。",
+      "suggested_fix": "支付结果页展示不得依赖 reportEvent 完成；reportEvent 应在后台异步执行，并通过现有本地批量队列保证事件不丢失，而非通过阻塞 UI 等待上传成功。",
+      "confidence": 0.95
+    },
+    {
+      "title": "立即重试三次与 await 结合会长时间阻塞结果页",
+      "type": "defect",
+      "severity": "high",
+      "evidence": "步骤3 await reportEvent 等待成功，步骤4“实时上传失败时立即重试三次；仍失败则重新放入批量队列”。",
+      "why_it_matters": "三次立即重试（加上网络往返）可能耗时数秒，且全部发生在 await 的关键路径上，进一步加剧对支付成功页的阻塞，违反非阻塞要求。",
+      "suggested_fix": "重试与批量回退逻辑必须异步执行，不得处于阻塞支付结果页展示的关键路径中。",
+      "confidence": 0.9
+    },
+    {
+      "title": "未为支付成功事件添加 event_id，服务端无法去重",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "步骤4包含三次实时重试及批量队列回退；需求背景说明“服务端仅对带有 event_id 的事件去重”。",
+      "why_it_matters": "同一支付成功事件可能经实时重试、批量回退被多次上报；若未生成 event_id，服务端将记录重复事件，可能影响后续统计或对账。",
+      "suggested_fix": "若业务要求支付事件唯一性，为实时支付事件生成稳定 event_id 并在上报全链路携带。",
+      "confidence": 0.7
+    },
+    {
+      "title": "未说明两个服务端版本共存时的兼容性",
+      "type": "missing_constraint",
+      "severity": "medium",
+      "evidence": "需求背景指出“线上存在旧客户端和两个服务端版本”；步骤5仅声明“在同一个版本窗口一起发布”，未描述服务端接口/字段兼容性。",
+      "why_it_matters": "即使同步发布，灰度或回滚仍会导致新客户端连接旧服务端版本；若旧服务端不认识实时字段或新接口语义，实时上报可能失败或被错误处理。",
+      "suggested_fix": "明确实时上报是否复用原有接口、旧服务端版本如何兼容 is_realtime 字段及失败后的降级行为。",
+      "confidence": 0.7
+    },
+    {
+      "title": "验收方式未覆盖失败路径与兼容性",
+      "type": "risk",
+      "severity": "low",
+      "evidence": "步骤6验收仅要求“开发环境能看到支付成功事件请求立即发出，普通事件仍进入批量队列”。",
+      "why_it_matters": "验收未验证上报失败是否阻塞支付页、失败重试/回退是否正确、旧客户端/旧服务端行为，可能让核心缺陷（阻塞、重复）遗漏到线上。",
+      "suggested_fix": "补充失败场景、旧客户端兼容、旧服务端兼容及重复上报情况的验收用例。",
+      "confidence": 0.75
+    }
+  ],
+  "missing_questions": [
+    "原生桥接收的事件对象是否将 payload 平铺到顶层，还是保留为嵌套结构？",
+    "实时上传与批量上传是否使用同一服务端接口？旧服务端版本看到 is_realtime 字段会忽略还是报错？",
+    "业务上是否允许支付成功事件在服务端出现重复记录？"
+  ],
+  "false_positive_risks": [
+    "旧客户端无法实时上报：输入仅说明存在旧客户端，未要求旧客户端必须实时上报，旧客户端保持批量属于正常向后兼容，证据不足构成缺陷。",
+    "缺少 event_id 导致重复即 blocker：输入仅陈述服务端去重规则，未明确要求支付事件必须去重，不能仅凭此推断业务不可接受重复，证据不足。"
+  ]
+}

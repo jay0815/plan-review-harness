@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 4,
+    "false_positive_cost": 4
+  },
+  "total": 20,
+  "matched_known_issues": [
+    "支付成功页同步依赖遥测网络结果。",
+    "is_realtime 传输策略跨越业务 payload 与原生桥边界。",
+    "跨团队同窗口发布形成版本和回滚耦合。",
+    "Promise 成功语义与批量回退责任不清。",
+    "重试和批量回退缺少稳定 event_id。"
+  ],
+  "missed_known_issues": [
+    "没有把 payload 内写入与事件顶层读取的直接 wire mismatch 单独提升为最高优先级契约问题。",
+    "没有明确报告生产观测结构缺口。"
+  ],
+  "valuable_new_findings": [
+    "识别调用方等待的成功语义与内部批量回退之间存在双重权威。"
+  ],
+  "false_positives": [
+    "建议通过事件类型或注册表决定路由，超过最小结构修订目标。",
+    "把批量路径描述为持久化兜底和最终上报保证。"
+  ],
+  "failure_modes": [
+    "容易先评价 payload 边界优雅性，而没有首先锁定实际字段路径错位。"
+  ],
+  "notes": "角色判断：Architecture 主模型候选。结构覆盖最好，可独立发现依赖、责任、发布和幂等问题；正式定稿时仍需优先复核精确 wire mismatch 和可靠性措辞。",
+  "suggested_roles": [
+    "architecture"
+  ],
+  "unsuitable_roles": []
+}

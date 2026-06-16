@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 2,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 13,
+  "matched_known_issues": [
+    "Promise 不等待网络并保护支付成功页。",
+    "批量回退沿用相同 event_id。",
+    "覆盖兼容、观测、发布和回滚。"
+  ],
+  "missed_known_issues": [
+    "没有形成唯一服务端 endpoint、Native 接口和字段位置契约。",
+    "旧服务端处理新请求的行为未经确认。"
+  ],
+  "valuable_new_findings": [
+    "覆盖面较完整，失败和发布路径表达清楚。"
+  ],
+  "false_positives": [
+    "同时保留现有 endpoint 和新增实时 endpoint。",
+    "引入事件名配置、X-Event-Mode 请求头和潜在新 Native API。",
+    "无依据承诺失败事件五分钟内通过批量队列补报成功。"
+  ],
+  "failure_modes": [
+    "关键契约保留多条互斥路径。",
+    "把应由 Planner 收敛的关键选择留到执行阶段。"
+  ],
+  "notes": "角色判断：不建议担任 Planner 主模型。能够覆盖主要主题，但习惯保留多条互斥实现路径，把关键契约留给执行阶段决定；更适合作为辅助模型补充兼容、观测、发布和回滚检查。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "planner"
+  ]
+}

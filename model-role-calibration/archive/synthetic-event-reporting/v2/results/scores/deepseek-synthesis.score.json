@@ -1,0 +1,87 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 15,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "覆盖大部分确定问题，但遗漏 API 拆分与需求复用之间的 L3 方向分歧。",
+      "evidence": [
+        "覆盖字段协议、非阻塞、幂等、兼容发布、观测和回滚。",
+        "将 Architecture Reviewer 的 API 拆分建议直接判为误报。",
+        "没有输出任何 L3 方向决策。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "主要契约要求基本明确，但旧客户端替代去重键没有来源依据，API 方向也未保留待裁决。",
+      "evidence": [
+        "要求统一 is_realtime 字段位置。",
+        "要求支付结果与上报解耦。",
+        "提出旧客户端替代去重键。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "修订指令覆盖主要执行面，但错误去重方案和遗漏方向决策会误导最终 Planner。",
+      "evidence": [
+        "包含协议、非阻塞、幂等和上线保障修订。",
+        "没有提示用户裁决公共 API 方向。",
+        "建议旧客户端使用替代去重键。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "多数结论可追溯，但发布、可观测和回滚的 merged_from 不完整，并新增旧客户端去重机制。",
+      "evidence": [
+        "运营保障问题的 merged_from 只有 Risk 与 Execution，但理由使用了 Architecture 的版本耦合意见。",
+        "新增来源未提供的替代去重键。",
+        "其余关键问题来源基本准确。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "正确丢弃 Kafka 和独立数据库，但新增旧客户端去重实现和后台队列表述。",
+      "evidence": [
+        "Kafka 和独立数据库未进入修订。",
+        "新增旧客户端替代去重键。",
+        "将后台队列作为非阻塞实现选项。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 字段位置必须统一。",
+    "await reportEvent 违反非阻塞硬约束。",
+    "重试和批量回退存在 event_id 幂等缺口。",
+    "缺少跨版本发布顺序和兼容矩阵。",
+    "缺少生产指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。"
+  ],
+  "missed_known_issues": [
+    "没有把 API 拆分与复用 reportEvent 识别为 L3 方向分歧。",
+    "发布兼容合并的来源列表遗漏 Architecture Reviewer。"
+  ],
+  "valuable_new_findings": [
+    "将字段事实冲突与最终字段位置选择区分为 L2 修改。"
+  ],
+  "false_positives": [
+    "为旧客户端新增替代去重键。",
+    "直接将 API 拆分意见判为误报，丢失了真实方向冲突。",
+    "将后台队列作为非阻塞修订的具体实现选项。"
+  ],
+  "failure_modes": [
+    "容易把与需求冲突的方向意见直接丢弃，而不是保留为需要修改前提的 L3 决策。",
+    "合并多来源问题时 merged_from 不完整。"
+  ],
+  "notes": "角色判断：适合作为辅助 Synthesizer，不适合作为本场景主模型。能够产出较完整修订清单，但方向分歧识别、来源列表完整性和机制边界仍需主模型复核。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

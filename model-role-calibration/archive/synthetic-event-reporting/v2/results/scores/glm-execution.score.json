@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 17,
+  "matched_known_issues": [
+    "await 阻塞硬约束。",
+    "event_id 生成责任和去重契约缺失。",
+    "实时失败回退时 is_realtime 处理语义未定义。",
+    "上传接口信息不足。",
+    "失败验收和版本兼容策略缺失。"
+  ],
+  "missed_known_issues": [
+    "错误淡化 payload 写入与事件顶层读取的确定契约冲突。",
+    "未单独检查 reportEvent 的 Promise resolve/reject 契约。",
+    "缺少完整生产观测和回滚检查。"
+  ],
+  "valuable_new_findings": [
+    "识别回退批量时保留 is_realtime 可能导致执行语义循环。"
+  ],
+  "false_positives": [
+    "要求具体 endpoint 名称、路径和方法，超过输入上下文。",
+    "错误认为字段层级描述已经足以唯一解释。",
+    "错误降低同步发布编排缺失的重要性。"
+  ],
+  "failure_modes": [
+    "适合检查交付物和接口信息，但精确 wire contract 判断不稳定。"
+  ],
+  "notes": "角色判断：Execution 辅助模型。适合检查接口信息、依赖和测试，不宜独立终审跨层字段与异步语义。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

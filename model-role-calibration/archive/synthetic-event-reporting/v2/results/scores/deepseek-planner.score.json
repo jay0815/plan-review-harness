@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 2,
+    "false_positive_cost": 3
+  },
+  "total": 16,
+  "matched_known_issues": [
+    "复用 reportEvent 并明确非阻塞调用边界。",
+    "定义 event_id、桥协议、单事件发送结构和服务端去重责任。",
+    "覆盖测试、观测、灰度发布和回滚。"
+  ],
+  "missed_known_issues": [
+    "桥发送失败时仍可能 reject，支付页与上报失败尚未完全解耦。",
+    "旧 Native 和旧服务端兼容行为缺少事实依据。"
+  ],
+  "valuable_new_findings": [
+    "v2 中四个模型里主契约和执行步骤最完整。"
+  ],
+  "false_positives": [
+    "由旧客户端没有 event_id 推断服务端一定从事件顶层读取该字段。",
+    "假设旧 Native 会忽略新增字段并自动降级到 batch。",
+    "扩展为所有事件生成 event_id，并引入后台保活和 rate limit 等首版范围外机制。"
+  ],
+  "failure_modes": [
+    "用未经确认的旧版本行为闭合兼容主路径。",
+    "少量平台能力和运行时机制超出输入范围。"
+  ],
+  "notes": "角色判断：当前 Planner 最佳候选，适合主方案起草；正式定稿前仍需由证据纪律更强的 Reviewer 校验旧版本兼容、字段位置和桥失败语义。",
+  "suggested_roles": [
+    "planner"
+  ],
+  "unsuitable_roles": []
+}

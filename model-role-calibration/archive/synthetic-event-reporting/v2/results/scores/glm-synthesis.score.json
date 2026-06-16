@@ -1,0 +1,86 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 16,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "主要问题和 L3 API 分歧覆盖完整，但错误降权回滚能力。",
+      "evidence": [
+        "覆盖字段契约、发布兼容、非阻塞、幂等和可观测性。",
+        "正确识别 API 拆分与需求复用之间的 L3 方向冲突。",
+        "将回滚开关放入 likely_false_positives。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "字段、非阻塞和版本要求基本闭合，但为旧客户端擅自设计业务键去重，可能破坏数据契约。",
+      "evidence": [
+        "要求统一 is_realtime 的唯一归属位置。",
+        "明确支付结果页不得等待上报。",
+        "建议服务端按事件类型和业务键为旧客户端去重。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "大部分修订可执行，但错误去重方案会误导 Planner，且遗漏回滚目标。",
+      "evidence": [
+        "修订指令覆盖协议、发布、非阻塞、幂等和指标。",
+        "直接指定来源未提供的旧客户端业务键去重。",
+        "没有把回滚能力保留为修订要求。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "来源和分歧整体准确，但新增业务键去重机制，并对回滚意见作了错误裁决。",
+      "evidence": [
+        "主要 merged_from 与来源一致。",
+        "没有把未表态描述为共识。",
+        "新增事件类型和业务键组合去重。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "正确丢弃 Kafka，但业务键去重增加了无依据的实现成本和数据风险。",
+      "evidence": [
+        "Kafka 和独立事件数据库未进入修订指令。",
+        "新增服务端业务键去重机制。",
+        "没有引入其他大型基础设施。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 字段协议必须统一。",
+    "await reportEvent 阻塞支付结果页。",
+    "实时重试和批量回退存在 event_id 幂等缺口。",
+    "缺少跨版本发布顺序与兼容矩阵。",
+    "缺少实时链路核心指标。",
+    "Kafka 和独立数据库属于超范围误报。",
+    "API 拆分与复用 reportEvent 构成 L3 方向分歧。"
+  ],
+  "missed_known_issues": [
+    "没有保留实时模式的回滚能力目标。"
+  ],
+  "valuable_new_findings": [
+    "正确将字段是否必须统一与最终统一到哪个位置区分开。"
+  ],
+  "false_positives": [
+    "建议旧客户端使用事件类型和业务键进行服务端去重。",
+    "将回滚能力整体判为不进入当前修订的低优先级事项。"
+  ],
+  "failure_modes": [
+    "会在合成阶段替 Reviewer 补充具体数据机制。",
+    "可能把合理目标和不确定实现一起删除。"
+  ],
+  "notes": "角色判断：适合作为辅助 Synthesizer，不建议独立负责最终修订。问题覆盖较好，但需要主模型过滤自行新增的去重机制，并恢复来源明确提出的回滚目标。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

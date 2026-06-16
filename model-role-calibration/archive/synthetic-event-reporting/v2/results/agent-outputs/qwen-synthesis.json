@@ -1,0 +1,49 @@
+{
+  "probe": "synthesis",
+  "consensus_issues": [
+    {
+      "title": "发布兼容计划缺失",
+      "merged_from": [
+        "Architecture Reviewer",
+        "Execution Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Architecture Reviewer 指出 JS、原生、服务端同时发布会形成版本耦合，需要定义向前和向后兼容顺序；Execution Reviewer 指出缺少每一层具体要修改的接口、发布顺序和跨版本验收矩阵。两者都明确要求补充发布兼容规划。",
+      "suggested_fix": "补充跨版本兼容策略：明确各层接口变更清单、发布顺序（服务端先行兼容）、向前向后兼容矩阵及验收标准。"
+    }
+  ],
+  "disagreements": [
+    {
+      "title": "is_realtime 字段位置不一致的严重度判断",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "is_realtime 在 JS 位于 payload、原生从顶层读取，协议没有唯一归属，判定为 blocker",
+          "reason": "字段在不同实现中归属不一致会导致协议不可靠，属于契约缺陷"
+        },
+        {
+          "source": "Risk Reviewer",
+          "position": "is_realtime 最好放在顶层，但放在 payload 也能工作，判定为低优先级偏好",
+          "reason": "两种位置都能运行，不影响功能正确性，属于偏好而非阻塞问题"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": false,
+      "decision_options": [
+        "统一放在事件顶层（Risk Reviewer 偏好，原生已按此读取，JS 侧改动较小）",
+        "统一放在 payload 内（需修改原生读取逻辑）"
+      ]
+    }
+  ],
+  "likely_false_positives": [
+    "Execution Reviewer 建议建设 Kafka 和独立事件数据库：需求未提及具体中间件或存储选型，属于依赖未知基础设施的超范围建议，应降权。",
+    "Architecture Reviewer 建议将实时和批量上报拆成两个公开 API：需求明确要求「在复用 reportEvent 的前提下」增加实时上报，拆分公共 API 与该约束冲突，应降权。"
+  ],
+  "revision_instructions": [
+    "统一 is_realtime 字段在协议中的位置（建议顶层），确保 JS、原生、服务端三端读取方式一致，关闭契约不一致。",
+    "补充跨版本兼容策略：定义各层接口变更清单、发布顺序（服务端先行兼容新旧字段）、向前向后兼容矩阵及跨版本验收标准。",
+    "消除 await reportEvent 对支付结果页的阻塞：遥测上报必须异步执行（fire-and-forget 或不 await），确保上报失败不影响支付结果展示，满足需求硬约束「失败不能阻塞支付结果」。",
+    "明确重试与幂等范围：三次重试后回退到批量队列时需防止重复上报；旧客户端缺少 event_id 时服务端无法去重，需界定幂等保障的适用边界。",
+    "补充实时上报的可观测性与回滚能力：增加实时成功率、上报延迟、回退批量次数等指标，并提供关闭实时模式的回滚开关。"
+  ]
+}

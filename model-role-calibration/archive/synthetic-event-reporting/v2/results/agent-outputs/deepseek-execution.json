@@ -1,0 +1,80 @@
+{
+  "probe": "execution",
+  "issues": [
+    {
+      "title": "Step 3 阻塞支付成功页与需求硬约束冲突",
+      "type": "step",
+      "severity": "blocker",
+      "evidence": "需求明确「上报失败不能阻塞支付成功页」，但 Step 3 要求「await reportEvent(...)，确认上传成功后再展示结果页」。",
+      "why_it_matters": "该步骤让支付成功页的展示依赖上报成功，违反硬约束。实现者无法同时满足「await 等待成功」和「不阻塞」，该步骤不可执行。",
+      "suggested_fix": "明确支付成功页调用 reportEvent 后不等待结果即展示结果页；定义上报失败时对用户无感知的降级路径（如仅依赖批量队列兜底），并说明 Step 4 重试/重入队列的异步语义如何与页面生命周期解耦。",
+      "confidence": 1
+    },
+    {
+      "title": "reportEvent 的 await 语义与现有签名不一致",
+      "type": "ambiguity",
+      "severity": "high",
+      "evidence": "Step 1 要求「保持 reportEvent 函数签名不变」，Step 3 却使用「await reportEvent(...)」等待上传结果。现有函数将事件放入本地批量队列即返回，未暴露 Promise 或回调。",
+      "why_it_matters": "实现者无法确定：reportEvent 是否需要改为返回 Promise；该 Promise resolve 的时机是入队成功、上传成功、还是重试耗尽后入队成功；旧调用方（不关心返回值的场景）是否会受影响。",
+      "suggested_fix": "明确 reportEvent 的返回类型和 resolve/reject 契约：是否对所有调用方返回 Promise；resolve 时机对应哪个阶段（入队/上传完成/重试后入队）；旧调用方忽略返回值的行为是否兼容。",
+      "confidence": 0.9
+    },
+    {
+      "title": "重试三次后重新放入批量队列的 resolve 路径未定义",
+      "type": "step",
+      "severity": "high",
+      "evidence": "Step 4「立即重试三次；仍失败则重新放入批量队列」未说明此时 reportEvent 返回的 Promise 应 resolve 还是 reject。Step 3 又依赖 await 结果决定页面展示。",
+      "why_it_matters": "如果重入批量队列后 Promise 不 resolve，支付成功页将无限等待（已因 issue 1 不可执行）；如果 resolve，调用方无法区分「上传成功」和「仅入队成功」，Step 3 的「确认上传成功」条件无法满足。",
+      "suggested_fix": "定义重试耗尽并入队后的返回契约：Promise resolve 的值或状态、调用方如何获知最终结果（成功/降级/失败）、该结果与 Step 3 页面展示逻辑的关系。",
+      "confidence": 0.9
+    },
+    {
+      "title": "event_id 的生成责任未分配",
+      "type": "input",
+      "severity": "medium",
+      "evidence": "需求「服务端仅对带有 event_id 的事件去重」但方案未说明 event_id 由谁生成。",
+      "why_it_matters": "实时上报路径重试三次后重入批量队列，若 event_id 由不同层生成（JS vs 原生），可能导致同一次支付成功事件在重试和批量发送时产生不同 event_id，服务端无法去重，造成重复统计。",
+      "suggested_fix": "指定 event_id 的生成层（JS/原生桥）、生成时机（调用 reportEvent 时/入队时/发送前），并确保重试和重入队列时 event_id 不变。",
+      "confidence": 0.8
+    },
+    {
+      "title": "is_realtime 标记在事件生命周期中的处理未定义",
+      "type": "output",
+      "severity": "medium",
+      "evidence": "Step 1 在 payload 中增加 is_realtime，Step 2 原生桥读取后分支，但未说明：(a) 发送到服务端前是否剥离 is_realtime；(b) 重入批量队列时 is_realtime 是否保留。",
+      "why_it_matters": "若 is_realtime 未剥离发送到服务端，服务端可能需要忽略该字段（未声明的契约变更）；若重入队列时保留 is_realtime，批量发送逻辑是否会被触发再次实时发送（取决于 Step 2 的读取位置），可能导致循环。",
+      "suggested_fix": "明确 is_realtime 在发送前是否从 payload 中移除；重入批量队列时该标记的处理方式；服务端是否需要感知该字段。",
+      "confidence": 0.8
+    },
+    {
+      "title": "新旧客户端/服务端组合的兼容路径未覆盖",
+      "type": "acceptance",
+      "severity": "medium",
+      "evidence": "需求「线上存在旧客户端和两个服务端版本」且 Step 5 要求「一起发布」，但未定义旧 JS+新原生桥、新 JS+旧原生桥、新旧服务端的组合行为。",
+      "why_it_matters": "不同团队维护且一起发布的窗口内必然存在混合版本。实现者无法判断旧 JS 不传 is_realtime 时新原生桥是否正常工作（应为是）；旧原生桥收到新 JS 的 is_realtime 是否会因未知字段报错或被忽略；服务端是否需要配合变更。",
+      "suggested_fix": "列出所有新旧组合矩阵并定义每组的预期行为，至少覆盖：旧 JS+新原生桥、新 JS+旧原生桥、新旧服务端。",
+      "confidence": 0.85
+    },
+    {
+      "title": "验收标准仅覆盖正向路径",
+      "type": "acceptance",
+      "severity": "low",
+      "evidence": "Step 6 仅验证「支付成功事件请求立即发出，普通事件仍进入批量队列」，未涉及失败重试、重入队列、页面不阻塞等关键路径。",
+      "why_it_matters": "实现完成后无法判断重试逻辑、降级路径和硬约束「不阻塞支付成功页」是否满足。",
+      "suggested_fix": "补充失败场景的验收条件：模拟上传失败验证重试三次并入队、验证支付成功页在上报失败时仍正常展示、验证 event_id 在重试/重入队列后不变。",
+      "confidence": 0.9
+    }
+  ],
+  "missing_questions": [
+    "reportEvent 改为可 await 后，现有不关心返回值的调用方是否需要改动？",
+    "实时上传接口的 URL/端点是否与批量上传相同？若不同，由谁配置？",
+    "重试三次的间隔是多少（立即重试是否意味着无间隔）？",
+    "服务端是否需要任何变更来配合此方案（如忽略 is_realtime 字段、区分实时/批量请求）？",
+    "支付成功事件上报的触发时机是在支付回调中还是支付成功页生命周期中？"
+  ],
+  "false_positive_risks": [
+    "Step 5「JS、原生和服务端在同一个版本窗口一起发布」可能被误判为不现实，但多团队协调发布窗口是常规操作，只要兼容矩阵已定义即可执行。",
+    "Step 2「原生桥从事件对象顶层读取 is_realtime」可能与 Step 1 的 payload 路径看似不一致，但「事件对象顶层」可理解为包含 payload 字段合并后的事件结构，无需额外澄清。",
+    "方案未提及功能开关/灰度策略可能被视为缺失，但需求未要求灰度且第一版不建新平台，当前执行信息足够。"
+  ]
+}

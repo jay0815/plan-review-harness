@@ -1,0 +1,88 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 4,
+    "false_positive_cost": 4
+  },
+  "total": 20,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "完整覆盖字段契约、非阻塞、幂等、兼容发布、可观测性和 API 方向分歧，但错误降权了回滚能力。",
+      "evidence": [
+        "合并 Architecture 与 Execution 的发布和兼容问题。",
+        "保留 await blocker、event_id 和可观测性问题。",
+        "正确识别 API 拆分与复用 reportEvent 的 L3 方向冲突。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "正确要求统一字段层级，并将其标记为无需人工裁决的 L2 修改；主要缺口是没有保留回滚目标。",
+      "evidence": [
+        "明确要求 is_realtime 写入和读取位置保持一致。",
+        "没有将保持当前字段差异作为有效选项。",
+        "API 拆分在修订指令中保持待用户裁决。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "修订清单覆盖主要问题且顺序清楚，但错误移除了实时模式回滚要求，并略微扩展到告警和看板。",
+      "evidence": [
+        "修订指令覆盖协议、非阻塞、兼容发布、幂等和可观测性。",
+        "将回滚开关整体放入 likely_false_positives。",
+        "在指标基础上额外指定告警和看板。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 4,
+      "rationale": "来源归因基本准确，事实问题和方向分歧区分清楚；仅对回滚意见作了过度降权。",
+      "evidence": [
+        "merged_from 与实际提出问题的来源一致。",
+        "没有把来源未表态解释为共识。",
+        "误将 Risk Reviewer 的回滚目标等同于无依据的具体功能开关实现。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 4,
+      "rationale": "正确丢弃 Kafka 和独立数据库，修订范围总体克制；告警看板属于轻微机制扩张。",
+      "evidence": [
+        "Kafka 和独立事件数据库未进入修订指令。",
+        "没有新增持久化、能力探测或版本协商。",
+        "额外加入告警和看板。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入和读取位置不一致是必须修复的协议问题。",
+    "await reportEvent 违反支付结果不得被遥测阻塞的硬约束。",
+    "实时重试和批量回退存在 event_id 幂等缺口。",
+    "同窗口发布缺少跨版本兼容顺序和验收矩阵。",
+    "缺少实时成功率、延迟和批量回退次数等生产观测。",
+    "Kafka 和独立数据库属于超范围建议。",
+    "两个公开 API 与复用 reportEvent 构成 L3 方向分歧。"
+  ],
+  "missed_known_issues": [
+    "没有保留无需重新发版的实时模式关闭能力这一回滚目标。"
+  ],
+  "valuable_new_findings": [
+    "将字段位置的事实错误与最终选择顶层或 payload 的局部修改清晰分开。",
+    "准确合并架构层版本耦合与执行层发布顺序、接口清单和兼容矩阵。"
+  ],
+  "false_positives": [
+    "将回滚能力整体判定为需要降权的功能开关建议。",
+    "在来源只要求指标时额外指定告警和看板。"
+  ],
+  "failure_modes": [
+    "可能把合理的修订目标与未经确认的具体实现一起降权。"
+  ],
+  "notes": "角色判断：适合作为主 Synthesizer，当前四模型首选。来源保真、分歧分类和修订一致性较好；采用时需恢复回滚目标，并避免额外指定告警看板等实现。",
+  "suggested_roles": [
+    "synthesis"
+  ],
+  "unsuitable_roles": []
+}

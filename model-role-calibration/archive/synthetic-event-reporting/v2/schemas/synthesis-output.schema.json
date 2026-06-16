@@ -2,63 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Synthesis Probe Model Output",
   "type": "object",
-  "required": ["probe", "process_map", "consensus_issues", "disagreements", "likely_false_positives", "revision_instructions"],
+  "required": ["probe", "consensus_issues", "disagreements", "likely_false_positives", "revision_instructions"],
   "properties": {
     "probe": {
       "const": "synthesis"
-    },
-    "process_map": {
-      "type": "object",
-      "required": ["title", "mermaid", "nodes"],
-      "properties": {
-        "title": {
-          "type": "string"
-        },
-        "mermaid": {
-          "type": "string",
-          "description": "Mermaid flowchart source. Use node ids declared in nodes."
-        },
-        "nodes": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "required": ["id", "label", "stage", "status", "related_issue_titles", "evidence"],
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
-              },
-              "label": {
-                "type": "string"
-              },
-              "stage": {
-                "type": "string"
-              },
-              "status": {
-                "enum": ["normal", "affected", "decision"]
-              },
-              "related_issue_titles": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "evidence": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          }
-        }
-      },
-      "additionalProperties": false
     },
     "consensus_issues": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "merged_from", "severity", "affected_nodes", "reason", "suggested_fix"],
+        "required": ["title", "merged_from", "severity", "reason", "suggested_fix"],
         "properties": {
           "title": {
             "type": "string"
@@ -71,13 +24,6 @@
           },
           "severity": {
             "enum": ["low", "medium", "high", "blocker"]
-          },
-          "affected_nodes": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string"
-            }
           },
           "reason": {
             "type": "string"
@@ -93,7 +39,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "positions", "affected_nodes", "level", "needs_human_decision", "decision_options"],
+        "required": ["title", "positions", "level", "needs_human_decision", "decision_options"],
         "properties": {
           "title": {
             "type": "string"
@@ -115,13 +61,6 @@
                 }
               },
               "additionalProperties": false
-            }
-          },
-          "affected_nodes": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-              "type": "string"
             }
           },
           "level": {

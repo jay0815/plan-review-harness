@@ -14,6 +14,10 @@ const {
 } = require("./run-calibration");
 const { roleRecommendation } = require("./summarize-results");
 const { validateJsonText } = require("./json-validator-mcp");
+const {
+  evaluationSchemaFile,
+  validateEvaluationScore
+} = require("./evaluation-lib");
 
 function modelStats(model, plannerCases) {
   return {
@@ -31,6 +35,10 @@ function main() {
 
   assert.equal(MAX_CONCURRENCY, 3);
   assert.equal(schemaForProbe("risk"), path.join(ROOT, "schemas", "risk-output.schema.json"));
+  assert.equal(
+    evaluationSchemaFile(),
+    path.join(ROOT, "schemas", "evaluation-score.schema.json")
+  );
   const riskSchema = JSON.parse(fs.readFileSync(schemaForProbe("risk"), "utf8"));
   const validRiskOutput = {
     probe: "risk",
@@ -53,6 +61,46 @@ function main() {
       suggested_fix: "改为异步"
     }]
   }), riskSchema).stage, "schema");
+  const evaluationScore = {
+    case_id: "synthetic/event-reporting",
+    model: "kimi",
+    probe: "risk",
+    score: {
+      hit_rate: 4,
+      contract_closure: 4,
+      actionability: 4,
+      evidence_discipline: 4,
+      false_positive_cost: 4
+    },
+    total: 20,
+    dimension_assessments: Object.fromEntries([
+      "hit_rate",
+      "contract_closure",
+      "actionability",
+      "evidence_discipline",
+      "false_positive_cost"
+    ].map((dimension) => [
+      dimension,
+      {
+        score: 4,
+        rationale: "测试",
+        evidence: []
+      }
+    ])),
+    matched_known_issues: [],
+    missed_known_issues: [],
+    valuable_new_findings: [],
+    false_positives: [],
+    failure_modes: [],
+    notes: "角色判断：测试。",
+    suggested_roles: ["risk"],
+    unsuitable_roles: []
+  };
+  assert.equal(validateEvaluationScore(evaluationScore, {
+    case_id: "synthetic/event-reporting",
+    model: "kimi",
+    probe: "risk"
+  }), evaluationScore);
   assert.equal(DEFAULT_CASE, "synthetic/event-reporting");
   assert.deepEqual(parseList("kimi,kimi,qwen", config.models), ["kimi", "qwen"]);
   assert.deepEqual(parseList(undefined, ["kimi", "qwen"]), ["kimi", "qwen"]);

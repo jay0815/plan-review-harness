@@ -1,0 +1,42 @@
+{
+  "probe": "architecture",
+  "issues": [
+    {
+      "title": "await reportEvent structurally blocks payment success page, directly contradicting hard constraint",
+      "type": "coupling",
+      "severity": "blocker",
+      "evidence": "Point 3: '支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页' vs hard constraint: '上报失败不能阻塞支付成功页，也不能改变支付结果'",
+      "why_it_matters": "await makes page rendering dependent on completion of network I/O (upload attempt + up to 3 immediate retries). Even if the promise eventually resolves via fallback to batch queue, the page is blocked during the entire retry cycle. This is a control-flow structure that violates the hard constraint, not an implementation tuning issue. The constraint explicitly forbids blocking the page on reporting failure, but the proposed design blocks it on reporting success-or-failure.",
+      "suggested_fix": "Decouple page rendering from event upload completion: show the result page independently, fire the realtime upload non-blocking, and rely on the existing retry-and-fallback mechanism for reliability rather than await-based confirmation.",
+      "confidence": 0.95
+    },
+    {
+      "title": "Transport control flag is_realtime embedded in business payload creates cross-layer leak and dual authority over delivery mode",
+      "type": "abstraction",
+      "severity": "high",
+      "evidence": "Point 1: JS caller adds 'is_realtime: true' inside payload. Point 2: native bridge reads 'is_realtime' from event object top level to decide delivery mode. Point 4: native bridge can override the realtime declaration via fallback to batch queue on retry failure.",
+      "why_it_matters": "Same root cause produces two structural consequences: (1) Cross-layer leak — is_realtime is a transport/delivery instruction that flows through the business payload to the server, which must either ignore or strip transport metadata from event data. Future transport modes would continue polluting payloads with transport flags. (2) Dual authority — JS declares delivery intent via data payload, native interprets and can silently override via fallback, creating ownership conflict over the effective delivery mode. The await in Point 3 then has ambiguous semantics: does it resolve on realtime success or on fallback-to-batch acceptance?",
+      "suggested_fix": "Separate transport instructions from business payload: pass delivery mode as a distinct parameter or context alongside payload, owned and interpreted solely by the JS-to-native transport layer. Business payload should never carry transport control flags.",
+      "confidence": 0.85
+    },
+    {
+      "title": "Unnecessary version coupling: server co-released for a transport-only change that does not alter server contract",
+      "type": "coupling",
+      "severity": "medium",
+      "evidence": "Point 5: 'JS、原生和服务端在同一个版本窗口一起发布'. Background: server deduplicates by event_id only; is_realtime affects only JS-to-native transport behavior.",
+      "why_it_matters": "is_realtime is a JS→native transport instruction. The server's reception and deduplication contract (keyed on event_id) is unchanged. Requiring server team to coordinate a co-release for a change that does not affect their contract creates unnecessary cross-team release coupling and slows independent evolution. However, this assessment depends on whether the server rejects payloads with unknown top-level fields.",
+      "suggested_fix": "If server contract is truly unchanged, decouple server release from JS/native release window. Ensure server is forward-compatible with payload fields it does not consume, so JS/native can deploy independently.",
+      "confidence": 0.6
+    }
+  ],
+  "missing_questions": [
+    "Does the server validate or reject event payloads that contain unknown top-level fields such as is_realtime? If yes, co-release with server IS structurally necessary and Issue 3 severity should be reconsidered.",
+    "What is the resolution semantics of await reportEvent when realtime upload fails and the event falls back to the batch queue — does the promise throw, resolve with a status, or resolve immediately on fallback acceptance? This determines whether the payment page await can ever be non-blocking.",
+    "Are there other event types or callers that may need alternative delivery modes in the future? If so, the is_realtime boolean-in-payload approach will require each new mode to add another transport flag to business payload, amplifying the cross-layer leak."
+  ],
+  "false_positive_risks": [
+    "Issue 3 (version coupling) could be a false positive if the server has strict payload schema validation that rejects unknown fields. In that case, server co-release is structurally required, not merely unnecessary coordination overhead.",
+    "The retry-and-fallback mechanism (Point 4) might appear to be a structural ownership conflict, but the fallback is a transport-layer reliability strategy owned by the native bridge. Its structural consequence is already captured in Issue 2's dual authority analysis; the retry count and timing are implementation details without independent structural impact.",
+    "One might argue is_realtime is simply another payload field and its placement is a style preference. However, is_realtime controls cross-layer transport behavior rather than business semantics — the distinction is structural (data vs control), not stylistic."
+  ]
+}

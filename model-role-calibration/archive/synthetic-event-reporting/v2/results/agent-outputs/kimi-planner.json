@@ -1,0 +1,213 @@
+{
+  "probe": "planner",
+  "summary": "在 reportEvent 内为支付成功事件增加实时路径：JS SDK 通过事件名识别命中事件，生成 event_id 后调用 native 桥即时发送；失败则回退到现有批量队列。优先复用现有服务端批量接口，不新增公共 JS API，不引入新平台、数据库或通用任务系统。",
+  "scope": {
+    "in_scope": [
+      "JS SDK 事件路由与 event_id 生成",
+      "Native 桥实时发送能力扩展",
+      "服务端对实时单事件请求的接收、去重与兼容",
+      "实时发送失败回退到现有批量队列",
+      "多版本客户端与服务端兼容性矩阵",
+      "灰度发布、回滚、观测指标与告警"
+    ],
+    "out_of_scope": [
+      "通用实时消息平台",
+      "持久化队列或数据库",
+      "通用任务调度系统",
+      "非支付事件的实时化",
+      "新的公共上报 API（如 reportEventRealtime）"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "支付成功事件识别规则",
+      "decision": "通过事件名识别：JS SDK 维护一份可配置的实时事件名列表，默认包含 payment_success；命中即走实时路径，其余事件走批量路径。",
+      "reason": "复用现有 reportEvent 签名，不新增公共参数；业务语义明确，便于产品配置。"
+    },
+    {
+      "title": "event_id 生成责任",
+      "decision": "新客户端为所有上报事件生成 event_id（UUID），并置于现有事件协议约定的 event_id 字段；实时事件必须在发送前生成，回退到批量队列时保持同一 event_id。",
+      "reason": "服务端按 event_id 去重，确保实时路径重试或回退批量时不会产生重复；旧客户端无 event_id 的行为保持不变。"
+    },
+    {
+      "title": "实时发送路径",
+      "decision": "JS SDK 检测到实时事件后，调用 native 桥新增的即时发送接口；native 桥优先向服务端现有批量 endpoint 发送单事件请求（如现有 endpoint 不支持单事件数组，则新增 /events/realtime 专用 endpoint），并附带 X-Event-Mode: realtime 头。",
+      "reason": "优先复用现有服务端 endpoint，降低改造成本；头信息供新服务端识别实时来源以做快速 ack 和监控。"
+    },
+    {
+      "title": "失败处理与阻塞要求",
+      "decision": "实时发送失败（网络错误、超时、服务端非 2xx）时，将该事件保留 event_id 写入现有批量队列；reportEvent 返回的 Promise 在发起即时发送或入队后立即 resolve，不等待网络结果。",
+      "reason": "满足“上报失败不能阻塞支付成功页”；复用现有批量基础设施，不新建持久化队列。"
+    },
+    {
+      "title": "服务端去重边界",
+      "decision": "服务端对含 event_id 的事件按 event_id 幂等；对旧客户端不含 event_id 的事件保持现有策略，本次不强制旧客户端生成 event_id。",
+      "reason": "与已知条件一致，避免跨版本兼容风险。"
+    },
+    {
+      "title": "兼容性策略",
+      "decision": "新服务端兼容旧客户端（接收无 event_id 的批量请求）；旧服务端兼容新客户端（单事件数组请求被正常处理，忽略不识别的 header）；新客户端实时失败可回退批量。",
+      "reason": "线上同时存在多个旧版本客户端和两个服务端版本，必须保证双向兼容。"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "确认事件名、event_id 位置与服务端接口契约",
+      "details": [
+        "业务方确认支付成功事件名（如 payment_success 及可能别名）",
+        "确认现有事件协议中 event_id 字段位置（顶层或 payload 内）",
+        "确认现有服务端批量 endpoint 是否支持单事件数组请求体",
+        "确定 native 桥新增即时发送接口的可行形态"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "实时事件名配置清单",
+        "event_id 字段位置约定",
+        "服务端接口契约确认（是否需新增 endpoint）",
+        "native 桥接口草案"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "JS SDK 事件路由与 event_id 生成",
+      "details": [
+        "新增 event_id 生成模块：所有事件生成 UUID",
+        "在 reportEvent 内部增加路由：命中实时事件名 -> 实时路径；否则 -> 批量路径",
+        "实时路径：生成 event_id，组装事件信封 {event_id, name, timestamp, payload}，调用 native reportEventRealtime",
+        "批量路径：生成 event_id，加入现有批量队列",
+        "reportEvent Promise 在调用 native 或入队后立即 resolve"
+      ],
+      "dependencies": [
+        "步骤 1 确认的事件名、event_id 位置与 native 接口"
+      ],
+      "outputs": [
+        "JS SDK 新版本",
+        "事件信封数据结构文档",
+        "reportEvent 路由逻辑"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Native 桥实时发送实现",
+      "details": [
+        "新增 native 方法 reportEventRealtime(serializedEvent: string): Promise<void>（或按步骤 1 结论扩展现有方法）",
+        "方法内立即构造 HTTP POST：body=[serializedEvent]，endpoint=现有批量接口（或步骤 1 确定的新增 endpoint），header X-Event-Mode: realtime",
+        "支持 1-2 次即时重试（指数退避，总耗时 < 2s），仍失败则返回错误",
+        "native 层记录实时发送耗时、成功/失败指标"
+      ],
+      "dependencies": [
+        "步骤 2 的 JS SDK 路由逻辑",
+        "步骤 1 的 native 接口草案"
+      ],
+      "outputs": [
+        "Native 桥新版本",
+        "native 接口文档",
+        "实时发送指标埋点"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "服务端适配（新服务端版本）",
+      "details": [
+        "若复用现有批量 endpoint：保持接收单事件数组或常规批量数组，识别 X-Event-Mode: realtime 头，记录实时来源指标并返回快速 ack",
+        "若步骤 1 确认需新增 /events/realtime endpoint：接收单事件对象，同样按 event_id 去重，记录实时来源指标",
+        "实时事件若缺少 event_id 则返回 400，由客户端回退批量队列",
+        "按 event_id 去重逻辑保持不变；对旧客户端无 event_id 请求保持现有策略"
+      ],
+      "dependencies": [
+        "步骤 1 的服务端接口契约确认",
+        "步骤 3 的 native 请求格式"
+      ],
+      "outputs": [
+        "新服务端版本",
+        "API 文档更新",
+        "服务端实时指标与去重逻辑"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "失败回退与批量重试",
+      "details": [
+        "JS SDK 在 native 实时发送失败时，将同一 event_id 的事件插入现有批量队列",
+        "批量队列上传时携带 event_id",
+        "服务端按 event_id 去重，避免重复"
+      ],
+      "dependencies": [
+        "步骤 2 的 JS SDK",
+        "步骤 3 的 native 桥"
+      ],
+      "outputs": [
+        "回退批量队列逻辑",
+        "重试策略配置"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "观测指标与告警",
+      "details": [
+        "客户端：实时发送成功率、延迟、回退批量次数",
+        "服务端：实时事件接收量、去重复用量、400 率",
+        "告警：实时发送成功率低于阈值、回退批量数突增、服务端 400 率升高"
+      ],
+      "dependencies": [
+        "步骤 4 的服务端指标",
+        "步骤 5 的回退逻辑"
+      ],
+      "outputs": [
+        "指标埋点方案",
+        "告警规则"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "灰度发布与回滚",
+      "details": [
+        "先发布新服务端版本，验证旧客户端不受影响",
+        "灰度发布新 JS SDK 与 native 桥，观察实时路径指标",
+        "保留旧客户端回滚能力，新服务端兼容旧客户端",
+        "制定回滚手册：若实时路径异常，可关闭实时事件名配置或回滚客户端"
+      ],
+      "dependencies": [
+        "步骤 4 的服务端版本",
+        "步骤 5 的回退逻辑",
+        "步骤 6 的指标告警"
+      ],
+      "outputs": [
+        "发布计划",
+        "回滚手册"
+      ]
+    }
+  ],
+  "failure_handling": [
+    "网络超时/断开：native 实时发送失败，JS SDK 将事件回退到批量队列，reportEvent Promise 已 resolve，不阻塞支付页",
+    "服务端 400：若新服务端因缺少 event_id 返回 400，JS SDK 捕获后回退批量队列；新客户端应始终携带 event_id",
+    "服务端 5xx：视为发送失败，回退批量队列",
+    "native 即时重试耗尽：在 native 层做 1-2 次指数退避重试，仍失败则回退批量",
+    "重复发送：同一 event_id 的实时请求、重试请求、批量回退请求在服务端按 event_id 去重，只落库一次",
+    "服务端回滚：新服务端回滚到旧版本后，新客户端的实时单事件请求仍被旧服务端正常处理（忽略 header）"
+  ],
+  "test_plan": [
+    "正常场景：调用 reportEvent('payment_success', payload)，事件在 1 秒内被 native 即时发送，服务端收到并去重",
+    "失败回退：模拟网络断开，实时发送失败，事件进入批量队列，后续批量上传成功",
+    "旧客户端兼容：旧客户端上报 payment_success 仍走批量，服务端正常接收",
+    "重复幂等：实时请求超时但服务端已落库，重试及批量回退同一 event_id，服务端只记录一次",
+    "服务端回滚兼容：新客户端向旧服务端发送实时单事件请求，请求被正常处理",
+    "非支付事件：reportEvent('other_event') 仍进入批量队列，不触发实时路径",
+    "阻塞测试：支付页调用 reportEvent 后可立即关闭或跳转，不等待上报结果"
+  ],
+  "acceptance_criteria": [
+    "reportEvent('payment_success') 触发 native 即时发送，端到端延迟满足业务目标（建议 < 1s）",
+    "支付成功页调用 reportEvent 后，页面交互不阻塞，Promise 立即 resolve",
+    "实时发送失败的事件在 5 分钟内通过批量队列补报成功",
+    "同一 event_id 在服务端只落库一次",
+    "旧客户端行为与升级前一致",
+    "未新增公共 JS API 或新的持久化/消息平台"
+  ],
+  "open_decisions": [
+    "支付成功事件的具体名称/识别规则：是否仅 payment_success，是否包含别名或需要 payload 标志位共同判断",
+    "event_id 在现有事件协议中的具体字段位置（顶层或 payload 内），需与现有服务端协议对齐",
+    "服务端批量接口是否天然支持单事件数组：若不支持，需要新增 /events/realtime 专用 endpoint 或调整现有 endpoint 的 body 格式",
+    "native 桥即时发送接口的具体形态：新增独立方法还是扩展现有方法参数，取决于 native 层现有架构"
+  ]
+}

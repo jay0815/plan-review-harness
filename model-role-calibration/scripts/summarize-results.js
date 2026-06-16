@@ -114,7 +114,10 @@ function main() {
   const run = requireArg(args, "run");
   const config = loadConfig();
   const runDir = path.join(ROOT, "runs", run);
-  const scoreFiles = walk(runDir, (file) => file.endsWith(".score.json"));
+  const draftSegment = `${path.sep}scores${path.sep}drafts${path.sep}`;
+  const scoreFiles = walk(runDir, (file) => (
+    file.endsWith(".score.json") && !file.includes(draftSegment)
+  ));
   const scores = scoreFiles.map((file) => {
     const data = parseJsonFile(file);
     const computedTotal = sumScore(data.score || {});

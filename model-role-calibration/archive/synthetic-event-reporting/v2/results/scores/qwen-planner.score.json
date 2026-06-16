@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 4,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 14,
+  "matched_known_issues": [
+    "定义 options.realtime、顶层 event_id、桥方法和单事件请求结构。",
+    "重试与批量回退保持同一 event_id。",
+    "覆盖测试、观测、灰度和回滚。"
+  ],
+  "missed_known_issues": [
+    "Promise 等待首次网络尝试结束，仍违反支付页不得被遥测阻塞的硬约束。",
+    "没有把旧桥和两个服务端版本的真实兼容行为前置关闭。"
+  ],
+  "valuable_new_findings": [
+    "四个模型中接口和 wire shape 的结构表达较清晰。"
+  ],
+  "false_positives": [
+    "假设现有 endpoint 使用 events 数组且两个服务端版本行为一致。",
+    "引入 feature flag、固定超时、具体平台 HTTP 实现和无依据告警阈值。",
+    "把批量回退描述为保证最终送达。"
+  ],
+  "failure_modes": [
+    "把不得阻塞错误解释为允许等待三秒。",
+    "用额外机制和可靠性承诺扩大首版范围。"
+  ],
+  "notes": "角色判断：契约结构较强，但本轮违反核心非阻塞约束，不建议作为 Planner 主模型；可用于接口结构和测试清单复核。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "planner"
+  ]
+}

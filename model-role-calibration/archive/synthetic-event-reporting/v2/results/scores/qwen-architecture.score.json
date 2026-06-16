@@ -1,0 +1,35 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 4,
+    "false_positive_cost": 5
+  },
+  "total": 18,
+  "matched_known_issues": [
+    "支付结果页与事件上报控制流错误耦合。",
+    "传输路由指令嵌入业务 payload。",
+    "三个团队同窗口发布形成不必要的发布耦合。"
+  ],
+  "missed_known_issues": [
+    "event_id 在实时重试和批量回退间的一致性未形成正式 issue。",
+    "没有直接指出 payload.is_realtime 与顶层读取的字段位置错位。",
+    "缺少观测和回滚结构问题。"
+  ],
+  "valuable_new_findings": [
+    "准确把重试次数、布尔与枚举、集中式路由平台识别为实现偏好而非结构问题。"
+  ],
+  "false_positives": [],
+  "failure_modes": [
+    "输出精炼但覆盖偏窄，容易把关键幂等问题留在 missing_questions。"
+  ],
+  "notes": "角色判断：Architecture 高质量备选。误报成本最低，适合对主审结果做范围控制和最小结构复核；单独主审时可能遗漏跨路径契约。",
+  "suggested_roles": [
+    "architecture"
+  ],
+  "unsuitable_roles": []
+}

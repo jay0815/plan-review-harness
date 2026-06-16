@@ -1,0 +1,35 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 5,
+    "actionability": 4,
+    "evidence_discipline": 5,
+    "false_positive_cost": 5
+  },
+  "total": 23,
+  "matched_known_issues": [
+    "await reportEvent 直接违反支付成功页不得被上报阻塞的硬约束。",
+    "is_realtime 在 payload 与事件对象顶层之间存在确定的 wire contract 矛盾。",
+    "实时重试与批量回退未明确 event_id 去重保护。"
+  ],
+  "missed_known_issues": [
+    "旧客户端和两个服务端版本的兼容发布只作为待确认问题，没有形成正式反驳。",
+    "未覆盖失败验收、生产观测和独立回滚。"
+  ],
+  "valuable_new_findings": [
+    "明确指出专家认可不能消除硬约束冲突。",
+    "将字段层级问题定位为方案内部结构矛盾，而不是实现风格偏好。"
+  ],
+  "false_positives": [],
+  "failure_modes": [
+    "输出高度聚焦，但对发布和运行闭环的覆盖不足。"
+  ],
+  "notes": "角色判断：Rebuttal 主模型首选。证据纪律、契约定位和反从众判断最稳定；适合负责核心反驳，再由覆盖型模型补充发布与运行闭环。",
+  "suggested_roles": [
+    "rebuttal"
+  ],
+  "unsuitable_roles": []
+}

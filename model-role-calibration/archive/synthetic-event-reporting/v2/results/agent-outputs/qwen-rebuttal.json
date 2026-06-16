@@ -1,0 +1,31 @@
+{
+  "probe": "rebuttal",
+  "issues": [
+    {
+      "title": "Step 3 awaits upload confirmation before showing result page, directly violating the non-blocking hard constraint",
+      "type": "missing_constraint",
+      "severity": "blocker",
+      "evidence": "Proposal step 3 states: \"支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页，确保事件不会丢失\". The requirement explicitly mandates: \"上报失败不能阻塞支付成功页，也不能改变支付结果\".",
+      "why_it_matters": "await reportEvent(...) gates result page display on upload completion. Step 4 adds up to 3 immediate retries before falling back to batch, so worst case the user waits through multiple network timeouts before the result page renders. This is textbook blocking of the payment success page. The stated purpose \"确保事件不会丢失\" further confirms the design intent is to wait, not to fire-and-forget. Expert approval does not override an explicit hard constraint in the requirements.",
+      "suggested_fix": "Remove the await-before-display dependency. After calling reportEvent, immediately proceed to show the result page. Upload success/failure handling (retries, batch fallback) must occur entirely in the background, decoupled from the payment result page flow.",
+      "confidence": 0.95
+    },
+    {
+      "title": "No event_id specified for payment success events, leaving the fallback-to-batch path unprotected against duplicates",
+      "type": "risk",
+      "severity": "medium",
+      "evidence": "Background states: \"服务端仅对带有 event_id 的事件去重\". The proposal does not mention whether the payment success event payload includes event_id. Step 4 specifies that after 3 realtime retries fail, the event is placed back into the batch queue.",
+      "why_it_matters": "If a realtime upload attempt succeeds server-side but the client-side response is lost (e.g., network drop after server commit), and the event is later re-sent via batch queue, the same payment success event reaches the server twice. Without event_id, the server's only deduplication mechanism cannot apply, resulting in undetected duplicates. Expert approval did not address whether event_id is included, so the deduplication safety net for the fallback path is unverified.",
+      "suggested_fix": "Ensure payment success events include a unique event_id in the payload so the server's existing deduplication mechanism covers both the realtime and batch-fallback paths.",
+      "confidence": 0.7
+    }
+  ],
+  "missing_questions": [
+    "Step 3 的 await 是否存在总超时上限？若存在，超时后结果页是否无条件展示？（输入未说明，影响 Issue 1 的实际严重程度）",
+    "两个服务端版本是否都能正确处理 is_realtime 字段和实时上传接口？旧客户端不含 is_realtime 时是否自动走批量队列？（输入提到存在两个服务端版本和旧客户端，但未说明兼容性细节）"
+  ],
+  "false_positive_risks": [
+    "Step 3 可能存在隐含的超时兜底机制，使得 await 实际上不会无限阻塞。但方案文本明确以\"确认上传成功后\"作为展示结果页的条件，\"成功\"是前置条件而非\"超时或成功\"，因此阻塞意图是明确的，此 false positive 风险较低。",
+    "重复上报支付成功事件可能在业务侧有其他去重手段（如幂等设计），不应仅从 event_id 缺失推导业务问题。但输入仅提及 event_id 作为唯一去重机制，不应假设未提及的机制存在，因此仍保留为 medium 风险而非升级为 blocker。"
+  ]
+}

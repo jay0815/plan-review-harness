@@ -1,0 +1,36 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "version": "v2",
+  "source_run_id": "synthetic-event-reporting-v2-20260612T082942Z",
+  "archived_at": "2026-06-15",
+  "models": [
+    "kimi",
+    "deepseek",
+    "glm",
+    "qwen"
+  ],
+  "probes": [
+    "planner",
+    "risk",
+    "architecture",
+    "execution",
+    "rebuttal",
+    "synthesis"
+  ],
+  "counts": {
+    "case_inputs": 3,
+    "probe_prompts": 6,
+    "evaluator_prompts": 6,
+    "agent_outputs": 24,
+    "scores": 24
+  },
+  "schema_by_probe": {
+    "planner": "schemas/planner-output.schema.json",
+    "risk": "schemas/risk-output.schema.json",
+    "architecture": "schemas/model-output.schema.json",
+    "execution": "schemas/model-output.schema.json",
+    "rebuttal": "schemas/model-output.schema.json",
+    "synthesis": "schemas/synthesis-output.schema.json"
+  },
+  "comparison_report": "analysis/v1-v2-comparison.md"
+}

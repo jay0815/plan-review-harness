@@ -1,0 +1,38 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 17,
+  "matched_known_issues": [
+    "await 阻塞硬约束。",
+    "重试缺少 event_id 导致重复。",
+    "is_realtime 写入与读取层级不一致。",
+    "生产环境缺少观测。",
+    "旧客户端实时能力缺失。"
+  ],
+  "missed_known_issues": [
+    "没有正确保留同窗口发布和回滚边界的风险。",
+    "没有明确检查失败回退的可见性和回滚能力。"
+  ],
+  "valuable_new_findings": [
+    "正确避免在无 evidence 时制造安全风险。"
+  ],
+  "false_positives": [
+    "无依据断言旧原生会忽略新增字段并安全回退到批量队列。",
+    "错误降权同窗口发布与跨版本兼容风险。"
+  ],
+  "failure_modes": [
+    "issue 与 false_positive_risks 对旧客户端兼容性的判断相互矛盾。",
+    "把未知旧版本行为当作安全结论。"
+  ],
+  "notes": "角色判断：适合作为辅助 Risk Reviewer，不建议独立负责兼容和发布风险；需要外部 Reviewer 复核其旧版本行为假设。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}
