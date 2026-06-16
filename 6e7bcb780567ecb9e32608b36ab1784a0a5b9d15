@@ -1,0 +1,210 @@
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-risk.json
+  1e05bb5b3bcb8fa2 1-49
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-planner.score.json
+  1e05bb5b3bcb8fa2 1-37
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-risk.score.json
+  1e05bb5b3bcb8fa2 1-34
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-execution.score.json
+  1e05bb5b3bcb8fa2 1-40
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/architecture.md
+  1e05bb5b3bcb8fa2 1-79
+model-role-calibration/scripts/plan-review-mcp.js
+  1e05bb5b3bcb8fa2 29,84,86-92,106-119,178-211,213-225,244-245,657
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-risk.md
+  1e05bb5b3bcb8fa2 1-282
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-architecture.json
+  1e05bb5b3bcb8fa2 1-42
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-planner.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-synthesis.md
+  1e05bb5b3bcb8fa2 1-313
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-synthesis.score.json
+  1e05bb5b3bcb8fa2 1-88
+model-role-calibration/examples/claude-settings/kimi.settings.example.json
+  1e05bb5b3bcb8fa2 1-6
+model-role-calibration/archive/synthetic-event-reporting/v2/case/v2-experiment.md
+  1e05bb5b3bcb8fa2 1-125
+model-role-calibration/archive/synthetic-event-reporting/v2/schemas/risk-output.schema.json
+  1e05bb5b3bcb8fa2 1-64
+model-role-calibration/scripts/workspace-review-lib.js
+  1e05bb5b3bcb8fa2 40-48,218,224-225,344-465,637
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-planner.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/workspace-runs/.gitignore
+  1e05bb5b3bcb8fa2 1-3
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-synthesis.score.json
+  1e05bb5b3bcb8fa2 1-87
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-execution.json
+  1e05bb5b3bcb8fa2 1-80
+model-role-calibration/scripts/package-claude-distribution.js
+  1e05bb5b3bcb8fa2 16,108,172-190,193-221,223-225,227-246
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/rebuttal.md
+  1e05bb5b3bcb8fa2 1-78
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-planner.json
+  1e05bb5b3bcb8fa2 1-280
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-risk.score.json
+  1e05bb5b3bcb8fa2 1-38
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-execution.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-planner.json
+  1e05bb5b3bcb8fa2 1-213
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-synthesis.score.json
+  1e05bb5b3bcb8fa2 1-88
+model-role-calibration/examples/claude-settings/deepseek.settings.example.json
+  1e05bb5b3bcb8fa2 1-7
+model-role-calibration/scripts/test-claude-distribution.js
+  1e05bb5b3bcb8fa2 32-40,50-52,56-74
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-planner.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/risk.md
+  1e05bb5b3bcb8fa2 1-79
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-execution.json
+  1e05bb5b3bcb8fa2 1-90
+model-role-calibration/dist/.gitignore
+  1e05bb5b3bcb8fa2 1-2
+model-role-calibration/archive/synthetic-event-reporting/v2/case/inputs/review.md
+  1e05bb5b3bcb8fa2 1-17
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-architecture.json
+  1e05bb5b3bcb8fa2 1-53
+model-role-calibration/scripts/inspect-workspace-run.js
+  1e05bb5b3bcb8fa2 1-183
+model-role-calibration/claude-code-mcp-integration.md
+  1e05bb5b3bcb8fa2 239,250-255,270,273-274,336,338-352,355-395,400,421-422,434-444
+model-role-calibration/README.md
+  1e05bb5b3bcb8fa2 5-16,121-132
+model-role-calibration/archive/synthetic-event-reporting/v2/README.md
+  1e05bb5b3bcb8fa2 1-78
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-risk.json
+  1e05bb5b3bcb8fa2 1-58
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-risk.score.json
+  1e05bb5b3bcb8fa2 1-34
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-planner.md
+  1e05bb5b3bcb8fa2 1-257
+model-role-calibration/archive/synthetic-event-reporting/v2/manifest.json
+  1e05bb5b3bcb8fa2 1-36
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/synthesis.md
+  1e05bb5b3bcb8fa2 1-106
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-architecture.json
+  1e05bb5b3bcb8fa2 1-42
+model-role-calibration/scripts/test-plan-review-mcp.js
+  1e05bb5b3bcb8fa2 14,21,105,128-168,223-224,230-261
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-rebuttal.json
+  1e05bb5b3bcb8fa2 1-61
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-risk.json
+  1e05bb5b3bcb8fa2 1-54
+model-role-calibration/archive/synthetic-event-reporting/v2/schemas/score.schema.json
+  1e05bb5b3bcb8fa2 1-78
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-rebuttal.score.json
+  1e05bb5b3bcb8fa2 1-40
+model-role-calibration/examples/claude-settings/glm.settings.example.json
+  1e05bb5b3bcb8fa2 1-7
+model-role-calibration/archive/synthetic-event-reporting/v2/schemas/synthesis-output.schema.json
+  1e05bb5b3bcb8fa2 1-96
+model-role-calibration/scripts/run-workspace-review.js
+  1e05bb5b3bcb8fa2 21,48,180,291-307,331,344
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-architecture.md
+  1e05bb5b3bcb8fa2 1-308
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-rebuttal.json
+  1e05bb5b3bcb8fa2 1-31
+model-role-calibration/examples/claude-settings/qwen.settings.example.json
+  1e05bb5b3bcb8fa2 1-7
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-execution.json
+  1e05bb5b3bcb8fa2 1-69
+model-role-calibration/next-update.md
+  1e05bb5b3bcb8fa2 14-38,480-491
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-planner.json
+  1e05bb5b3bcb8fa2 1-264
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-execution.md
+  1e05bb5b3bcb8fa2 1-315
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-architecture.json
+  1e05bb5b3bcb8fa2 1-63
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-architecture.score.json
+  1e05bb5b3bcb8fa2 1-35
+model-role-calibration/archive/synthetic-event-reporting/v2/schemas/planner-output.schema.json
+  1e05bb5b3bcb8fa2 1-122
+model-role-calibration/archive/synthetic-event-reporting/v2/analysis/v1-v2-comparison.md
+  1e05bb5b3bcb8fa2 1-219
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-planner.json
+  1e05bb5b3bcb8fa2 1-214
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-architecture.score.json
+  1e05bb5b3bcb8fa2 1-37
+model-role-calibration/claude-code/skills/plan-review/SKILL.md
+  1e05bb5b3bcb8fa2 1-70
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-execution.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/evaluators/evaluate-rebuttal.md
+  1e05bb5b3bcb8fa2 1-309
+model-role-calibration/archive/synthetic-event-reporting/v2/case/inputs/planner.md
+  1e05bb5b3bcb8fa2 1-20
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-rebuttal.json
+  1e05bb5b3bcb8fa2 1-41
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-architecture.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/case/rubric.md
+  1e05bb5b3bcb8fa2 1-35
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-execution.score.json
+  1e05bb5b3bcb8fa2 1-40
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-rebuttal.json
+  1e05bb5b3bcb8fa2 1-68
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-rebuttal.score.json
+  1e05bb5b3bcb8fa2 1-39
+model-role-calibration/archive/synthetic-event-reporting/v2/case/inputs/synthesis.md
+  1e05bb5b3bcb8fa2 1-25
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/deepseek-risk.score.json
+  1e05bb5b3bcb8fa2 1-38
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-rebuttal.score.json
+  1e05bb5b3bcb8fa2 1-35
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/execution.md
+  1e05bb5b3bcb8fa2 1-79
+package.json
+  1e05bb5b3bcb8fa2 19,21
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-synthesis.json
+  1e05bb5b3bcb8fa2 1-76
+model-role-calibration/workspace-runs/.gitkeep
+  1e05bb5b3bcb8fa2 1
+model-role-calibration/archive/synthetic-event-reporting/v2/schemas/model-output.schema.json
+  1e05bb5b3bcb8fa2 1-55
+install.md
+  1e05bb5b3bcb8fa2 137-160,163-202,204,207,231-269,291
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-execution.json
+  1e05bb5b3bcb8fa2 1-71
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/deepseek-risk.json
+  1e05bb5b3bcb8fa2 1-47
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/qwen-synthesis.json
+  1e05bb5b3bcb8fa2 1-49
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/kimi-synthesis.json
+  1e05bb5b3bcb8fa2 1-98
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/glm-synthesis.score.json
+  1e05bb5b3bcb8fa2 1-86
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/qwen-rebuttal.score.json
+  1e05bb5b3bcb8fa2 1-37
+model-role-calibration/archive/synthetic-event-reporting/v2/prompts/probes/planner.md
+  1e05bb5b3bcb8fa2 1-92
+model-role-calibration/archive/synthetic-event-reporting/v2/results/agent-outputs/glm-synthesis.json
+  1e05bb5b3bcb8fa2 1-107
+model-role-calibration/archive/synthetic-event-reporting/v2/analysis/next-update.md
+  1e05bb5b3bcb8fa2 1-508
+model-role-calibration/archive/synthetic-event-reporting/v2/results/scores/kimi-architecture.score.json
+  1e05bb5b3bcb8fa2 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "6e7bcb780567ecb9e32608b36ab1784a0a5b9d15",
+  "prompts": {
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 8078,
+      "total_deletions": 60,
+      "accepted_lines": 8049,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/1220aadf48c676381b401a894b29b95953ebe962a61df947301ddcfcdaaa3318"
+    }
+  }
+}
