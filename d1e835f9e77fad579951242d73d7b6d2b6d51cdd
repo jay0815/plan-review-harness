@@ -1,0 +1,50 @@
+model-role-calibration/prompts/probe-synthesis.md
+  1e05bb5b3bcb8fa2 22-26
+model-role-calibration/scripts/plan-review-mcp.js
+  1e05bb5b3bcb8fa2 62,129,346-349,374-391,422-424,426,432,437
+model-role-calibration/scripts/run-workspace-review.js
+  1e05bb5b3bcb8fa2 19,149-271,291,306-307,311-314,357-358,467-468,482-486
+model-role-calibration/schemas/fact-check-output.schema.json
+  1e05bb5b3bcb8fa2 1-125
+model-role-calibration/scripts/package-claude-distribution.js
+  1e05bb5b3bcb8fa2 21,25,185,191-194,249
+install.md
+  1e05bb5b3bcb8fa2 125,144,212-214,267
+model-role-calibration/claude-code-mcp-integration.md
+  1e05bb5b3bcb8fa2 108,112-113,406-410,440
+model-role-calibration/scripts/workspace-review-lib.js
+  1e05bb5b3bcb8fa2 16-19,38,52-57,181-184,187-188,194-195,476-492,500,509-515,517,533-559,568,580-583,587,592-599,608,610,615,624,626-630,697-699,703
+model-role-calibration/claude-code/skills/plan-review/SKILL.md
+  1e05bb5b3bcb8fa2 60-63
+model-role-calibration/README.md
+  1e05bb5b3bcb8fa2 17-19
+model-role-calibration/scripts/test-claude-distribution.js
+  1e05bb5b3bcb8fa2 75-82,188
+model-role-calibration/scripts/test-plan-review-mcp.js
+  1e05bb5b3bcb8fa2 104,129-153,204-217,307-308,311,328-333,338-339
+model-role-calibration/workspace-review.config.example.json
+  1e05bb5b3bcb8fa2 39
+model-role-calibration/prompts/probe-fact_check.md
+  1e05bb5b3bcb8fa2 1-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "d1e835f9e77fad579951242d73d7b6d2b6d51cdd",
+  "prompts": {
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 567,
+      "total_deletions": 44,
+      "accepted_lines": 564,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/d64aaf6998e82ce8abea8ea53bb90299bbc14db0e991bbf378471e787baf2158"
+    }
+  }
+}
