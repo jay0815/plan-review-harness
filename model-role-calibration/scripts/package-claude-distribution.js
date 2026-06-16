@@ -239,6 +239,15 @@ node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \\
   --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>
 \`\`\`
 
+Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离：runner 只复制计划或
+evidence 明确引用的相对文件，以及少量项目配置文件到临时工程副本，并把该副本作为
+Claude Code 的 \`--add-dir\`。每个角色会写入 \`roles/<role>/read-scope.json\`，
+inspect 输出会标记 \`out_of_boundary_read_files\`。
+
+Fact Check 会额外生成 \`roles/fact_check/fact-check-summary.json\`，其中包含
+\`strictness_signal\`、\`status_counts\`、\`evidence_status_counts\` 和
+\`claim_support_counts\`。如果长期都是 \`all_verified\`，说明裁判可能偏宽。
+
 每次运行会生成：
 
 \`\`\`text

@@ -19,6 +19,9 @@ const {
   FACT_CHECK_ROLE,
   loadWorkspaceReviewFromArgs,
   validateProjectRoot,
+  buildRoleReadScope,
+  buildFactCheckReadScope,
+  copyScopedWorkspace,
   compactPlanForReview,
   buildWorkspacePrompt,
   buildClaudeWorkspaceArgs,
@@ -38,20 +41,105 @@ function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
 }
 
+function countBy(items, key) {
+  const counts = {};
+  for (const item of items || []) {
+    const value = item?.[key] || "unknown";
+    counts[value] = (counts[value] || 0) + 1;
+  }
+  return counts;
+}
+
+function summarizeFactCheckOutput(output) {
+  const checkedIssues = Array.isArray(output?.checked_issues) ? output.checked_issues : [];
+  const statusCounts = countBy(checkedIssues, "status");
+  const evidenceStatusCounts = countBy(checkedIssues, "evidence_status");
+  const claimSupportCounts = countBy(checkedIssues, "claim_support");
+  const total = checkedIssues.length;
+  const challenged = [
+    "partially_verified",
+    "unsupported",
+    "contradicted",
+    "unverifiable"
+  ].reduce((sum, key) => sum + (statusCounts[key] || 0), 0);
+  const verified = statusCounts.verified || 0;
+  return {
+    total_checked: total,
+    status_counts: statusCounts,
+    evidence_status_counts: evidenceStatusCounts,
+    claim_support_counts: claimSupportCounts,
+    verified_ratio: total ? Number((verified / total).toFixed(4)) : null,
+    challenged_count: challenged,
+    strictness_signal: total === 0
+      ? "no_issues_checked"
+      : challenged === 0
+        ? "all_verified"
+        : "challenged_some_claims",
+    limits_count: Array.isArray(output?.limits) ? output.limits.length : 0
+  };
+}
+
+function prepareReadBoundary(config, request, runDir, role, readScope) {
+  if (config.execution.isolate_reviewers === false) {
+    return {
+      promptRoot: request.project_root,
+      claudeRoot: request.project_root,
+      boundary: {
+        ...readScope,
+        mode: "prompt_only",
+        source_root: request.project_root,
+        exposed_root: request.project_root
+      },
+      cleanup: () => {}
+    };
+  }
+  const workspaceParent = fs.mkdtempSync(path.join(os.tmpdir(), `plan-review-${role}-scope-`));
+  const boundary = {
+    ...readScope,
+    ...copyScopedWorkspace(request.project_root, readScope, workspaceParent)
+  };
+  appendExecutionLog(runDir, "read_scope_prepared", {
+    role,
+    mode: boundary.mode,
+    files: boundary.files.length,
+    blocked_refs: boundary.blocked_refs.length,
+    skipped_refs: boundary.skipped_refs.length
+  });
+  return {
+    promptRoot: boundary.exposed_root,
+    claudeRoot: boundary.exposed_root,
+    boundary,
+    cleanup: () => fs.rmSync(workspaceParent, { recursive: true, force: true })
+  };
+}
+
 async function runRole(config, request, role, runDir) {
   const model = config.roles[role];
   const startedMs = Date.now();
   const roleDir = path.join(runDir, "roles", role);
   fs.mkdirSync(roleDir, { recursive: true });
-  const prompt = buildWorkspacePrompt(
+  const readScope = buildRoleReadScope(
     role,
     request.project_root,
     request.review_plan || request.plan,
-    request.context || ""
+    {
+      maxFiles: config.execution.read_scope_max_files
+    }
+  );
+  const readBoundary = prepareReadBoundary(config, request, runDir, role, readScope);
+  writeJson(path.join(roleDir, "read-scope.json"), readBoundary.boundary);
+  const prompt = buildWorkspacePrompt(
+    role,
+    readBoundary.promptRoot,
+    request.review_plan || request.plan,
+    request.context || "",
+    null,
+    null,
+    readBoundary.boundary
   );
   const promptFile = path.join(roleDir, "prompt.md");
   writeGenerated(promptFile, prompt);
-  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root);
+  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-role-"));
   const startedAt = new Date().toISOString();
   appendExecutionLog(runDir, "agent_started", {
@@ -78,6 +166,7 @@ async function runRole(config, request, role, runDir) {
     throw error;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
+    readBoundary.cleanup();
   }
 
   writeGenerated(path.join(roleDir, "stdout.jsonl"), child.stdout || "");
@@ -94,7 +183,14 @@ async function runRole(config, request, role, runDir) {
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
     allowed_tools: ["Read", "Glob", "Grep"],
-    project_root: request.project_root
+    project_root: request.project_root,
+    read_boundary: {
+      mode: readBoundary.boundary.mode,
+      source_root: readBoundary.boundary.source_root,
+      exposed_root: readBoundary.boundary.exposed_root,
+      file_count: readBoundary.boundary.files.length,
+      read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
+    }
   };
   if (child.error || child.status !== 0) {
     appendExecutionLog(runDir, "agent_failed", {
@@ -156,16 +252,27 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     SOURCE_NAME_BY_ROLE[item.role],
     item.output
   ]));
+  const readScope = buildFactCheckReadScope(
+    request.project_root,
+    reviewerOutputs,
+    {
+      maxFiles: config.execution.read_scope_max_files
+    }
+  );
+  const readBoundary = prepareReadBoundary(config, request, runDir, role, readScope);
+  writeJson(path.join(roleDir, "read-scope.json"), readBoundary.boundary);
   const prompt = buildWorkspacePrompt(
     role,
-    request.project_root,
+    readBoundary.promptRoot,
     request.review_plan || request.plan,
     request.context || "",
-    reviewerOutputs
+    reviewerOutputs,
+    null,
+    readBoundary.boundary
   );
   const promptFile = path.join(roleDir, "prompt.md");
   writeGenerated(promptFile, prompt);
-  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root, {
+  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot, {
     tools: "Read",
     allowProjectRead: true,
     systemPrompt: [
@@ -201,6 +308,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     throw error;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
+    readBoundary.cleanup();
   }
 
   writeGenerated(path.join(roleDir, "stdout.jsonl"), child.stdout || "");
@@ -217,7 +325,14 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
     allowed_tools: ["Read"],
-    project_root: request.project_root
+    project_root: request.project_root,
+    read_boundary: {
+      mode: readBoundary.boundary.mode,
+      source_root: readBoundary.boundary.source_root,
+      exposed_root: readBoundary.boundary.exposed_root,
+      file_count: readBoundary.boundary.files.length,
+      read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
+    }
   };
   if (child.error || child.status !== 0) {
     appendExecutionLog(runDir, "fact_check_failed", {
@@ -251,11 +366,15 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     throw new Error(`${role}/${model} returned invalid output: ${error.message}`);
   }
   writeJson(path.join(roleDir, "output.json"), parsed.output);
+  const factCheckSummary = summarizeFactCheckOutput(parsed.output);
+  writeJson(path.join(roleDir, "fact-check-summary.json"), factCheckSummary);
   writeJson(path.join(roleDir, "metadata.json"), {
     ...metadata,
+    fact_check_summary_file: path.relative(runDir, path.join(roleDir, "fact-check-summary.json")),
     status: "completed",
     error: null
   });
+  appendExecutionLog(runDir, "fact_check_summary", factCheckSummary);
   appendExecutionLog(runDir, "fact_check_completed", {
     role,
     model,
@@ -265,7 +384,9 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     role,
     model,
     output: parsed.output,
-    output_file: path.relative(runDir, path.join(roleDir, "output.json"))
+    output_file: path.relative(runDir, path.join(roleDir, "output.json")),
+    summary: factCheckSummary,
+    summary_file: path.relative(runDir, path.join(roleDir, "fact-check-summary.json"))
   };
 }
 
@@ -482,6 +603,8 @@ async function main() {
       fact_check: {
         model: factCheck.model,
         output_file: factCheck.output_file,
+        summary_file: factCheck.summary_file,
+        summary: factCheck.summary,
         output: factCheck.output
       },
       synthesis: {

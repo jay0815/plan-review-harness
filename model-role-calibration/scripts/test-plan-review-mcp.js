@@ -9,6 +9,9 @@ const {
   loadWorkspaceReviewConfig,
   loadWorkspaceReviewSettingsDirectory,
   configSummary,
+  buildRoleReadScope,
+  buildFactCheckReadScope,
+  copyScopedWorkspace,
   buildWorkspacePrompt,
   buildClaudeWorkspaceArgs,
   compactPlanForReview,
@@ -104,6 +107,8 @@ async function main() {
     assert.equal(directoryConfig.roles.fact_check, "deepseek");
     assert.equal(directoryConfig.roles.synthesis, "kimi");
     assert.equal(directoryConfig.execution.max_concurrency, 4);
+    assert.equal(directoryConfig.execution.isolate_reviewers, true);
+    assert.equal(directoryConfig.execution.read_scope_max_files, 80);
     assert.equal(directoryConfig.models.deepseek.settings_file, path.join(settingsDir, "deepseek.json"));
 
     const logRunDir = path.join(tempDir, "log-run");
@@ -126,6 +131,50 @@ async function main() {
     );
     assert(prompt.includes("检查当前计划"));
     assert(prompt.includes("相对文件路径和行号"));
+
+    const projectRoot = path.join(tempDir, "project");
+    fs.mkdirSync(path.join(projectRoot, "src", "cdp"), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, "package.json"), "{\"scripts\":{}}\n");
+    fs.writeFileSync(path.join(projectRoot, "tsconfig.json"), "{}\n");
+    fs.writeFileSync(path.join(projectRoot, "src", "cli.ts"), "export const cli = true;\n");
+    fs.writeFileSync(path.join(projectRoot, "src", "cdp", "extract.ts"), "export const extract = true;\n");
+    fs.writeFileSync(path.join(projectRoot, "secret.txt"), "do not copy\n");
+    const readScope = buildRoleReadScope(
+      "risk",
+      projectRoot,
+      [
+        "修改 `src/cli.ts` 和 `src/cdp/extract.ts`。",
+        `不要读取 ${path.join(tempDir, "outside.ts")}。`
+      ].join("\n"),
+      {
+        maxFiles: 10
+      }
+    );
+    assert(readScope.files.includes("package.json"));
+    assert(readScope.files.includes("tsconfig.json"));
+    assert(readScope.files.includes("src/cli.ts"));
+    assert(readScope.files.includes("src/cdp/extract.ts"));
+    assert(!readScope.files.includes("secret.txt"));
+    assert(readScope.blocked_refs.some((item) => item.endsWith("outside.ts")));
+    const mirrorParent = fs.mkdtempSync(path.join(tempDir, "mirror-"));
+    const boundary = copyScopedWorkspace(projectRoot, readScope, mirrorParent);
+    assert(fs.existsSync(path.join(boundary.exposed_root, "src", "cli.ts")));
+    assert(!fs.existsSync(path.join(boundary.exposed_root, "secret.txt")));
+    fs.rmSync(mirrorParent, { recursive: true, force: true });
+
+    const factScope = buildFactCheckReadScope(projectRoot, {
+      "Risk Reviewer": {
+        issues: [{
+          evidence: "src/cli.ts:1 shows cli",
+          why_it_matters: "package.json scripts consume it"
+        }]
+      }
+    }, {
+      maxFiles: 10
+    });
+    assert(factScope.files.includes("src/cli.ts"));
+    assert(factScope.files.includes("package.json"));
+
     const factCheckPrompt = buildWorkspacePrompt(
       "fact_check",
       tempDir,
@@ -145,12 +194,21 @@ async function main() {
           missing_questions: [],
           false_positive_risks: []
         }
+      },
+      null,
+      {
+        mode: "scoped_mirror",
+        files: ["packages/example.ts"],
+        blocked_refs: [],
+        skipped_refs: []
       }
     );
     assert(factCheckPrompt.includes("Fact Judge"));
     assert(factCheckPrompt.includes("只能使用 Read"));
     assert(factCheckPrompt.includes("\"probe\": \"fact_check\""));
     assert(factCheckPrompt.includes("## Risk Reviewer"));
+    assert(factCheckPrompt.includes("读取边界"));
+    assert(factCheckPrompt.includes("packages/example.ts"));
 
     const longPlan = [
       "# 实施计划",

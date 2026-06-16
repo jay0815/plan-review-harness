@@ -74,6 +74,8 @@ function main() {
     assert(packagedReadme.includes("plan-compaction.json"));
     assert(packagedReadme.includes("Fact Check"));
     assert(packagedReadme.includes("Synthesizer 最后只读取计划、Reviewer JSON"));
+    assert(packagedReadme.includes("scoped mirror"));
+    assert(packagedReadme.includes("fact-check-summary.json"));
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "prompts", "probe-fact_check.md")
     ));

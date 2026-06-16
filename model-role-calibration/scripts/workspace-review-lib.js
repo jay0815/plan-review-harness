@@ -41,12 +41,37 @@ const DEFAULT_ROLE_ROUTES = {
 };
 const COMPACT_CODE_BLOCK_LINE_THRESHOLD = 12;
 const COMPACT_CODE_BLOCK_CHAR_THRESHOLD = 900;
+const DEFAULT_READ_SCOPE_MAX_FILES = 80;
 const PRESERVE_CODE_BLOCK_LANGS = new Set([
   "bash",
   "sh",
   "shell",
   "zsh",
   "mermaid"
+]);
+const COMMON_PROJECT_FILES = [
+  "package.json",
+  "tsconfig.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lockb",
+  "README.md",
+  "readme.md",
+  ".gitignore"
+];
+const SKIP_SCOPE_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  ".next",
+  ".turbo",
+  ".cache",
+  "runs",
+  "workspace-runs"
 ]);
 
 function assertWorkspaceRole(role) {
@@ -232,7 +257,12 @@ function normalizeWorkspaceReviewConfig(raw, source, options = {}) {
         "execution.max_buffer_bytes"
       ),
       max_turns: positiveInteger(execution.max_turns || 24, "execution.max_turns"),
-      compact_plan: execution.compact_plan !== false
+      compact_plan: execution.compact_plan !== false,
+      isolate_reviewers: execution.isolate_reviewers !== false,
+      read_scope_max_files: positiveInteger(
+        execution.read_scope_max_files || DEFAULT_READ_SCOPE_MAX_FILES,
+        "execution.read_scope_max_files"
+      )
     }
   };
   if (options.validateClaudeBin !== false) {
@@ -349,6 +379,238 @@ function validateProjectRoot(projectRoot) {
   }
   fs.accessSync(resolved, fs.constants.R_OK);
   return resolved;
+}
+
+function isInsidePath(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function normalizeProjectRelativePath(projectRoot, candidate) {
+  let value = String(candidate || "").trim();
+  if (!value) {
+    return null;
+  }
+  value = value
+    .replace(/^["'`(<[]+/, "")
+    .replace(/[)"'`,.;\]]+$/, "")
+    .replace(/:\d+(?::\d+)?$/, "");
+  if (!value || /^(?:https?|chrome|data):\/\//i.test(value)) {
+    return null;
+  }
+  const absoluteProjectRoot = path.resolve(projectRoot);
+  let absolute;
+  if (path.isAbsolute(value)) {
+    absolute = path.resolve(value);
+    if (!isInsidePath(absoluteProjectRoot, absolute)) {
+      return {
+        blocked: value
+      };
+    }
+  } else {
+    absolute = path.resolve(absoluteProjectRoot, value);
+    if (!isInsidePath(absoluteProjectRoot, absolute)) {
+      return {
+        blocked: value
+      };
+    }
+  }
+  const relative = path.relative(absoluteProjectRoot, absolute).split(path.sep).join("/");
+  if (!relative || relative.startsWith("../") || relative.includes("\0")) {
+    return null;
+  }
+  return {
+    relative,
+    absolute
+  };
+}
+
+function collectPathCandidates(text) {
+  const candidates = new Set();
+  const input = String(text || "");
+  const patterns = [
+    /`([^`\n]+)`/g,
+    /(?:^|[\s"'([])(\/[A-Za-z0-9_./@+-]+(?:\.[A-Za-z0-9]+)?(?::\d+(?::\d+)?)?)/gm,
+    /(?:^|[\s"'([])((?:\.{1,2}\/)?(?:[A-Za-z0-9_.@+-]+\/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9]+)?(?::\d+(?::\d+)?)?)/gm,
+    /(?:^|[\s"'([])((?:package|tsconfig|pnpm-lock|pnpm-workspace|package-lock|yarn|bun|README|readme|CHANGELOG|\.gitignore)[A-Za-z0-9_.-]*)(?=$|[\s"'`),.;\]])/gm
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(input)) !== null) {
+      const raw = match[1] || "";
+      for (const part of raw.split(/\s+/)) {
+        if (part.includes("/") || COMMON_PROJECT_FILES.includes(part) || /\.[A-Za-z0-9]+(?::\d+)?$/.test(part)) {
+          candidates.add(part);
+        }
+      }
+    }
+  }
+  return [...candidates];
+}
+
+function shouldSkipScopePath(relativePath) {
+  return relativePath.split("/").some((part) => SKIP_SCOPE_DIRS.has(part));
+}
+
+function addFileToScope(projectRoot, relativePath, files, skippedRefs) {
+  if (shouldSkipScopePath(relativePath)) {
+    skippedRefs.add(relativePath);
+    return;
+  }
+  const absolute = path.join(projectRoot, relativePath);
+  if (!fs.existsSync(absolute)) {
+    skippedRefs.add(relativePath);
+    return;
+  }
+  const stat = fs.lstatSync(absolute);
+  if (!stat.isFile()) {
+    skippedRefs.add(relativePath);
+    return;
+  }
+  files.add(relativePath);
+}
+
+function expandDirectoryToScope(projectRoot, relativeDir, files, skippedRefs, maxFiles) {
+  if (files.size >= maxFiles || shouldSkipScopePath(relativeDir)) {
+    skippedRefs.add(relativeDir);
+    return;
+  }
+  const absoluteDir = path.join(projectRoot, relativeDir);
+  if (!fs.existsSync(absoluteDir) || !fs.lstatSync(absoluteDir).isDirectory()) {
+    skippedRefs.add(relativeDir);
+    return;
+  }
+  const stack = [absoluteDir];
+  while (stack.length && files.size < maxFiles) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (files.size >= maxFiles) {
+        break;
+      }
+      const absolute = path.join(current, entry.name);
+      const relative = path.relative(projectRoot, absolute).split(path.sep).join("/");
+      if (shouldSkipScopePath(relative)) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        stack.push(absolute);
+      } else if (entry.isFile()) {
+        files.add(relative);
+      }
+    }
+  }
+}
+
+function buildReadScopeFromText(role, projectRoot, text, options = {}) {
+  const maxFiles = options.maxFiles || DEFAULT_READ_SCOPE_MAX_FILES;
+  const files = new Set();
+  const blockedRefs = new Set();
+  const skippedRefs = new Set();
+  for (const common of COMMON_PROJECT_FILES) {
+    if (fs.existsSync(path.join(projectRoot, common))) {
+      addFileToScope(projectRoot, common, files, skippedRefs);
+    }
+  }
+  for (const candidate of collectPathCandidates(text)) {
+    if (files.size >= maxFiles) {
+      skippedRefs.add(candidate);
+      continue;
+    }
+    const normalized = normalizeProjectRelativePath(projectRoot, candidate);
+    if (!normalized) {
+      continue;
+    }
+    if (normalized.blocked) {
+      blockedRefs.add(normalized.blocked);
+      continue;
+    }
+    if (!fs.existsSync(normalized.absolute)) {
+      skippedRefs.add(normalized.relative);
+      continue;
+    }
+    const stat = fs.lstatSync(normalized.absolute);
+    if (stat.isDirectory()) {
+      expandDirectoryToScope(projectRoot, normalized.relative, files, skippedRefs, maxFiles);
+    } else if (stat.isFile()) {
+      files.add(normalized.relative);
+    } else {
+      skippedRefs.add(normalized.relative);
+    }
+  }
+  return {
+    role,
+    mode: "scoped_mirror",
+    max_files: maxFiles,
+    files: [...files].sort(),
+    blocked_refs: [...blockedRefs].sort(),
+    skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort()
+  };
+}
+
+function buildRoleReadScope(role, projectRoot, plan, options = {}) {
+  const scope = buildReadScopeFromText(role, projectRoot, plan, options);
+  scope.description = [
+    "只暴露计划中明确引用的工程文件和少量项目配置文件。",
+    "Reviewer 若需要未暴露文件，应写入 missing_questions，不应猜测。"
+  ].join("");
+  return scope;
+}
+
+function buildFactCheckReadScope(projectRoot, reviewerOutputs, options = {}) {
+  const text = JSON.stringify(reviewerOutputs || {});
+  const scope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, options);
+  scope.description = [
+    "只暴露 Reviewer evidence 明确引用的工程文件。",
+    "Fact Check 不应搜索新证据或新增问题。"
+  ].join("");
+  return scope;
+}
+
+function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
+  const exposedRoot = path.join(workspaceParent, "project");
+  fs.mkdirSync(exposedRoot, { recursive: true });
+  const copied = [];
+  for (const relative of readScope.files || []) {
+    const source = path.join(projectRoot, relative);
+    if (!fs.existsSync(source) || !fs.lstatSync(source).isFile()) {
+      continue;
+    }
+    const destination = path.join(exposedRoot, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+    copied.push(relative);
+  }
+  return {
+    mode: "scoped_mirror",
+    source_root: projectRoot,
+    exposed_root: exposedRoot,
+    files: copied.sort(),
+    blocked_refs: readScope.blocked_refs || [],
+    skipped_refs: readScope.skipped_refs || []
+  };
+}
+
+function readBoundarySection(readBoundary) {
+  if (!readBoundary) {
+    return "";
+  }
+  const files = readBoundary.files || [];
+  const blockedRefs = readBoundary.blocked_refs || [];
+  const skippedRefs = readBoundary.skipped_refs || [];
+  return [
+    "## 读取边界",
+    "",
+    `模式：${readBoundary.mode || "prompt_only"}`,
+    readBoundary.description ? `说明：${readBoundary.description}` : null,
+    "只能将下列相对路径作为工程事实 evidence 来源；如果需要的文件不在列表中，写入 missing_questions，不要猜测。",
+    files.length ? files.map((file) => `- ${file}`).join("\n") : "- （无可读取工程文件）",
+    blockedRefs.length
+      ? ["", "已阻止的外部路径引用：", ...blockedRefs.map((item) => `- ${item}`)].join("\n")
+      : null,
+    skippedRefs.length
+      ? ["", "未暴露或不存在的计划引用：", ...skippedRefs.slice(0, 20).map((item) => `- ${item}`)].join("\n")
+      : null
+  ].filter(Boolean).join("\n");
 }
 
 function compactList(values, limit = 8) {
@@ -488,7 +750,7 @@ const ACCESS_NOTES = {
   ]
 };
 
-function workspaceReviewInput(projectRoot, plan, context = "", accessMode = "reviewer") {
+function workspaceReviewInput(projectRoot, plan, context = "", accessMode = "reviewer", readBoundary = null) {
   const accessNotes = ACCESS_NOTES[accessMode] || ACCESS_NOTES.reviewer;
   return [
     "# 工程评审输入",
@@ -498,6 +760,8 @@ function workspaceReviewInput(projectRoot, plan, context = "", accessMode = "rev
     `\`${projectRoot}\``,
     "",
     ...accessNotes,
+    "",
+    readBoundarySection(readBoundary),
     "",
     "## 待评审计划",
     "",
@@ -512,7 +776,8 @@ function buildWorkspacePrompt(
   plan,
   context = "",
   reviewerOutputs = null,
-  factCheckOutput = null
+  factCheckOutput = null,
+  readBoundary = null
 ) {
   assertWorkspaceRole(role);
   const templateFile = path.join(ROOT, "prompts", `probe-${role}.md`);
@@ -547,7 +812,7 @@ function buildWorkspacePrompt(
       ].join("\n")
       : "";
     const input = [
-      workspaceReviewInput(projectRoot, plan, context, "synthesis"),
+      workspaceReviewInput(projectRoot, plan, context, "synthesis", readBoundary),
       "",
       "# Reviewer 意见",
       "",
@@ -565,7 +830,7 @@ function buildWorkspacePrompt(
       "```"
     ].join("\n")).join("\n\n");
     const input = [
-      workspaceReviewInput(projectRoot, plan, context, "fact_check"),
+      workspaceReviewInput(projectRoot, plan, context, "fact_check", readBoundary),
       "",
       "# Reviewer 意见",
       "",
@@ -573,7 +838,7 @@ function buildWorkspacePrompt(
     ].join("\n");
     return template.replace("{{INPUT}}", input);
   }
-  return template.replace("{{INPUT}}", workspaceReviewInput(projectRoot, plan, context));
+  return template.replace("{{INPUT}}", workspaceReviewInput(projectRoot, plan, context, "reviewer", readBoundary));
 }
 
 function workspaceSchemaForRole(role) {
@@ -710,6 +975,9 @@ module.exports = {
   loadWorkspaceReviewFromArgs,
   configSummary,
   validateProjectRoot,
+  buildRoleReadScope,
+  buildFactCheckReadScope,
+  copyScopedWorkspace,
   compactPlanForReview,
   workspaceReviewInput,
   buildWorkspacePrompt,

@@ -72,6 +72,10 @@ function summarizeRole(roleDir) {
   const outputFile = path.join(roleDir, "output.json");
   const promptFile = path.join(roleDir, "prompt.md");
   const metadata = fs.existsSync(metadataFile) ? readJson(metadataFile) : {};
+  const factCheckSummaryFile = path.join(roleDir, "fact-check-summary.json");
+  const factCheckSummary = fs.existsSync(factCheckSummaryFile)
+    ? readJson(factCheckSummaryFile)
+    : null;
   const events = parseJsonLines(stdoutFile);
   const init = events.find((event) => event.type === "system" && event.subtype === "init") || {};
   const toolUses = extractToolUses(events);
@@ -83,6 +87,25 @@ function summarizeRole(roleDir) {
     .filter((call) => call.name === "Read" && call.input.file_path)
     .map((call) => call.input.file_path)
   )];
+  const readBoundary = metadata.read_boundary || null;
+  const exposedRoot = readBoundary?.exposed_root ? path.resolve(readBoundary.exposed_root) : null;
+  const sourceRoot = readBoundary?.source_root ? path.resolve(readBoundary.source_root) : null;
+  const outOfBoundaryReadFiles = exposedRoot
+    ? readFiles.filter((file) => {
+      const relative = path.relative(exposedRoot, path.resolve(file));
+      return relative.startsWith("..") || path.isAbsolute(relative);
+    })
+    : [];
+  const mappedReadFiles = readFiles.map((file) => {
+    if (!exposedRoot || !sourceRoot) {
+      return file;
+    }
+    const relative = path.relative(exposedRoot, path.resolve(file));
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      return file;
+    }
+    return path.join(sourceRoot, relative);
+  });
   return {
     role,
     model: metadata.model || init.model || null,
@@ -98,6 +121,10 @@ function summarizeRole(roleDir) {
     tools: init.tools || [],
     tool_counts: toolCounts,
     read_files: readFiles,
+    mapped_read_files: [...new Set(mappedReadFiles)],
+    out_of_boundary_read_files: outOfBoundaryReadFiles,
+    read_boundary: readBoundary,
+    fact_check_summary: factCheckSummary,
     usage: usageSummary(events)
   };
 }
@@ -108,8 +135,8 @@ function printText(summary) {
   console.log(`Run dir: ${summary.run_dir}`);
   console.log(`Roles: ${summary.roles.map((item) => item.role).join(", ")}`);
   console.log("");
-  console.log("| Role | Model | Elapsed | Prompt | Output | Stdout | Tool calls | Max input tokens |");
-  console.log("|---|---|---:|---:|---:|---:|---|---:|");
+  console.log("| Role | Model | Elapsed | Prompt | Output | Stdout | Tool calls | Boundary | Max input tokens |");
+  console.log("|---|---|---:|---:|---:|---:|---|---|---:|");
   for (const role of summary.roles) {
     const toolCalls = Object.entries(role.tool_counts)
       .map(([name, count]) => `${name}:${count}`)
@@ -122,6 +149,9 @@ function printText(summary) {
       role.output_bytes,
       role.stdout_bytes,
       toolCalls,
+      role.read_boundary
+        ? `${role.read_boundary.mode}:${role.read_boundary.file_count ?? "-"} files, out:${role.out_of_boundary_read_files.length}`
+        : "-",
       role.usage?.max_input_tokens ?? "-"
     ].join(" | ") + " |");
   }
@@ -130,6 +160,20 @@ function printText(summary) {
     console.log(`## ${role.role} (${role.model || "unknown"})`);
     console.log(`session_id: ${role.session_id || "-"}`);
     console.log(`tools: ${role.tools.join(", ") || "-"}`);
+    if (role.read_boundary) {
+      console.log(`read_boundary: ${role.read_boundary.mode} (${role.read_boundary.file_count ?? "-"} file(s))`);
+      if (role.out_of_boundary_read_files.length) {
+        console.log("out_of_boundary_read_files:");
+        for (const file of role.out_of_boundary_read_files) {
+          console.log(`- ${file}`);
+        }
+      }
+    }
+    if (role.fact_check_summary) {
+      console.log(`fact_check_strictness: ${role.fact_check_summary.strictness_signal}`);
+      console.log(`fact_check_status_counts: ${JSON.stringify(role.fact_check_summary.status_counts)}`);
+      console.log(`fact_check_evidence_status_counts: ${JSON.stringify(role.fact_check_summary.evidence_status_counts)}`);
+    }
     if (!role.read_files.length) {
       console.log("read_files: none");
     } else {

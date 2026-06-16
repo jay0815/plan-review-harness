@@ -44,6 +44,9 @@
     "max_concurrency": 3,
     "timeout_ms": 900000,
     "max_buffer_bytes": 20971520,
-    "max_turns": 24
+    "max_turns": 24,
+    "compact_plan": true,
+    "isolate_reviewers": true,
+    "read_scope_max_files": 80
   }
 }

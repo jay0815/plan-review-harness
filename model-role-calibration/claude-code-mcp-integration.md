@@ -431,8 +431,10 @@ execution.log
 runner.stdout.log
 runner.stderr.log
 roles/<role>/prompt.md
+roles/<role>/read-scope.json
 roles/<role>/output.json
 roles/<role>/metadata.json
+roles/fact_check/fact-check-summary.json
 ```
 
 `request.json` 包含计划全文，可能涉及内部信息。`workspace-runs/` 已被 Git 忽略，不要手工提交。
@@ -446,7 +448,10 @@ node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \
   --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>
 ```
 
-该脚本读取 `roles/<role>/stdout.jsonl`，输出每个角色的模型、耗时、prompt/output/stdout 大小、工具调用次数、最大输入 token 和读取文件列表。
+Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离：runner 从计划或
+Reviewer evidence 中提取相对文件，只复制这些文件和少量项目配置文件到临时工程副本，并将该副本作为 Claude Code 的 `--add-dir`。每个角色的边界保存在 `roles/<role>/read-scope.json`。
+
+该脚本读取 `roles/<role>/stdout.jsonl`，输出每个角色的模型、耗时、prompt/output/stdout 大小、工具调用次数、最大输入 token、读取边界、越界读取文件和读取文件列表。Fact Check 会额外输出 `fact-check-summary.json`，用于观察 `verified`、`unsupported`、`contradicted`、`unverifiable` 等状态分布。
 
 ## 9. 故障处理
 
