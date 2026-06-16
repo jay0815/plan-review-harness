@@ -1,0 +1,58 @@
+model-role-calibration/prompts/probe-architecture.md
+  1e05bb5b3bcb8fa2 15,18,20,22-23,26,30,35-38
+model-role-calibration/scripts/test-workspace-review-verification.js
+  1e05bb5b3bcb8fa2 1-308
+package.json
+  1e05bb5b3bcb8fa2 20,22
+model-role-calibration/prompts/probe-risk.md
+  1e05bb5b3bcb8fa2 18,21-26,28,31,36-39
+model-role-calibration/scripts/package-claude-distribution.js
+  1e05bb5b3bcb8fa2 17,234-248,258-270,272-278
+install.md
+  1e05bb5b3bcb8fa2 218,220-233,242,244-250,279-325,361,371
+model-role-calibration/prompts/probe-rebuttal.md
+  1e05bb5b3bcb8fa2 15-16,18-19,21,24-26,29,34-37
+model-role-calibration/scripts/test-plan-review-mcp.js
+  1e05bb5b3bcb8fa2 23-24,279,281-331,484-493,498-503,518
+model-role-calibration/scripts/plan-review-mcp.js
+  1e05bb5b3bcb8fa2 425,427-429
+model-role-calibration/prompts/probe-synthesis.md
+  1e05bb5b3bcb8fa2 16,34,40-41,47,52-55
+model-role-calibration/prompts/probe-planner.md
+  1e05bb5b3bcb8fa2 15-16,22,25,31-33
+model-role-calibration/prompts/probe-fact_check.md
+  1e05bb5b3bcb8fa2 13,19-20,26,32-35
+model-role-calibration/prompts/probe-execution.md
+  1e05bb5b3bcb8fa2 15,17,23-24,26-27,30,35-38
+model-role-calibration/claude-code-mcp-integration.md
+  1e05bb5b3bcb8fa2 451-467
+model-role-calibration/scripts/run-workspace-review.js
+  1e05bb5b3bcb8fa2 82-174,307,316-318,508-530,704-707,710,716,725,744-745,749-750,775
+model-role-calibration/scripts/test-claude-distribution.js
+  1e05bb5b3bcb8fa2 40-44,58-60,81,83-88
+model-role-calibration/scripts/verify-workspace-review-run.js
+  1e05bb5b3bcb8fa2 1-474
+model-role-calibration/scripts/workspace-review-lib.js
+  1e05bb5b3bcb8fa2 861-862
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "59c03e78bd9280a3495a99c1ed5785d32da5e179",
+  "prompts": {
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 1273,
+      "total_deletions": 132,
+      "accepted_lines": 1214,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/02acd1dd20f44e8ce4b63fcf3a3b51e499ad87bc5b002ea2d2acdaba9d424d72"
+    }
+  }
+}
