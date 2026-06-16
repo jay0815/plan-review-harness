@@ -37,6 +37,11 @@ function main() {
     assert(installDoc.includes("### 使用案例二：没有计划文档"));
     assert(installDoc.includes("请粘贴需要审查的完整计划正文。"));
     assert(installDoc.includes("带参数模式会始终将参数解释为计划文件路径"));
+    assert(installDoc.includes("## 七、标准验证流程"));
+    assert(installDoc.includes("--run-id <run-id>"));
+    assert(installDoc.includes("project_root"));
+    assert(installDoc.includes("NOT_READY"));
+    assert(installDoc.includes("outcome"));
 
     const outputDir = path.join(tempDir, "dist");
     const result = buildDistribution({
@@ -49,6 +54,9 @@ function main() {
     }
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "inspect-workspace-run.js")
+    ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "verify-workspace-review-run.js")
     ));
     assert(fs.statSync(
       path.join(result.packageDir, "skill", "plan-review", "SKILL.md")
@@ -70,7 +78,14 @@ function main() {
     assert(packagedReadme.includes("没有现成计划文档"));
     assert(packagedReadme.includes("带参数模式始终把参数作为文件路径"));
     assert(packagedReadme.includes("请粘贴需要审查的完整计划正文。"));
+    assert(packagedReadme.includes("## 标准验证流程"));
     assert(packagedReadme.includes("inspect-workspace-run.js"));
+    assert(packagedReadme.includes("verify-workspace-review-run.js"));
+    assert(packagedReadme.includes("--run-id <run-id>"));
+    assert(packagedReadme.includes("state.json"));
+    assert(packagedReadme.includes("project_root"));
+    assert(packagedReadme.includes("NOT_READY"));
+    assert(packagedReadme.includes("report.json.outcome"));
     assert(packagedReadme.includes("plan-compaction.json"));
     assert(packagedReadme.includes("Fact Check"));
     assert(packagedReadme.includes("Synthesizer 最后只读取计划、Reviewer JSON"));

@@ -20,6 +20,9 @@ const {
   withoutAnthropicApiKey
 } = require("./workspace-review-lib");
 const {
+  summarizeReviewOutcome
+} = require("./run-workspace-review");
+const {
   toolList,
   resolvePlanInput,
   getPlanReview
@@ -273,6 +276,59 @@ async function main() {
     assert.equal(synthesisArgs[synthesisArgs.indexOf("--tools") + 1], "");
     assert.equal(synthesisArgs[synthesisArgs.indexOf("--allowed-tools") + 1], "");
     assert(!synthesisArgs.includes("--add-dir"));
+    assert(args[args.indexOf("--system-prompt") + 1].includes("Return only one raw JSON object"));
+
+    const readyOutcome = summarizeReviewOutcome(
+      [{
+        role: "risk",
+        output: {
+          issues: []
+        }
+      }],
+      {
+        summary: {
+          total_checked: 0,
+          challenged_count: 0
+        }
+      },
+      {
+        output: {
+          consensus_issues: [],
+          disagreements: [],
+          revision_instructions: []
+        }
+      },
+      []
+    );
+    assert.equal(readyOutcome.status, "plan_ready");
+
+    const infraOutcome = summarizeReviewOutcome(
+      [{
+        role: "risk",
+        output: {
+          issues: []
+        }
+      }],
+      {
+        summary: {
+          total_checked: 0,
+          challenged_count: 0
+        }
+      },
+      {
+        output: {
+          consensus_issues: [],
+          disagreements: [],
+          revision_instructions: []
+        }
+      },
+      [{
+        role: "rebuttal",
+        model: "glm",
+        type: "invalid_output"
+      }]
+    );
+    assert.equal(infraOutcome.status, "review_completed_with_infra_errors");
 
     let apiKeyRead = false;
     const inheritedEnv = {
@@ -425,12 +481,26 @@ async function main() {
         elapsed_ms: 10
       });
       writeJson(path.join(waitRunDir, "report.json"), {
-        run_id: waitRunId
+        run_id: waitRunId,
+        outcome: {
+          status: "review_completed_with_infra_errors",
+          message: "test"
+        },
+        infra_errors: [{
+          role: "rebuttal",
+          model: "glm",
+          type: "invalid_output"
+        }]
       });
       writeJson(path.join(waitRunDir, "state.json"), {
         run_id: waitRunId,
         status: "completed",
-        roles: ["risk"]
+        roles: ["risk"],
+        infra_errors: [{
+          role: "rebuttal",
+          model: "glm",
+          type: "invalid_output"
+        }]
       });
     }, 25);
     const waitedResult = await getPlanReview(
@@ -445,6 +515,7 @@ async function main() {
     assert.equal(waitedResult.status, "completed");
     assert.equal(waitedResult.progress.completed_reviewers, 1);
     assert.equal(waitedResult.next_action, null);
+    assert(waitedResult.progress.message.includes("基础设施错误"));
     assert(progressEvents.length >= 1);
     assert(progressEvents[0].message.includes("risk/qwen"));
 

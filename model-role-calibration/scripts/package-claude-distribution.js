@@ -14,6 +14,7 @@ const RUNTIME_FILES = [
   "scripts/run-workspace-review.js",
   "scripts/plan-review-mcp.js",
   "scripts/inspect-workspace-run.js",
+  "scripts/verify-workspace-review-run.js",
   "prompts/probe-risk.md",
   "prompts/probe-architecture.md",
   "prompts/probe-execution.md",
@@ -230,6 +231,21 @@ Skill 会询问：
 粘贴完整计划后，Skill 会直接使用正文启动审查，不需要创建临时文件。
 不要把计划正文直接追加在 \`/plan-review\` 后面，因为带参数模式会将其解释为文件路径。
 
+## 标准验证流程
+
+1. 在目标项目的 Claude Code 中执行 \`/plan-review <计划文件路径>\`，或执行
+   \`/plan-review\` 后粘贴计划正文。
+2. 记录 \`start_plan_review\` 返回的 \`run_id\`。
+3. 按 MCP 返回的 \`next_action\` 等待 \`get_plan_review\`，直到 \`status=completed\`。
+4. 回到任意终端执行：
+
+\`\`\`bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
+  --run-id <run-id>
+\`\`\`
+
+这一步不会调用模型，只读取本机已归档的运行产物并输出标准化检查报告。
+
 ## 诊断与提速
 
 查看某次评审中各模型实际读取了哪些文件、调用了哪些工具：
@@ -238,6 +254,28 @@ Skill 会询问：
 node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \\
   --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>
 \`\`\`
+
+生成标准化验证报告：
+
+\`\`\`bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
+  --run-id <run-id>
+\`\`\`
+
+机器可读 JSON：
+
+\`\`\`bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
+  --run-id <run-id> \\
+  --json
+\`\`\`
+
+默认日志和运行产物在 \`~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>\`。
+\`state.json\` 会记录启动评审时的 \`project_root\`，所以标准验证只需要 \`run_id\`。
+只有评审产物被移动到非默认目录时，才使用 \`--run-dir /path/to/workspace-runs/<run-id>\`。
+验证脚本退出码：\`0\` 表示 PASS，\`1\` 表示 FAIL，\`2\` 表示 NOT_READY。
+新版本运行产物必须包含 \`report.json.outcome\`。如果报告出现 \`infra_errors\`，
+表示 Reviewer/模型输出或 harness 解析问题，不是计划本身的阻塞结论。
 
 Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离：runner 只复制计划或
 evidence 明确引用的相对文件，以及少量项目配置文件到临时工程副本，并把该副本作为

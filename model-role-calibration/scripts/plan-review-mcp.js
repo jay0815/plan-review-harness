@@ -422,8 +422,11 @@ function progressSnapshot(config, runDir, state) {
   if (factCheck.status === "running") {
     active.push(`fact_check/${factCheck.model}`);
   }
+  const infraErrorCount = Array.isArray(state.infra_errors) ? state.infra_errors.length : 0;
   const message = state.status === "completed"
-    ? `计划评审已完成：Reviewer ${completedReviewers}/${reviewerValues.length}，Fact Check 已完成，Synthesis 已完成。`
+    ? infraErrorCount
+      ? `计划评审已完成但存在 ${infraErrorCount} 个 Reviewer 基础设施错误：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成；Fact Check 已完成；Synthesis 已完成。`
+      : `计划评审已完成：Reviewer ${completedReviewers}/${reviewerValues.length}，Fact Check 已完成，Synthesis 已完成。`
     : state.status === "failed"
       ? `计划评审失败：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成。`
       : [

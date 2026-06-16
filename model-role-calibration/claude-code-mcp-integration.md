@@ -448,6 +448,23 @@ node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \
   --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>
 ```
 
+生成标准化验证报告：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+  --run-id <run-id>
+```
+
+需要机器读取时加 `--json`。脚本默认读取
+`~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>`。退出码 `0` 表示已完成且通过，`1` 表示已完成但检查失败或 run failed，`2` 表示 queued/running 尚未完成。
+只有评审产物被移动到非默认目录时，才使用 `--run-dir /path/to/workspace-runs/<run-id>`。
+
+`workspace-runs/<run-id>/state.json` 会记录启动评审时 CC 所在项目的
+`project_root`，所以标准验证流程只需要 `run_id`。做跨项目效果分析时，可以额外记录项目路径，方便人工解释业务上下文。
+
+新版本运行产物必须在 `report.json` 中包含 `outcome`。如果报告出现
+`infra_errors`，表示 Reviewer/模型输出或 harness 解析问题，不应解释为计划本身的阻塞结论。
+
 Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离：runner 从计划或
 Reviewer evidence 中提取相对文件，只复制这些文件和少量项目配置文件到临时工程副本，并将该副本作为 Claude Code 的 `--add-dir`。每个角色的边界保存在 `roles/<role>/read-scope.json`。
 

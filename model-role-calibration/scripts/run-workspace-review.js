@@ -79,6 +79,99 @@ function summarizeFactCheckOutput(output) {
   };
 }
 
+function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors) {
+  const reviewerIssueCount = reviewerResults.reduce((sum, item) => (
+    sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0)
+  ), 0);
+  const consensusCount = Array.isArray(synthesis.output?.consensus_issues)
+    ? synthesis.output.consensus_issues.length
+    : 0;
+  const disagreementCount = Array.isArray(synthesis.output?.disagreements)
+    ? synthesis.output.disagreements.length
+    : 0;
+  const revisionCount = Array.isArray(synthesis.output?.revision_instructions)
+    ? synthesis.output.revision_instructions.length
+    : 0;
+  const factChecked = factCheck.summary?.total_checked || 0;
+  const challenged = factCheck.summary?.challenged_count || 0;
+  if (infraErrors.length) {
+    return {
+      status: "review_completed_with_infra_errors",
+      message: "审查已完成，但存在 Reviewer/模型输出基础设施错误；不能视为全角色完整审查。",
+      reviewer_issue_count: reviewerIssueCount,
+      consensus_issue_count: consensusCount,
+      disagreement_count: disagreementCount,
+      revision_instruction_count: revisionCount,
+      fact_checked_issue_count: factChecked,
+      fact_check_challenged_count: challenged,
+      infra_error_count: infraErrors.length
+    };
+  }
+  if (consensusCount === 0 && disagreementCount === 0 && revisionCount === 0) {
+    return {
+      status: "plan_ready",
+      message: "未发现需要修订的共识问题、分歧或修订指令；当前计划可以进入执行或保持原计划。",
+      reviewer_issue_count: reviewerIssueCount,
+      consensus_issue_count: consensusCount,
+      disagreement_count: disagreementCount,
+      revision_instruction_count: revisionCount,
+      fact_checked_issue_count: factChecked,
+      fact_check_challenged_count: challenged,
+      infra_error_count: 0
+    };
+  }
+  return {
+    status: "needs_revision",
+    message: "审查发现需要处理的问题、分歧或修订指令；应先修订计划再执行。",
+    reviewer_issue_count: reviewerIssueCount,
+    consensus_issue_count: consensusCount,
+    disagreement_count: disagreementCount,
+    revision_instruction_count: revisionCount,
+    fact_checked_issue_count: factChecked,
+    fact_check_challenged_count: challenged,
+    infra_error_count: 0
+  };
+}
+
+function extractFinalOutputText(stdout) {
+  const lines = String(stdout || "").trim().split(/\n/).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    let event;
+    try {
+      event = JSON.parse(lines[index]);
+    } catch {
+      continue;
+    }
+    if (event?.type === "result" && typeof event.result === "string") {
+      return event.result;
+    }
+    const content = event?.message?.content;
+    if (Array.isArray(content)) {
+      for (let contentIndex = content.length - 1; contentIndex >= 0; contentIndex -= 1) {
+        const block = content[contentIndex];
+        if (block?.type === "text" && typeof block.text === "string") {
+          return block.text;
+        }
+      }
+    }
+  }
+  return "";
+}
+
+function reviewerInfraError(role, model, error, runDir) {
+  return {
+    role,
+    model,
+    type: /invalid output|valid JSON|Probe mismatch/i.test(error.message)
+      ? "invalid_output"
+      : "agent_failed",
+    message: error.message,
+    metadata_file: path.relative(runDir, path.join(runDir, "roles", role, "metadata.json")),
+    stdout_file: path.relative(runDir, path.join(runDir, "roles", role, "stdout.jsonl")),
+    stderr_file: path.relative(runDir, path.join(runDir, "roles", role, "stderr.log"))
+  };
+}
+
 function prepareReadBoundary(config, request, runDir, role, readScope) {
   if (config.execution.isolate_reviewers === false) {
     return {
@@ -211,6 +304,7 @@ async function runRole(config, request, role, runDir) {
   try {
     parsed = parseAssistantOutput(child.stdout, role);
   } catch (error) {
+    writeGenerated(path.join(roleDir, "output.invalid.txt"), extractFinalOutputText(child.stdout));
     appendExecutionLog(runDir, "agent_invalid_output", {
       role,
       model,
@@ -219,7 +313,9 @@ async function runRole(config, request, role, runDir) {
     writeJson(path.join(roleDir, "metadata.json"), {
       ...metadata,
       status: "failed",
-      error: error.message
+      error: error.message,
+      failure_kind: "invalid_output",
+      invalid_output_file: path.relative(runDir, path.join(roleDir, "output.invalid.txt"))
     });
     throw new Error(`${role}/${model} returned invalid output: ${error.message}`);
   }
@@ -409,6 +505,31 @@ async function runWithConcurrency(items, concurrency, worker) {
   return results;
 }
 
+async function runReviewers(config, request, roles, runDir) {
+  const settled = await runWithConcurrency(
+    roles,
+    config.execution.max_concurrency,
+    async (role) => {
+      const model = config.roles[role];
+      try {
+        return {
+          ok: true,
+          result: await runRole(config, request, role, runDir)
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: reviewerInfraError(role, model, error, runDir)
+        };
+      }
+    }
+  );
+  return {
+    reviewerResults: settled.filter((item) => item.ok).map((item) => item.result),
+    infraErrors: settled.filter((item) => !item.ok).map((item) => item.error)
+  };
+}
+
 async function runSynthesis(config, request, reviewerResults, factCheckResult, runDir) {
   const role = "synthesis";
   const model = config.roles.synthesis;
@@ -580,18 +701,19 @@ async function main() {
   appendExecutionLog(runDir, "plan_compacted", request.plan_compaction);
 
   try {
-    const reviewerResults = await runWithConcurrency(
-      roles,
-      config.execution.max_concurrency,
-      (role) => runRole(config, request, role, runDir)
-    );
+    const { reviewerResults, infraErrors } = await runReviewers(config, request, roles, runDir);
+    if (!reviewerResults.length) {
+      throw new Error("All reviewers failed before producing valid JSON output");
+    }
     const factCheck = await runFactCheck(config, request, reviewerResults, runDir);
     const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, runDir);
+    const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors);
     const report = {
       run_id: request.run_id,
       project_root: request.project_root,
       created_at: new Date().toISOString(),
       plan_compaction: request.plan_compaction,
+      outcome,
       reviewers: Object.fromEntries(reviewerResults.map((item) => [
         item.role,
         {
@@ -600,6 +722,7 @@ async function main() {
           output: item.output
         }
       ])),
+      infra_errors: infraErrors,
       fact_check: {
         model: factCheck.model,
         output_file: factCheck.output_file,
@@ -618,11 +741,13 @@ async function main() {
       status: "completed",
       finished_at: new Date().toISOString(),
       report_file: "report.json",
-      error: null
+      error: null,
+      infra_errors: infraErrors
     });
     appendExecutionLog(runDir, "run_completed", {
       run_id: request.run_id,
-      reviewer_count: reviewerResults.length
+      reviewer_count: reviewerResults.length,
+      infra_error_count: infraErrors.length
     });
   } catch (error) {
     appendExecutionLog(runDir, "run_failed", {
@@ -647,5 +772,6 @@ if (require.main === module) {
 module.exports = {
   runRole,
   runWithConcurrency,
+  summarizeReviewOutcome,
   runSynthesis
 };

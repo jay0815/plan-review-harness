@@ -858,8 +858,8 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}
   const allowProjectRead = options.allowProjectRead !== false;
   const systemPrompt = options.systemPrompt || (
     allowProjectRead
-      ? "You are a non-interactive plan review agent. Inspect only the provided project directory. Never modify files or execute shell commands."
-      : "You are a non-interactive plan review synthesis agent. Do not inspect project files, modify files, or execute shell commands."
+      ? "You are a non-interactive plan review agent. Inspect only the provided project directory. Never modify files or execute shell commands. Return only one raw JSON object that conforms to the provided schema; no prose before or after JSON."
+      : "You are a non-interactive plan review synthesis agent. Do not inspect project files, modify files, or execute shell commands. Return only one raw JSON object that conforms to the provided schema; no prose before or after JSON."
   );
   const args = [
     "--settings",

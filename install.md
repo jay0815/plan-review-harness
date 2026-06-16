@@ -215,7 +215,22 @@ Skill 会自动：
 
 不需要再粘贴固定的 MCP 调用 prompt。
 
-## 七、运行过程
+## 七、标准验证流程
+
+1. 在目标项目的 Claude Code 中执行 `/plan-review <计划文件路径>`，或执行
+   `/plan-review` 后粘贴计划正文。
+2. 记录 `start_plan_review` 返回的 `run_id`。
+3. 按 MCP 返回的 `next_action` 等待 `get_plan_review`，直到 `status=completed`。
+4. 回到任意终端执行：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+  --run-id <run-id>
+```
+
+这一步不会调用模型，只读取本机已归档的运行产物并输出标准化检查报告。
+
+## 八、运行过程
 
 评审期间 Claude Code 应持续等待 get_plan_review，不需要手工执行：
 
@@ -223,6 +238,15 @@ sleep
 Bash
 Monitor
 claude mcp call
+
+每次评审的运行产物固定记录在：
+
+```text
+~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>/
+```
+
+其中 `state.json` 会记录本次 CC 所在项目的 `project_root`。通常你不需要额外提供
+CC 当前运行项目路径；只有做跨项目效果对比或解释具体业务上下文时，建议同时提供项目路径。
 
 如果需要人工诊断，可以在另一个终端查看日志：
 ```
@@ -251,6 +275,54 @@ node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \
 
 输出会列出每个角色的模型、耗时、prompt/output/stdout 大小、工具调用次数、
 最大输入 token、读取边界、越界读取文件，以及读取过的文件列表。
+
+标准化验证报告使用：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+  --run-id <run-id>
+```
+
+如果需要机器可读输出：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+  --run-id <run-id> \
+  --json
+```
+
+如果评审产物被移动到了其他目录，才使用 `--run-dir`：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+  --run-dir /path/to/workspace-runs/<run-id>
+```
+
+报告会检查：
+
+- run 是否 completed。
+- completed 后 `report.json` 是否包含 `outcome`。
+- `review-plan.md` 压缩指标是否存在。
+- 四个 Reviewer 是否使用 scoped mirror，且无越界读取。
+- Fact Check 是否完成、只使用 Read、是否有 strictness summary。
+- Synthesis 是否没有工具、没有读取工程文件。
+- `report.json` 和 `execution.log` 是否包含关键观测字段。
+
+验证脚本的退出码语义：
+
+- `0`：`PASS`，运行已完成且结构检查通过。
+- `1`：`FAIL`，运行已完成但结构检查失败，或运行状态为 failed。
+- `2`：`NOT_READY`，运行仍是 queued/running，等待 `get_plan_review` 完成后再验证。
+
+如果报告出现 `infra_errors`，表示 Reviewer/模型输出或 harness 解析问题；它不是计划本身的阻塞结论，但说明本轮不是全角色健康审查。
+
+把结果发给协作者时，优先提供：
+
+- `run_id`。
+- `verify-workspace-review-run.js --run-id <run-id>` 的 Markdown 输出。
+- 如果检查失败，再提供 `--json` 输出。
+- 如果要评估审查质量，再提供计划文件路径、实际项目路径，以及最终 `report.json` 中的
+  `fact_check.summary` 和 `synthesis` 结论。
 
 Reviewer 和 Fact Check 默认使用临时 scoped mirror：
 
@@ -286,7 +358,7 @@ roles/fact_check/fact-check-summary.json
 - `bash`、`sh`、`zsh`、`shell`、`mermaid` 代码块默认保留。
 - `plan-compaction.json` 记录原始字符数、压缩后字符数、压缩代码块数量和节省字符数。
 
-## 八、更新安装
+## 九、更新安装
 
 拿到新版压缩包后重新解压并执行：
 ```
@@ -296,7 +368,7 @@ roles/fact_check/fact-check-summary.json
 
 更新后重启 Claude Code。
 
-## 九、卸载
+## 十、卸载
 
 在解压后的分发包目录执行：
 ```
