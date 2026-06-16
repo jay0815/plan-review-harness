@@ -59,6 +59,7 @@ function toolList() {
       description: [
         "启动一次后台 Plan Review；同一计划只调用一次本工具。",
         "评审模型只能使用 Read、Glob、Grep 读取 project_root，不能修改文件或执行 Bash。",
+        "Reviewer 完成后会先执行 Fact Check 校验 evidence，Synthesizer 不读取工程目录，只基于计划、Reviewer JSON 和 Fact Check 报告合成。",
         "返回后必须立即使用 next_action 指定的参数调用 get_plan_review。",
         "不要自行读取 execution_log 判断完成状态，也不要使用 Bash、sleep、Monitor 或其他轮询方式。"
       ].join(" "),
@@ -125,7 +126,7 @@ function toolList() {
       description: [
         "这是等待 Plan Review 完成的唯一状态接口。",
         "默认在 MCP 调用内等待最多 60 秒，并通过 progress notification 报告 Agent 进度。",
-        "收到 progress notification 表示 Agent 正常执行，应保持当前工具调用等待，不要发起其他状态查询。",
+        "收到 progress notification 表示 Reviewer、Fact Check 或 Synthesis 正常执行，应保持当前工具调用等待，不要发起其他状态查询。",
         "禁止使用 Bash、sleep、Monitor、execution_log 或 claude mcp call 观察状态。",
         "只有当本工具返回 status=running 和 next_action 时，才按 next_action 再次调用。",
         "status=completed 时直接使用返回的结构化报告。"
@@ -342,6 +343,10 @@ function progressSnapshot(config, runDir, state) {
       status: "pending"
     }
   ]));
+  let factCheck = {
+    model: config.roles.fact_check,
+    status: "pending"
+  };
   let synthesis = {
     model: config.roles.synthesis,
     status: "pending"
@@ -365,6 +370,25 @@ function progressSnapshot(config, runDir, state) {
         ) {
           reviewers[event.role].status = "failed";
         }
+      }
+      if (event.event === "fact_check_started") {
+        factCheck = {
+          model: event.model || factCheck.model,
+          status: "running"
+        };
+      } else if (event.event === "fact_check_completed") {
+        factCheck = {
+          model: event.model || factCheck.model,
+          status: "completed"
+        };
+      } else if (
+        event.event === "fact_check_failed" ||
+        event.event === "fact_check_invalid_output"
+      ) {
+        factCheck = {
+          model: event.model || factCheck.model,
+          status: "failed"
+        };
       }
       if (event.event === "synthesis_started") {
         synthesis = {
@@ -395,17 +419,22 @@ function progressSnapshot(config, runDir, state) {
   const active = Object.entries(reviewers)
     .filter(([, item]) => item.status === "running")
     .map(([role, item]) => `${role}/${item.model}`);
+  if (factCheck.status === "running") {
+    active.push(`fact_check/${factCheck.model}`);
+  }
   const message = state.status === "completed"
-    ? `计划评审已完成：Reviewer ${completedReviewers}/${reviewerValues.length}，Synthesis 已完成。`
+    ? `计划评审已完成：Reviewer ${completedReviewers}/${reviewerValues.length}，Fact Check 已完成，Synthesis 已完成。`
     : state.status === "failed"
       ? `计划评审失败：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成。`
       : [
         `计划评审执行中：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成`,
         active.length ? `运行中 ${active.join(", ")}` : "等待下一阶段",
+        `Fact Check ${factCheck.status}`,
         `Synthesis ${synthesis.status}`
       ].join("；") + "。";
   return {
     reviewers,
+    fact_check: factCheck,
     synthesis,
     completed_reviewers: completedReviewers,
     total_reviewers: reviewerValues.length,

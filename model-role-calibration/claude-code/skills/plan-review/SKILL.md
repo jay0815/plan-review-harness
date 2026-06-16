@@ -57,6 +57,10 @@ allowed-tools:
 
 只列 `needs_human_decision: true` 的分歧，保留决策选项和影响。没有时写“无”。
 
+### Fact Check
+
+展示 `report.fact_check.output.source_summaries`，并列出 `unsupported`、`contradicted`、`unverifiable` 的 issue 标题、来源和原因。没有时写“无”。
+
 ### 可能误报
 
 展示 `likely_false_positives`，不要混入修订清单。

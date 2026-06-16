@@ -105,10 +105,13 @@ chmod 600 <settings-dir>/*.json
 | Architecture Reviewer | Kimi |
 | Execution Reviewer | Kimi |
 | Rebuttal Reviewer | GLM |
+| Fact Judge / Evidence Verifier | DeepSeek |
 | Synthesizer | Kimi |
 | Planner 备选 | DeepSeek |
 
-`planner` 当前不参与默认 Plan Review，因为计划由当前 Claude Code 会话提供。该映射保留给后续独立 Planner 流程。
+`fact_check` 在四个 Reviewer 完成后执行，只校验 Reviewer 输出中的
+evidence 是否支持 claim，不新增问题、不合成、不提供修复建议。`planner`
+当前不参与默认 Plan Review，因为计划由当前 Claude Code 会话提供。该映射保留给后续独立 Planner 流程。
 
 ## 3. 启动前校验
 
@@ -400,9 +403,11 @@ Skill 会自动：
 1. 读取计划文件全文，或接收用户粘贴的计划正文。
 2. 使用当前 Claude Code 工程目录作为 `project_root`。
 3. 启动默认全部 Reviewer。
-4. 按 `next_action` 等待 MCP progress。
-5. 输出 Mermaid 主流程图。
-6. 按流程节点展示问题、人工决策、可能误报和修订清单。
+4. Reviewer 完成后启动 Fact Check，只校验已给出的 evidence。
+5. Fact Check 完成后启动 Synthesizer。Synthesizer 不读取工程目录，只基于计划、Reviewer JSON 和 Fact Check 报告合成。
+6. 按 `next_action` 等待 MCP progress。
+7. 输出 Mermaid 主流程图。
+8. 按流程节点展示问题、人工决策、可能误报和修订清单。
 
 不要把 token 或 settings 内容写入 Skill。
 
@@ -432,7 +437,7 @@ roles/<role>/metadata.json
 
 `request.json` 包含计划全文，可能涉及内部信息。`workspace-runs/` 已被 Git 忽略，不要手工提交。
 
-`review-plan.md` 是实际传给 Reviewer/Synthesizer 的审查版计划。runner 会把长代码块压缩为 `pseudo` 摘要，保留接口、测试意图、关键流程和显式 TODO。`plan-compaction.json` 记录压缩前后字符数、压缩代码块数量和节省字符数。原始计划仍保存在 `request.json`。
+`review-plan.md` 是实际传给 Reviewer、Fact Check 和 Synthesizer 的审查版计划。runner 会把长代码块压缩为 `pseudo` 摘要，保留接口、测试意图、关键流程和显式 TODO。`plan-compaction.json` 记录压缩前后字符数、压缩代码块数量和节省字符数。原始计划仍保存在 `request.json`。
 
 分析某次 `cc -p` 执行行为：
 

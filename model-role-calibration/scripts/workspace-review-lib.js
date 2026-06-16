@@ -6,16 +6,17 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const {
   ROOT,
-  assertProbe,
   parseJsonFile,
   readText,
   schemaForProbe,
-  slug,
   writeGenerated
 } = require("./lib");
 
 const REVIEW_ROLES = ["risk", "architecture", "execution", "rebuttal"];
-const REQUIRED_ROLES = [...REVIEW_ROLES, "synthesis"];
+const FACT_CHECK_ROLE = "fact_check";
+const SYNTHESIS_ROLE = "synthesis";
+const WORKSPACE_ROLES = [...REVIEW_ROLES, FACT_CHECK_ROLE, SYNTHESIS_ROLE];
+const REQUIRED_ROLES = [...REVIEW_ROLES, FACT_CHECK_ROLE, SYNTHESIS_ROLE];
 const PLACEHOLDER_PATTERN = /REPLACE_|YOUR_|CHANGEME|<[^>]+>/i;
 const DEFAULT_MODEL_FILES = {
   kimi: "kimi.json",
@@ -34,6 +35,7 @@ const DEFAULT_ROLE_ROUTES = {
   architecture: "kimi",
   execution: "kimi",
   rebuttal: "glm",
+  fact_check: "deepseek",
   synthesis: "kimi",
   planner: "deepseek"
 };
@@ -46,6 +48,12 @@ const PRESERVE_CODE_BLOCK_LANGS = new Set([
   "zsh",
   "mermaid"
 ]);
+
+function assertWorkspaceRole(role) {
+  if (!WORKSPACE_ROLES.includes(role)) {
+    throw new Error(`Invalid workspace review role "${role}". Expected one of: ${WORKSPACE_ROLES.join(", ")}`);
+  }
+}
 
 function expandHome(value) {
   if (value === "~") {
@@ -170,17 +178,21 @@ function normalizeWorkspaceReviewConfig(raw, source, options = {}) {
   }
 
   const configDir = source.config_dir;
+  const roles = {
+    ...DEFAULT_ROLE_ROUTES,
+    ...raw.roles
+  };
   const requiredModels = new Set();
   for (const role of REQUIRED_ROLES) {
-    assertProbe(role);
-    const model = raw.roles[role];
+    assertWorkspaceRole(role);
+    const model = roles[role];
     if (typeof model !== "string" || !model.trim()) {
       throw new Error(`roles.${role} must name a configured model`);
     }
     requiredModels.add(model);
   }
-  if (raw.roles.planner) {
-    requiredModels.add(raw.roles.planner);
+  if (roles.planner) {
+    requiredModels.add(roles.planner);
   }
 
   const models = {};
@@ -211,9 +223,7 @@ function normalizeWorkspaceReviewConfig(raw, source, options = {}) {
       configDir
     ),
     models,
-    roles: {
-      ...raw.roles
-    },
+    roles,
     execution: {
       max_concurrency: positiveInteger(execution.max_concurrency || 4, "execution.max_concurrency"),
       timeout_ms: positiveInteger(execution.timeout_ms || 900000, "execution.timeout_ms"),
@@ -463,7 +473,23 @@ function compactPlanForReview(plan, options = {}) {
   };
 }
 
-function workspaceReviewInput(projectRoot, plan, context = "") {
+const ACCESS_NOTES = {
+  reviewer: [
+    "你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。",
+    "涉及工程事实的结论必须在 evidence 中包含相对文件路径和行号；找不到证据时放入 missing_questions。"
+  ],
+  fact_check: [
+    "你只能使用 Read 读取 Reviewer evidence 明确引用的相对文件；不要使用 Glob/Grep 搜索新证据，不要发现新问题。",
+    "Reviewer 未提供可定位文件、行号或片段时，将对应 claim 标记为 unverifiable 或 unsupported。"
+  ],
+  synthesis: [
+    "本角色不得读取工程目录，也不会获得工程读取工具；只能基于待评审计划、Reviewer 意见和 Fact Check 报告合成结论。",
+    "涉及工程事实的结论必须遵从 Fact Check 状态；不要补充任何来源都未提出的新事实。"
+  ]
+};
+
+function workspaceReviewInput(projectRoot, plan, context = "", accessMode = "reviewer") {
+  const accessNotes = ACCESS_NOTES[accessMode] || ACCESS_NOTES.reviewer;
   return [
     "# 工程评审输入",
     "",
@@ -471,8 +497,7 @@ function workspaceReviewInput(projectRoot, plan, context = "") {
     "",
     `\`${projectRoot}\``,
     "",
-    "你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。",
-    "涉及工程事实的结论必须在 evidence 中包含相对文件路径和行号；找不到证据时放入 missing_questions。",
+    ...accessNotes,
     "",
     "## 待评审计划",
     "",
@@ -481,8 +506,15 @@ function workspaceReviewInput(projectRoot, plan, context = "") {
   ].filter(Boolean).join("\n");
 }
 
-function buildWorkspacePrompt(role, projectRoot, plan, context = "", reviewerOutputs = null) {
-  assertProbe(role);
+function buildWorkspacePrompt(
+  role,
+  projectRoot,
+  plan,
+  context = "",
+  reviewerOutputs = null,
+  factCheckOutput = null
+) {
+  assertWorkspaceRole(role);
   const templateFile = path.join(ROOT, "prompts", `probe-${role}.md`);
   let template = readText(templateFile);
   if (role === "rebuttal") {
@@ -505,8 +537,35 @@ function buildWorkspacePrompt(role, projectRoot, plan, context = "", reviewerOut
       JSON.stringify(output, null, 2),
       "```"
     ].join("\n")).join("\n\n");
+    const factCheckSection = factCheckOutput
+      ? [
+        "# Fact Check 报告",
+        "",
+        "```json",
+        JSON.stringify(factCheckOutput, null, 2),
+        "```"
+      ].join("\n")
+      : "";
     const input = [
-      workspaceReviewInput(projectRoot, plan, context),
+      workspaceReviewInput(projectRoot, plan, context, "synthesis"),
+      "",
+      "# Reviewer 意见",
+      "",
+      sourceSections,
+      factCheckSection ? "\n" + factCheckSection : ""
+    ].join("\n");
+    return template.replace("{{INPUT}}", input);
+  }
+  if (role === FACT_CHECK_ROLE) {
+    const sourceSections = Object.entries(reviewerOutputs || {}).map(([source, output]) => [
+      `## ${source}`,
+      "",
+      "```json",
+      JSON.stringify(output, null, 2),
+      "```"
+    ].join("\n")).join("\n\n");
+    const input = [
+      workspaceReviewInput(projectRoot, plan, context, "fact_check"),
       "",
       "# Reviewer 意见",
       "",
@@ -518,15 +577,26 @@ function buildWorkspacePrompt(role, projectRoot, plan, context = "", reviewerOut
 }
 
 function workspaceSchemaForRole(role) {
+  assertWorkspaceRole(role);
+  if (role === FACT_CHECK_ROLE) {
+    return path.join(ROOT, "schemas", "fact-check-output.schema.json");
+  }
   return schemaForProbe(role);
 }
 
-function buildClaudeWorkspaceArgs(config, model, role, projectRoot) {
+function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}) {
   const modelConfig = config.models[model];
   if (!modelConfig) {
     throw new Error(`No validated model configuration for "${model}"`);
   }
-  return [
+  const tools = options.tools === undefined ? "Read,Glob,Grep" : options.tools;
+  const allowProjectRead = options.allowProjectRead !== false;
+  const systemPrompt = options.systemPrompt || (
+    allowProjectRead
+      ? "You are a non-interactive plan review agent. Inspect only the provided project directory. Never modify files or execute shell commands."
+      : "You are a non-interactive plan review synthesis agent. Do not inspect project files, modify files, or execute shell commands."
+  );
+  const args = [
     "--settings",
     modelConfig.settings_file,
     "--bare",
@@ -535,14 +605,14 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot) {
     "--strict-mcp-config",
     "--disable-slash-commands",
     "--tools",
-    "Read,Glob,Grep",
+    tools,
     "--allowed-tools",
-    "Read,Glob,Grep",
+    tools,
     "--no-chrome",
     "--permission-mode",
     "dontAsk",
     "--system-prompt",
-    "You are a non-interactive plan review agent. Inspect only the provided project directory. Never modify files or execute shell commands.",
+    systemPrompt,
     "--input-format",
     "text",
     "--output-format",
@@ -551,11 +621,13 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot) {
     JSON.stringify(parseJsonFile(workspaceSchemaForRole(role))),
     "--max-turns",
     String(config.execution.max_turns),
-    "--no-session-persistence",
-    "--add-dir",
-    projectRoot,
-    "-p"
+    "--no-session-persistence"
   ];
+  if (allowProjectRead) {
+    args.push("--add-dir", projectRoot);
+  }
+  args.push("-p");
+  return args;
 }
 
 function runDirectory(config, runId) {
@@ -622,9 +694,13 @@ function withoutAnthropicApiKey(env = process.env) {
 
 module.exports = {
   REVIEW_ROLES,
+  FACT_CHECK_ROLE,
+  SYNTHESIS_ROLE,
+  WORKSPACE_ROLES,
   REQUIRED_ROLES,
   DEFAULT_MODEL_FILES,
   DEFAULT_ROLE_ROUTES,
+  assertWorkspaceRole,
   expandHome,
   resolveConfiguredPath,
   validateSettingsFile,

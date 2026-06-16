@@ -16,6 +16,7 @@ const {
 } = require("./run-model");
 const {
   REVIEW_ROLES,
+  FACT_CHECK_ROLE,
   loadWorkspaceReviewFromArgs,
   validateProjectRoot,
   compactPlanForReview,
@@ -145,6 +146,129 @@ async function runRole(config, request, role, runDir) {
   };
 }
 
+async function runFactCheck(config, request, reviewerResults, runDir) {
+  const role = FACT_CHECK_ROLE;
+  const model = config.roles[role];
+  const startedMs = Date.now();
+  const roleDir = path.join(runDir, "roles", role);
+  fs.mkdirSync(roleDir, { recursive: true });
+  const reviewerOutputs = Object.fromEntries(reviewerResults.map((item) => [
+    SOURCE_NAME_BY_ROLE[item.role],
+    item.output
+  ]));
+  const prompt = buildWorkspacePrompt(
+    role,
+    request.project_root,
+    request.review_plan || request.plan,
+    request.context || "",
+    reviewerOutputs
+  );
+  const promptFile = path.join(roleDir, "prompt.md");
+  writeGenerated(promptFile, prompt);
+  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root, {
+    tools: "Read",
+    allowProjectRead: true,
+    systemPrompt: [
+      "You are a non-interactive evidence verification agent.",
+      "Read only files explicitly cited by reviewer evidence.",
+      "Never search for new issues, modify files, or execute shell commands."
+    ].join(" ")
+  });
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-fact-check-"));
+  const startedAt = new Date().toISOString();
+  appendExecutionLog(runDir, "fact_check_started", {
+    role,
+    model,
+    reviewer_count: reviewerResults.length
+  });
+  let child;
+  try {
+    child = await runCommand(config.claude_bin, args, {
+      cwd: workDir,
+      env: withoutAnthropicApiKey(process.env),
+      input: prompt,
+      timeoutMs: config.execution.timeout_ms,
+      killSignal: "SIGKILL",
+      maxBuffer: config.execution.max_buffer_bytes,
+      validatorLogFile: null
+    });
+  } catch (error) {
+    appendExecutionLog(runDir, "fact_check_failed", {
+      role,
+      model,
+      elapsed_ms: Date.now() - startedMs
+    });
+    throw error;
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+
+  writeGenerated(path.join(roleDir, "stdout.jsonl"), child.stdout || "");
+  writeGenerated(path.join(roleDir, "stderr.log"), child.stderr || "");
+  const metadata = {
+    role,
+    model,
+    started_at: startedAt,
+    finished_at: new Date().toISOString(),
+    timed_out: child.error?.code === "ETIMEDOUT",
+    exit_code: child.status,
+    signal: child.signal,
+    error: child.error ? child.error.message : null,
+    prompt_file: path.relative(runDir, promptFile),
+    settings_file: config.models[model].settings_file,
+    allowed_tools: ["Read"],
+    project_root: request.project_root
+  };
+  if (child.error || child.status !== 0) {
+    appendExecutionLog(runDir, "fact_check_failed", {
+      role,
+      model,
+      elapsed_ms: Date.now() - startedMs
+    });
+    writeJson(path.join(roleDir, "metadata.json"), {
+      ...metadata,
+      status: "failed"
+    });
+    throw new Error(
+      `${role}/${model} failed: ${child.error?.message || `exit ${child.status}`}`
+    );
+  }
+
+  let parsed;
+  try {
+    parsed = parseAssistantOutput(child.stdout, role);
+  } catch (error) {
+    appendExecutionLog(runDir, "fact_check_invalid_output", {
+      role,
+      model,
+      elapsed_ms: Date.now() - startedMs
+    });
+    writeJson(path.join(roleDir, "metadata.json"), {
+      ...metadata,
+      status: "failed",
+      error: error.message
+    });
+    throw new Error(`${role}/${model} returned invalid output: ${error.message}`);
+  }
+  writeJson(path.join(roleDir, "output.json"), parsed.output);
+  writeJson(path.join(roleDir, "metadata.json"), {
+    ...metadata,
+    status: "completed",
+    error: null
+  });
+  appendExecutionLog(runDir, "fact_check_completed", {
+    role,
+    model,
+    elapsed_ms: Date.now() - startedMs
+  });
+  return {
+    role,
+    model,
+    output: parsed.output,
+    output_file: path.relative(runDir, path.join(roleDir, "output.json"))
+  };
+}
+
 async function runWithConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -164,7 +288,7 @@ async function runWithConcurrency(items, concurrency, worker) {
   return results;
 }
 
-async function runSynthesis(config, request, reviewerResults, runDir) {
+async function runSynthesis(config, request, reviewerResults, factCheckResult, runDir) {
   const role = "synthesis";
   const model = config.roles.synthesis;
   const startedMs = Date.now();
@@ -179,11 +303,15 @@ async function runSynthesis(config, request, reviewerResults, runDir) {
     request.project_root,
     request.review_plan || request.plan,
     request.context || "",
-    reviewerOutputs
+    reviewerOutputs,
+    factCheckResult.output
   );
   const promptFile = path.join(roleDir, "prompt.md");
   writeGenerated(promptFile, prompt);
-  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root);
+  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root, {
+    tools: "",
+    allowProjectRead: false
+  });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-synthesis-"));
   const startedAt = new Date().toISOString();
   appendExecutionLog(runDir, "synthesis_started", {
@@ -226,8 +354,8 @@ async function runSynthesis(config, request, reviewerResults, runDir) {
     error: child.error ? child.error.message : null,
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
-    allowed_tools: ["Read", "Glob", "Grep"],
-    project_root: request.project_root
+    allowed_tools: [],
+    project_root: null
   };
   if (child.error || child.status !== 0) {
     appendExecutionLog(runDir, "synthesis_failed", {
@@ -336,7 +464,8 @@ async function main() {
       config.execution.max_concurrency,
       (role) => runRole(config, request, role, runDir)
     );
-    const synthesis = await runSynthesis(config, request, reviewerResults, runDir);
+    const factCheck = await runFactCheck(config, request, reviewerResults, runDir);
+    const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, runDir);
     const report = {
       run_id: request.run_id,
       project_root: request.project_root,
@@ -350,6 +479,11 @@ async function main() {
           output: item.output
         }
       ])),
+      fact_check: {
+        model: factCheck.model,
+        output_file: factCheck.output_file,
+        output: factCheck.output
+      },
       synthesis: {
         model: synthesis.model,
         output_file: synthesis.output_file,

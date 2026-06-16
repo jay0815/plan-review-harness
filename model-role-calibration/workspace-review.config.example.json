@@ -36,6 +36,7 @@
     "architecture": "kimi",
     "execution": "kimi",
     "rebuttal": "glm",
+    "fact_check": "deepseek",
     "synthesis": "kimi",
     "planner": "deepseek"
   },

@@ -18,9 +18,11 @@ const RUNTIME_FILES = [
   "prompts/probe-architecture.md",
   "prompts/probe-execution.md",
   "prompts/probe-rebuttal.md",
+  "prompts/probe-fact_check.md",
   "prompts/probe-synthesis.md",
   "schemas/risk-output.schema.json",
   "schemas/model-output.schema.json",
+  "schemas/fact-check-output.schema.json",
   "schemas/synthesis-output.schema.json"
 ];
 const SKILL_SOURCE = "claude-code/skills/plan-review/SKILL.md";
@@ -180,11 +182,15 @@ claude
 2. 确认实施计划内容。
 3. 已保存为 Markdown 文件时，调用 \`/plan-review <文件路径>\`。
 4. 未保存为文件时，调用空参数 \`/plan-review\`，再按提示粘贴完整计划正文。
-5. 等待多角色审查和合成结果。
+5. 等待多角色审查、事实校验和合成结果。
 6. 根据审查结果修订计划，通过后再进入代码实现。
 
 Plan Review 只审查计划，不负责替代 Claude Code 生成计划，也不会修改工程文件。带参数模式始终把参数作为文件路径。
 文件模式只向 MCP 传递 \`plan_file\` 路径，由 MCP 读取文件，避免 Claude Code 在调用前读取和渲染整份长计划。
+
+执行流程为：Reviewer 先并发只读审查工程；Fact Check 随后只校验
+Reviewer 已给出的 evidence；Synthesizer 最后只读取计划、Reviewer JSON
+和 Fact Check 报告，不读取工程目录。
 
 ### 已有计划文档
 
@@ -240,7 +246,7 @@ review-plan.md
 plan-compaction.json
 \`\`\`
 
-原始计划保存在 \`request.json\`。Reviewer 和 Synthesizer 使用 \`review-plan.md\`。
+原始计划保存在 \`request.json\`。Reviewer、Fact Check 和 Synthesizer 使用 \`review-plan.md\`。
 长代码块会被压缩为 \`pseudo\` 摘要，减少模型读取成本；命令和 Mermaid
 代码块默认保留。
 

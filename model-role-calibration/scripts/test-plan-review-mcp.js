@@ -101,6 +101,7 @@ async function main() {
     assert.equal(directoryConfig.settings_dir, settingsDir);
     assert.deepEqual(directoryConfig.loader_args, ["--settings-dir", settingsDir]);
     assert.equal(directoryConfig.roles.risk, "qwen");
+    assert.equal(directoryConfig.roles.fact_check, "deepseek");
     assert.equal(directoryConfig.roles.synthesis, "kimi");
     assert.equal(directoryConfig.execution.max_concurrency, 4);
     assert.equal(directoryConfig.models.deepseek.settings_file, path.join(settingsDir, "deepseek.json"));
@@ -125,6 +126,31 @@ async function main() {
     );
     assert(prompt.includes("检查当前计划"));
     assert(prompt.includes("相对文件路径和行号"));
+    const factCheckPrompt = buildWorkspacePrompt(
+      "fact_check",
+      tempDir,
+      "检查当前计划",
+      "",
+      {
+        "Risk Reviewer": {
+          probe: "risk",
+          issues: [{
+            title: "配置值不一致",
+            type: "risk",
+            severity: "high",
+            evidence: "packages/example.ts:1 rounds: 30",
+            why_it_matters: "计划要求 15",
+            confidence: 0.9
+          }],
+          missing_questions: [],
+          false_positive_risks: []
+        }
+      }
+    );
+    assert(factCheckPrompt.includes("Fact Judge"));
+    assert(factCheckPrompt.includes("只能使用 Read"));
+    assert(factCheckPrompt.includes("\"probe\": \"fact_check\""));
+    assert(factCheckPrompt.includes("## Risk Reviewer"));
 
     const longPlan = [
       "# 实施计划",
@@ -175,6 +201,20 @@ async function main() {
     assert(!args.includes("Bash"));
     assert(!args.includes("Edit"));
     assert(!args.includes("Write"));
+    const factCheckArgs = buildClaudeWorkspaceArgs(config, "deepseek", "fact_check", tempDir, {
+      tools: "Read",
+      allowProjectRead: true
+    });
+    assert.equal(factCheckArgs[factCheckArgs.indexOf("--tools") + 1], "Read");
+    assert.equal(factCheckArgs[factCheckArgs.indexOf("--allowed-tools") + 1], "Read");
+    assert.equal(factCheckArgs[factCheckArgs.indexOf("--add-dir") + 1], tempDir);
+    const synthesisArgs = buildClaudeWorkspaceArgs(config, "kimi", "synthesis", tempDir, {
+      tools: "",
+      allowProjectRead: false
+    });
+    assert.equal(synthesisArgs[synthesisArgs.indexOf("--tools") + 1], "");
+    assert.equal(synthesisArgs[synthesisArgs.indexOf("--allowed-tools") + 1], "");
+    assert(!synthesisArgs.includes("--add-dir"));
 
     let apiKeyRead = false;
     const inheritedEnv = {
@@ -264,6 +304,11 @@ async function main() {
       path.join(__dirname, "..", "schemas", "synthesis-output.schema.json"),
       "utf8"
     ));
+    const factCheckSchema = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "..", "schemas", "fact-check-output.schema.json"),
+      "utf8"
+    ));
+    assert.equal(factCheckSchema.properties.probe.const, "fact_check");
     assert(synthesisSchema.required.includes("process_map"));
     assert(
       synthesisSchema.properties.consensus_issues.items.required.includes("affected_nodes")
@@ -280,10 +325,18 @@ async function main() {
           missing_questions: [],
           false_positive_risks: []
         }
+      },
+      {
+        probe: "fact_check",
+        checked_issues: [],
+        source_summaries: [],
+        limits: []
       }
     );
     assert(synthesisPrompt.includes("\"process_map\""));
     assert(synthesisPrompt.includes("\"affected_nodes\""));
+    assert(synthesisPrompt.includes("Fact Check 报告"));
+    assert(synthesisPrompt.includes("不得读取工程目录"));
 
     const waitConfig = {
       ...directoryConfig,

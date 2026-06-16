@@ -72,6 +72,14 @@ function main() {
     assert(packagedReadme.includes("请粘贴需要审查的完整计划正文。"));
     assert(packagedReadme.includes("inspect-workspace-run.js"));
     assert(packagedReadme.includes("plan-compaction.json"));
+    assert(packagedReadme.includes("Fact Check"));
+    assert(packagedReadme.includes("Synthesizer 最后只读取计划、Reviewer JSON"));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "prompts", "probe-fact_check.md")
+    ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "schemas", "fact-check-output.schema.json")
+    ));
     assert(fs.statSync(path.join(result.packageDir, "install.sh")).mode & 0o100);
     assert(!fs.existsSync(path.join(result.packageDir, "mcp", "runs")));
     assert(!fs.existsSync(path.join(result.packageDir, "mcp", "archive")));
@@ -177,6 +185,7 @@ exit 0
     const status = JSON.parse(validate.stdout);
     assert.equal(status.valid, true);
     assert.equal(status.roles.risk, "qwen");
+    assert.equal(status.roles.fact_check, "deepseek");
     assert.equal(status.roles.synthesis, "kimi");
     assert.equal(status.models.kimi.auth_env, "ANTHROPIC_AUTH_TOKEN");
     assert(!validate.stdout.includes("test-auth-token"));

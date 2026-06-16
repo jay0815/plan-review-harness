@@ -19,6 +19,11 @@
 # Rules
 
 - 来源保真是基础门槛。每个共识、分歧和误报判断都必须能追溯到输入中的具体来源，不得补充任何来源都未提出的新事实、新问题或新方案。
+- 如果输入包含 Fact Check 报告，事实支持状态优先于 Reviewer 声量和来源数量。
+- Fact Check 标记为 `unsupported` 或 `contradicted` 的 issue 不得进入 `consensus_issues`，只能进入 `likely_false_positives` 或作为分歧背景说明。
+- Fact Check 标记为 `unverifiable` 的 issue 不得当作已确认事实；如确需保留，只能降权并明确说明证据不可定位。
+- Fact Check 标记为 `partially_verified` 的 issue 可以进入合成结果，但必须在 `reason` 中说明只有部分事实成立，严重度不得高于 Reviewer 原始严重度。
+- 只有 `verified` 或经过明确说明的 `partially_verified` issue 才能成为主修订指令来源。
 - “某来源没有提到”不等于共识，也不等于反对。只有多个来源明确表达相同结论时，才可合并为共识。
 - 先按根因合并重复意见；同一问题的不同影响属于互补信息，不应被制造成分歧。
 - `merged_from` 必须使用输入中的准确来源名称，只列真正提出该问题的来源。

@@ -122,6 +122,7 @@ risk: qwen
 architecture: kimi
 execution: kimi
 rebuttal: glm
+fact_check: deepseek
 synthesis: kimi
 planner: deepseek
 
@@ -140,7 +141,7 @@ auth_env: ANTHROPIC_AUTH_TOKEN
 2. 确认计划内容后，调用 `/plan-review` 进行只读审查。
 3. 如果计划已经保存为 Markdown 文件，传入该文件的绝对路径。
 4. 如果计划没有保存为文件，执行不带参数的 `/plan-review`，再按提示粘贴完整计划正文。
-5. 等待四个 Reviewer 和 Synthesizer 完成审查。
+5. 等待四个 Reviewer、Fact Check 和 Synthesizer 完成审查。
 6. 根据流程图、节点问题、人工决策和修订清单更新计划。
 7. 计划通过审查后，再进入代码实现阶段。
 
@@ -208,8 +209,9 @@ Skill 会自动：
 2. 使用当前 Claude Code 工程作为 project_root。
 3. 启动四个 Reviewer。
 4. 等待 MCP progress notification。
-5. 启动 Synthesizer。
-6. 输出流程图、节点问题、人工决策、可能误报和修订清单。
+5. 启动 Fact Check，只校验 Reviewer 已给出的 evidence。
+6. 启动 Synthesizer。Synthesizer 不读取工程目录，只基于计划、Reviewer JSON 和 Fact Check 报告合成。
+7. 输出流程图、节点问题、人工决策、可能误报和修订清单。
 
 不需要再粘贴固定的 MCP 调用 prompt。
 
@@ -262,7 +264,7 @@ node ~/.claude/plan-review-harness/mcp/scripts/inspect-workspace-run.js \
 规则：
 
 - 原始计划仍保存在 `request.json`。
-- 传给 Reviewer 和 Synthesizer 的是 `review-plan.md`。
+- 传给 Reviewer、Fact Check 和 Synthesizer 的是 `review-plan.md`。
 - 长代码块会压缩为 `pseudo` 摘要，保留接口、测试意图、关键流程和显式 TODO。
 - `bash`、`sh`、`zsh`、`shell`、`mermaid` 代码块默认保留。
 - `plan-compaction.json` 记录原始字符数、压缩后字符数、压缩代码块数量和节省字符数。

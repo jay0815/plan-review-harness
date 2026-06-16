@@ -14,6 +14,9 @@ model-role-calibration/claude-code-mcp-integration.md
 npm run plan-review:package
 ```
 
+Workspace Plan Review 的执行顺序是四个 Reviewer 并发审查，随后由
+Fact Check 校验 Reviewer evidence，最后由 Synthesizer 在不读取工程目录的情况下合成结论。
+
 当前版本不直接调用模型 API，也不接 LangGraph。模型通过本机 Claude Code wrapper CLI 运行：
 
 - 创建可编辑的校准 case。
