@@ -1,0 +1,40 @@
+model-role-calibration/scripts/package-claude-distribution.js
+  1e05bb5b3bcb8fa2 242-250
+install.md
+  1e05bb5b3bcb8fa2 253-270
+model-role-calibration/claude-code-mcp-integration.md
+  1e05bb5b3bcb8fa2 434,437,451-454
+model-role-calibration/scripts/test-claude-distribution.js
+  1e05bb5b3bcb8fa2 77-78
+model-role-calibration/scripts/test-plan-review-mcp.js
+  1e05bb5b3bcb8fa2 12-14,110-111,134-177,197-203,210-211
+model-role-calibration/scripts/inspect-workspace-run.js
+  1e05bb5b3bcb8fa2 75-78,90-108,124-127,138-139,152-154,163-176
+model-role-calibration/scripts/run-workspace-review.js
+  1e05bb5b3bcb8fa2 22-24,44-115,121,125-138,142,169,186-193,255-263,266,269-271,275,311,328-335,369-370,373,377,387-389,606-607
+model-role-calibration/scripts/workspace-review-lib.js
+  1e05bb5b3bcb8fa2 44,52-75,260-265,384-615,753,764-765,779-780,815,833,841,978-980
+model-role-calibration/workspace-review.config.example.json
+  1e05bb5b3bcb8fa2 47-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "969051e5100039c4ab91d41dca8d17468c122730",
+  "prompts": {
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 550,
+      "total_deletions": 21,
+      "accepted_lines": 549,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/04e55b7c9dee977f40582f649decf25f1907f60268a2da2393cac644d95494d3"
+    }
+  }
+}
