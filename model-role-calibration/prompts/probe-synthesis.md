@@ -26,6 +26,8 @@
 - `partially_verified` 不能自动成为修订指令来源；只有当 Fact Check 明确确认“核心事实”和“阻塞性/直接后果”均有支持时，才可进入 `revision_instructions`。
 - 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，则该 issue 只能降权进入 `consensus_issues` 或 `likely_false_positives`，不得直接生成修订指令。
 - 只有 `verified` 或满足上述条件的 `partially_verified` issue 才能成为主修订指令来源。
+- 如果 issue 只来自 `semantics=plan_draft` 或 `expected=not_compile_target` 的 `proposed-code/...` artifact 中缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不得作为 blocker 或修订指令来源；除非输入明确证明主 plan 要求该 artifact 原样落地，或该缺口直接破坏主计划需求、接口契约、关键控制流、失败分支或验收标准。
+- 对草案完整性问题，即使 Fact Check 验证了“草案里确实缺少某符号/实现体”，也只能说明代码样例不完整；应放入 `likely_false_positives` 或降为低严重度提醒，不得把 plan 判为 needs_revision 的核心原因。
 - “某来源没有提到”不等于共识，也不等于反对。只有多个来源明确表达相同结论时，才可合并为共识。
 - 先按根因合并重复意见；同一问题的不同影响属于互补信息，不应被制造成分歧。
 - `merged_from` 必须使用输入中的准确来源名称，只列真正提出该问题的来源。

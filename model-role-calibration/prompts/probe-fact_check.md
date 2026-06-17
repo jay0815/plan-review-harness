@@ -19,6 +19,8 @@
 - 你只能读取 Reviewer evidence 明确引用的项目文件。禁止使用 Glob/Grep 搜索新证据；如果 evidence 没有可定位文件或片段，标记为 `unverifiable` 或 `unsupported`。
 - 如果 Reviewer 的代码事实来自计划中的新增/拟修改代码，evidence 必须定位到 `proposed-code/...` artifact 的具体行号；只引用 `pseudo` 摘要不足以验证 import、类型归属、控制流、测试断言或副作用。
 - 若 Reviewer 对新增代码作出精确代码事实判断，但没有引用可读的 `proposed-code/...` artifact，通常标记为 `unsupported` 或 `unverifiable`，不得用主 plan 摘要补证据。
+- `proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它只能证明计划草案中写了什么，不能自动证明最终代码会按该草案原样提交。
+- 对 plan_draft artifact 中缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性事实：若 Reviewer 只声称“草案存在该缺口”，可以按 evidence 校验；若 Reviewer 进一步声称“因此计划 blocker / 必然编译失败 / 必须修订”，通常只能标记为 `partially_verified`，除非主 plan 明确要求该 artifact 原样落地或该缺口直接破坏主计划契约。
 - 禁止因为 Reviewer 声称严重就默认成立；校验重点是 evidence 是否支持 claim。
 - 区分事实存在、因果成立和严重度成立：事实存在但因果或严重度被放大时，标记为 `partially_verified`。
 - evidence 与 claim 相反时标记为 `contradicted`。
@@ -45,6 +47,7 @@
 - 对复合 claim，不要因为其中一个子 claim 被反驳就把整个 issue 判为 `contradicted`；只要另一个实质子 claim 被 evidence 支持，优先使用 `partially_verified`。
 - `verified` 只用于 evidence 同时直接支持核心事实和 Reviewer 声称的直接后果；严重度、阻塞性或因果链被放大时，不得使用 `verified`。
 - 如果计划明确把某问题列为已知债务、暂不处理或本次范围外，只能验证“该债务存在”这一弱事实；Reviewer 将其上升为当前阻塞或高严重度时，使用 `partially_verified`。
+- 如果 claim 只由 plan_draft artifact 的代码样例不完整支撑，而主计划已经给出足够的执行意图或该细节可由实现阶段按项目惯例补齐，使用 `partially_verified`，并在 `reason` 中说明“草案事实成立，但 blocker/修订因果不成立或证据不足”。
 - 当前 scoped mirror 中的可读证据优先于 Reviewer 的旧行号、旧源码描述或旧仓库引用；二者冲突时，按当前可读证据判为 `contradicted` 或 `unsupported`。
 
 # JSON Output Contract

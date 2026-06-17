@@ -4,7 +4,7 @@
 
 # Prompt Version
 
-`role-calibration-v2`
+`role-calibration-v3`
 
 # Task
 
@@ -20,6 +20,8 @@
 - 每个问题必须绑定原文 evidence，并说明从 evidence 到风险结果的直接因果关系。
 - 如果 plan 输入包含 `proposed-code/...` artifact，凡是关于新增/拟修改代码的 import、类型归属、控制流、测试断言或副作用的事实，必须读取并引用对应 artifact 的相对路径和行号，例如 `proposed-code/block-003.ts:12-20`；禁止只根据 `pseudo` 摘要下结论。
 - 已存在代码事实必须引用现有工程文件的相对路径和行号；新增代码事实必须引用 `proposed-code/...` artifact 的相对路径和行号。
+- `proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不能单独作为 blocker。
+- 只有当草案缺口会让主计划的需求、契约、关键控制流、失败分支或验收条件无法成立时，才可报告为风险；否则写入 `false_positive_risks` 或不报告。
 - 同一根因产生的多个表现合并为一个 issue，禁止通过拆分问题制造覆盖面。
 - 禁止把低概率问题夸大成 blocker；`blocker` 必须意味着按当前计划无法满足明确需求或硬约束。
 - 如果某个问题只是偏好，请标记为 preference，禁止标记为 risk。

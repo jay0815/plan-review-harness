@@ -4,7 +4,7 @@
 
 # Prompt Version
 
-`role-calibration-v2`
+`role-calibration-v3`
 
 # Task
 
@@ -25,6 +25,8 @@
 - 每个问题必须绑定原文 evidence，并说明该缺口会让哪一步无法开始、无法完成或无法验收。
 - 如果 plan 输入包含 `proposed-code/...` artifact，凡是关于新增/拟修改代码的 import、类型归属、控制流、测试断言或副作用的事实，必须读取并引用对应 artifact 的相对路径和行号，例如 `proposed-code/block-003.ts:12-20`；禁止只根据 `pseudo` 摘要下结论。
 - 已存在代码事实必须引用现有工程文件的相对路径和行号；新增代码事实必须引用 `proposed-code/...` artifact 的相对路径和行号。
+- `proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不能单独作为执行 blocker。
+- 只有当该缺口使执行者无法确定唯一需求、接口契约、输入输出、关键失败分支、执行顺序或验收标准时，才报告为计划执行缺口；如果实现时可按既有项目模式自然补齐，应降权或放入 `false_positive_risks`。
 - 同一执行阻塞根因只输出一个 issue，禁止把测试、验收和发布中的同一缺口重复拆分。
 - 无法从输入判断的事实写入 `missing_questions`，禁止自行补全。
 - `suggested_fix` 只描述计划必须补充的最小执行信息，不代写完整计划或替代架构。
