@@ -973,12 +973,14 @@ const ACCESS_NOTES = {
     "你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。",
     "涉及已存在代码的工程事实，evidence 必须包含现有工程文件的相对路径和行号。",
     "涉及计划准备新增或大段修改的代码事实，evidence 必须读取并引用 `proposed-code/...` artifact 的相对路径和行号；不要只引用 pseudo 摘要。",
+    "`proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不能单独作为 blocker。",
     "找不到证据时放入 missing_questions。"
   ],
   fact_check: [
     "你只能使用 Read 读取 Reviewer evidence 明确引用的相对文件；不要使用 Glob/Grep 搜索新证据，不要发现新问题。",
     "Reviewer 未提供可定位文件、行号或片段时，将对应 claim 标记为 unverifiable 或 unsupported。",
-    "新增/拟修改代码的精确事实必须由 `proposed-code/...` artifact 支持；pseudo 摘要不能替代源码证据。"
+    "新增/拟修改代码的精确事实必须由 `proposed-code/...` artifact 支持；pseudo 摘要不能替代源码证据。",
+    "`proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，只能证明草案内容，不能自动证明最终代码会原样提交；草案完整性事实成立时也要单独判断 blocker/修订因果是否成立。"
   ],
   synthesis: [
     "本角色不得读取工程目录，也不会获得工程读取工具；只能基于待评审计划、Reviewer 意见和 Fact Check 报告合成结论。",

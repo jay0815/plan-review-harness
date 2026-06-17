@@ -136,6 +136,7 @@ async function main() {
     assert(prompt.includes("检查当前计划"));
     assert(prompt.includes("现有工程文件的相对路径和行号"));
     assert(prompt.includes("proposed-code/..."));
+    assert(prompt.includes("semantics=plan_draft"));
 
     const projectRoot = path.join(tempDir, "project");
     fs.mkdirSync(path.join(projectRoot, "src", "cdp"), { recursive: true });
@@ -252,6 +253,7 @@ async function main() {
     const compactedPlan = compactPlanForReview(longPlan);
     assert(compactedPlan.text.includes("```pseudo"));
     assert(compactedPlan.text.includes("源码 artifact：proposed-code/block-001.ts:1-"));
+    assert(compactedPlan.text.includes("not_compile_target"));
     assert(compactedPlan.text.includes("声明/入口"));
     assert(compactedPlan.text.includes("测试意图"));
     assert(compactedPlan.text.includes("```bash"));
@@ -260,6 +262,8 @@ async function main() {
     assert.equal(compactedPlan.stats.proposed_artifact_count, 1);
     assert.equal(compactedPlan.artifacts.length, 1);
     assert.equal(compactedPlan.artifacts[0].relative_path, "proposed-code/block-001.ts");
+    assert.equal(compactedPlan.artifacts[0].review_semantics, "plan_draft");
+    assert.equal(compactedPlan.artifacts[0].expected_completeness, "not_compile_target");
     assert(compactedPlan.artifacts[0].content.includes("clearHostResolverCache"));
     assert(compactedPlan.stats.saved_chars > 0);
 
@@ -309,6 +313,11 @@ async function main() {
     assert.equal(refs.format_status.has_proposed_code_artifacts_section, true);
     assert(refs.existing_code_refs.some((item) => item.path === "src/cli.ts" && item.line_ref === "1-1"));
     assert(refs.proposed_code_artifacts.some((item) => item.path === "proposed-code/block-001.ts"));
+    assert(refs.proposed_code_artifacts.some((item) => (
+      item.path === "proposed-code/block-001.ts" &&
+      item.review_semantics === "plan_draft" &&
+      item.expected_completeness === "not_compile_target"
+    )));
     assert(refs.blocked_refs.includes("/outside/project.ts"));
 
     const args = buildClaudeWorkspaceArgs(config, "qwen", "risk", tempDir);
