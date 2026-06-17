@@ -23,7 +23,9 @@
 - Fact Check 标记为 `unsupported` 或 `contradicted` 的 issue 不得进入 `consensus_issues`，只能进入 `likely_false_positives` 或作为分歧背景说明。
 - Fact Check 标记为 `unverifiable` 的 issue 不得当作已确认事实；如确需保留，只能降权并明确说明证据不可定位。
 - Fact Check 标记为 `partially_verified` 的 issue 可以进入合成结果，但必须在 `reason` 中说明只有部分事实成立，严重度不得高于 Reviewer 原始严重度。
-- 只有 `verified` 或经过明确说明的 `partially_verified` issue 才能成为主修订指令来源。
+- `partially_verified` 不能自动成为修订指令来源；只有当 Fact Check 明确确认“核心事实”和“阻塞性/直接后果”均有支持时，才可进入 `revision_instructions`。
+- 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，则该 issue 只能降权进入 `consensus_issues` 或 `likely_false_positives`，不得直接生成修订指令。
+- 只有 `verified` 或满足上述条件的 `partially_verified` issue 才能成为主修订指令来源。
 - “某来源没有提到”不等于共识，也不等于反对。只有多个来源明确表达相同结论时，才可合并为共识。
 - 先按根因合并重复意见；同一问题的不同影响属于互补信息，不应被制造成分歧。
 - `merged_from` 必须使用输入中的准确来源名称，只列真正提出该问题的来源。

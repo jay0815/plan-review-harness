@@ -9,6 +9,7 @@ const {
   parseJsonFile,
   readText,
   schemaForProbe,
+  slug,
   writeGenerated
 } = require("./lib");
 
@@ -35,13 +36,15 @@ const DEFAULT_ROLE_ROUTES = {
   architecture: "kimi",
   execution: "kimi",
   rebuttal: "glm",
-  fact_check: "deepseek",
+  fact_check: "glm",
   synthesis: "kimi",
   planner: "deepseek"
 };
 const COMPACT_CODE_BLOCK_LINE_THRESHOLD = 12;
 const COMPACT_CODE_BLOCK_CHAR_THRESHOLD = 900;
 const DEFAULT_READ_SCOPE_MAX_FILES = 80;
+const PROPOSED_CODE_DIR = "proposed-code";
+const LINE_REF_SUFFIX_PATTERN = /:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/;
 const PRESERVE_CODE_BLOCK_LANGS = new Set([
   "bash",
   "sh",
@@ -73,6 +76,24 @@ const SKIP_SCOPE_DIRS = new Set([
   "runs",
   "workspace-runs"
 ]);
+
+const CODE_BLOCK_EXTENSION_BY_LANGUAGE = {
+  cjs: ".cjs",
+  css: ".css",
+  html: ".html",
+  javascript: ".js",
+  js: ".js",
+  json: ".json",
+  jsx: ".jsx",
+  markdown: ".md",
+  md: ".md",
+  mjs: ".mjs",
+  ts: ".ts",
+  tsx: ".tsx",
+  typescript: ".ts",
+  yaml: ".yaml",
+  yml: ".yaml"
+};
 
 function assertWorkspaceRole(role) {
   if (!WORKSPACE_ROLES.includes(role)) {
@@ -394,7 +415,7 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
   value = value
     .replace(/^["'`(<[]+/, "")
     .replace(/[)"'`,.;\]]+$/, "")
-    .replace(/:\d+(?::\d+)?$/, "");
+    .replace(LINE_REF_SUFFIX_PATTERN, "");
   if (!value || /^(?:https?|chrome|data):\/\//i.test(value)) {
     return null;
   }
@@ -428,10 +449,14 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
 function collectPathCandidates(text) {
   const candidates = new Set();
   const input = String(text || "");
+  const lineRef = "(?::\\d+(?::\\d+)?(?:-\\d+(?::\\d+)?)?)?";
   const patterns = [
     /`([^`\n]+)`/g,
-    /(?:^|[\s"'([])(\/[A-Za-z0-9_./@+-]+(?:\.[A-Za-z0-9]+)?(?::\d+(?::\d+)?)?)/gm,
-    /(?:^|[\s"'([])((?:\.{1,2}\/)?(?:[A-Za-z0-9_.@+-]+\/)+[A-Za-z0-9_.@+-]+(?:\.[A-Za-z0-9]+)?(?::\d+(?::\d+)?)?)/gm,
+    new RegExp(`(?:^|[\\s"'([])(/[A-Za-z0-9_./@+-]+(?:\\.[A-Za-z0-9]+)?${lineRef})`, "gm"),
+    new RegExp(
+      `(?:^|[\\s"'([])((?:\\.{1,2}/)?(?:[A-Za-z0-9_.@+-]+/)+[A-Za-z0-9_.@+-]+(?:\\.[A-Za-z0-9]+)?${lineRef})`,
+      "gm"
+    ),
     /(?:^|[\s"'([])((?:package|tsconfig|pnpm-lock|pnpm-workspace|package-lock|yarn|bun|README|readme|CHANGELOG|\.gitignore)[A-Za-z0-9_.-]*)(?=$|[\s"'`),.;\]])/gm
   ];
   for (const pattern of patterns) {
@@ -446,6 +471,92 @@ function collectPathCandidates(text) {
     }
   }
   return [...candidates];
+}
+
+function stripLineRefSuffix(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^["'`(<[]+/, "")
+    .replace(/[)"'`,.;\]]+$/, "")
+    .replace(LINE_REF_SUFFIX_PATTERN, "");
+}
+
+function lineRefSuffix(value) {
+  const match = String(value || "").trim().match(LINE_REF_SUFFIX_PATTERN);
+  return match ? match[0].slice(1) : null;
+}
+
+function normalizeProposedArtifacts(artifacts = []) {
+  return (Array.isArray(artifacts) ? artifacts : [])
+    .filter((artifact) => artifact && typeof artifact.relative_path === "string")
+    .map((artifact) => ({
+      relative_path: artifact.relative_path.split(path.sep).join("/"),
+      source_file: artifact.source_file || null,
+      language: artifact.language || "",
+      line_count: artifact.line_count || null,
+      char_count: artifact.char_count || null,
+      block_index: artifact.block_index || null,
+      content: artifact.content || null
+    }))
+    .filter((artifact) => {
+      const relative = artifact.relative_path;
+      return relative.startsWith(`${PROPOSED_CODE_DIR}/`) &&
+        !relative.includes("\0") &&
+        !relative.split("/").includes("..");
+    });
+}
+
+function addProposedArtifactToScope(artifact, files, proposedArtifacts) {
+  files.add(artifact.relative_path);
+  proposedArtifacts.set(artifact.relative_path, artifact);
+}
+
+function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) {
+  const existingRefsByKey = new Map();
+  const blockedRefs = new Set();
+  const skippedRefs = new Set();
+  for (const candidate of collectPathCandidates(plan)) {
+    const normalized = normalizeProjectRelativePath(projectRoot, candidate);
+    if (!normalized) {
+      continue;
+    }
+    if (normalized.blocked) {
+      blockedRefs.add(normalized.blocked);
+      continue;
+    }
+    if (!fs.existsSync(normalized.absolute) || !fs.lstatSync(normalized.absolute).isFile()) {
+      skippedRefs.add(normalized.relative);
+      continue;
+    }
+    const key = `${normalized.relative}:${lineRefSuffix(candidate) || ""}`;
+    existingRefsByKey.set(key, {
+      path: normalized.relative,
+      line_ref: lineRefSuffix(candidate),
+      original_ref: String(candidate)
+    });
+  }
+  const normalizedArtifacts = normalizeProposedArtifacts(proposedArtifacts).map((artifact) => ({
+    path: artifact.relative_path,
+    line_ref: `1-${artifact.line_count || "?"}`,
+    language: artifact.language || "",
+    block_index: artifact.block_index || null,
+    char_count: artifact.char_count || null
+  }));
+  return {
+    version: 1,
+    format_status: {
+      has_existing_code_refs_section: /^##\s+Existing Code Refs\b/im.test(String(plan || "")),
+      has_proposed_code_artifacts_section: /^##\s+Proposed Code Artifacts\b/im.test(String(plan || "")),
+      generated_review_plan: true,
+      generated_ref_json: true
+    },
+    existing_code_refs: [...existingRefsByKey.values()].sort((a, b) => (
+      `${a.path}:${a.line_ref || ""}`.localeCompare(`${b.path}:${b.line_ref || ""}`)
+    )),
+    proposed_code_artifacts: normalizedArtifacts,
+    blocked_refs: [...blockedRefs].sort(),
+    skipped_refs: [...skippedRefs].sort()
+  };
 }
 
 function shouldSkipScopePath(relativePath) {
@@ -506,12 +617,28 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
   const files = new Set();
   const blockedRefs = new Set();
   const skippedRefs = new Set();
+  const proposedArtifacts = new Map();
+  const artifactsByPath = new Map(normalizeProposedArtifacts(options.proposedArtifacts).map((artifact) => [
+    artifact.relative_path,
+    artifact
+  ]));
   for (const common of COMMON_PROJECT_FILES) {
     if (fs.existsSync(path.join(projectRoot, common))) {
       addFileToScope(projectRoot, common, files, skippedRefs);
     }
   }
+  if (options.includeAllProposedArtifacts) {
+    for (const artifact of artifactsByPath.values()) {
+      addProposedArtifactToScope(artifact, files, proposedArtifacts);
+    }
+  }
   for (const candidate of collectPathCandidates(text)) {
+    const withoutLineRef = stripLineRefSuffix(candidate);
+    if (artifactsByPath.has(withoutLineRef)) {
+      addProposedArtifactToScope(artifactsByPath.get(withoutLineRef), files, proposedArtifacts);
+      skippedRefs.delete(withoutLineRef);
+      continue;
+    }
     if (files.size >= maxFiles) {
       skippedRefs.add(candidate);
       continue;
@@ -542,15 +669,28 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
     mode: "scoped_mirror",
     max_files: maxFiles,
     files: [...files].sort(),
+    proposed_artifacts: [...proposedArtifacts.values()]
+      .sort((a, b) => a.relative_path.localeCompare(b.relative_path))
+      .map((artifact) => ({
+        relative_path: artifact.relative_path,
+        source_file: artifact.source_file || null,
+        language: artifact.language || "",
+        line_count: artifact.line_count || null,
+        char_count: artifact.char_count || null,
+        block_index: artifact.block_index || null
+      })),
     blocked_refs: [...blockedRefs].sort(),
     skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort()
   };
 }
 
 function buildRoleReadScope(role, projectRoot, plan, options = {}) {
-  const scope = buildReadScopeFromText(role, projectRoot, plan, options);
+  const scope = buildReadScopeFromText(role, projectRoot, plan, {
+    ...options,
+    includeAllProposedArtifacts: true
+  });
   scope.description = [
-    "只暴露计划中明确引用的工程文件和少量项目配置文件。",
+    "只暴露计划中明确引用的工程文件、计划内 proposed-code artifact 和少量项目配置文件。",
     "Reviewer 若需要未暴露文件，应写入 missing_questions，不应猜测。"
   ].join("");
   return scope;
@@ -570,7 +710,14 @@ function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
   const exposedRoot = path.join(workspaceParent, "project");
   fs.mkdirSync(exposedRoot, { recursive: true });
   const copied = [];
+  const proposedByPath = new Map((readScope.proposed_artifacts || []).map((artifact) => [
+    artifact.relative_path,
+    artifact
+  ]));
   for (const relative of readScope.files || []) {
+    if (proposedByPath.has(relative)) {
+      continue;
+    }
     const source = path.join(projectRoot, relative);
     if (!fs.existsSync(source) || !fs.lstatSync(source).isFile()) {
       continue;
@@ -580,11 +727,31 @@ function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
     fs.copyFileSync(source, destination);
     copied.push(relative);
   }
+  for (const artifact of proposedByPath.values()) {
+    const destination = path.join(exposedRoot, artifact.relative_path);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    if (artifact.source_file && fs.existsSync(artifact.source_file)) {
+      fs.copyFileSync(artifact.source_file, destination);
+    } else if (artifact.content != null) {
+      fs.writeFileSync(destination, String(artifact.content), "utf8");
+    } else {
+      continue;
+    }
+    copied.push(artifact.relative_path);
+  }
   return {
     mode: "scoped_mirror",
     source_root: projectRoot,
     exposed_root: exposedRoot,
     files: copied.sort(),
+    proposed_artifacts: (readScope.proposed_artifacts || []).map((artifact) => ({
+      relative_path: artifact.relative_path,
+      source_file: artifact.source_file || null,
+      language: artifact.language || "",
+      line_count: artifact.line_count || null,
+      char_count: artifact.char_count || null,
+      block_index: artifact.block_index || null
+    })),
     blocked_refs: readScope.blocked_refs || [],
     skipped_refs: readScope.skipped_refs || []
   };
@@ -595,6 +762,7 @@ function readBoundarySection(readBoundary) {
     return "";
   }
   const files = readBoundary.files || [];
+  const proposedArtifacts = readBoundary.proposed_artifacts || [];
   const blockedRefs = readBoundary.blocked_refs || [];
   const skippedRefs = readBoundary.skipped_refs || [];
   return [
@@ -604,6 +772,15 @@ function readBoundarySection(readBoundary) {
     readBoundary.description ? `说明：${readBoundary.description}` : null,
     "只能将下列相对路径作为工程事实 evidence 来源；如果需要的文件不在列表中，写入 missing_questions，不要猜测。",
     files.length ? files.map((file) => `- ${file}`).join("\n") : "- （无可读取工程文件）",
+    proposedArtifacts.length
+      ? [
+        "",
+        "计划内 proposed-code artifact（表示计划准备新增或大段修改的代码草案；可按路径和行号读取校验）：",
+        ...proposedArtifacts.map((artifact) => (
+          `- ${artifact.relative_path}:1-${artifact.line_count || "?"}`
+        ))
+      ].join("\n")
+      : null,
     blockedRefs.length
       ? ["", "已阻止的外部路径引用：", ...blockedRefs.map((item) => `- ${item}`)].join("\n")
       : null,
@@ -660,13 +837,40 @@ function extractCodeSignals(code) {
   };
 }
 
-function compactCodeBlock(language, code, blockIndex) {
+function codeBlockExtension(language) {
+  const normalized = String(language || "").toLowerCase();
+  return CODE_BLOCK_EXTENSION_BY_LANGUAGE[normalized] || ".txt";
+}
+
+function proposedArtifactForCodeBlock(language, code, blockIndex) {
+  const extension = codeBlockExtension(language);
+  const relativePath = path.join(
+    PROPOSED_CODE_DIR,
+    `block-${String(blockIndex).padStart(3, "0")}${extension}`
+  ).split(path.sep).join("/");
+  const content = String(code).endsWith("\n") ? String(code) : `${code}\n`;
+  return {
+    block_index: blockIndex,
+    language: language || "code",
+    relative_path: relativePath,
+    line_count: content.split("\n").length - 1,
+    char_count: content.length,
+    content
+  };
+}
+
+function compactCodeBlock(language, code, blockIndex, artifact = null) {
   const lines = code.split("\n");
   const signals = extractCodeSignals(code);
   const pseudo = [
     "```pseudo",
     `[压缩自 ${language || "code"} 代码块 #${blockIndex}：${lines.length} 行，${code.length} 字符]`,
-    "用途：保留审查语义，不作为可直接复制的实现代码。",
+    artifact
+      ? `源码 artifact：${artifact.relative_path}:1-${artifact.line_count}`
+      : null,
+    artifact
+      ? "用途：主 plan 只保留设计语义；精确 import、类型、控制流、测试断言必须读取源码 artifact 校验。"
+      : "用途：保留审查语义，不作为可直接复制的实现代码。",
     "审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。",
     signals.declarations.length
       ? `声明/入口：${signals.declarations.join(", ")}`
@@ -697,6 +901,7 @@ function compactPlanForReview(plan, options = {}) {
   let codeBlocks = 0;
   let compactedBlocks = 0;
   let preservedBlocks = 0;
+  const artifacts = [];
   const compacted = String(plan).replace(
     /```([^\n`]*)\n([\s\S]*?)```/g,
     (match, rawLanguage, code) => {
@@ -711,13 +916,16 @@ function compactPlanForReview(plan, options = {}) {
         return match;
       }
       compactedBlocks += 1;
-      return compactCodeBlock(language, code, codeBlocks);
+      const artifact = proposedArtifactForCodeBlock(language, code, codeBlocks);
+      artifacts.push(artifact);
+      return compactCodeBlock(language, code, codeBlocks, artifact);
     }
   );
   const header = compactedBlocks > 0
     ? [
-      "> 审查输入说明：为降低评审耗时，长代码块已压缩为 `pseudo` 摘要。",
-      "> 原始计划仍保存在 run 的 `request.json`；Reviewer 应关注契约、流程、测试意图和风险，不逐字校验代码片段。",
+      "> 审查输入说明：为降低评审耗时，长代码块已拆分为 `proposed-code/` artifact，并在主计划中保留 `pseudo` 摘要。",
+      "> 原始计划仍保存在 run 的 `request.json`；Reviewer 应关注契约、流程、测试意图和风险。",
+      "> 涉及 import、类型归属、控制流、测试断言等精确代码事实时，必须读取对应 `proposed-code/...` artifact，不得只根据 pseudo 摘要判断。",
       ""
     ].join("\n")
     : "";
@@ -730,19 +938,25 @@ function compactPlanForReview(plan, options = {}) {
       saved_chars: String(plan).length - text.length,
       code_blocks: codeBlocks,
       compacted_blocks: compactedBlocks,
-      preserved_blocks: preservedBlocks
-    }
+      preserved_blocks: preservedBlocks,
+      proposed_artifact_count: artifacts.length,
+      proposed_artifact_chars: artifacts.reduce((sum, artifact) => sum + artifact.char_count, 0)
+    },
+    artifacts
   };
 }
 
 const ACCESS_NOTES = {
   reviewer: [
     "你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。",
-    "涉及工程事实的结论必须在 evidence 中包含相对文件路径和行号；找不到证据时放入 missing_questions。"
+    "涉及已存在代码的工程事实，evidence 必须包含现有工程文件的相对路径和行号。",
+    "涉及计划准备新增或大段修改的代码事实，evidence 必须读取并引用 `proposed-code/...` artifact 的相对路径和行号；不要只引用 pseudo 摘要。",
+    "找不到证据时放入 missing_questions。"
   ],
   fact_check: [
     "你只能使用 Read 读取 Reviewer evidence 明确引用的相对文件；不要使用 Glob/Grep 搜索新证据，不要发现新问题。",
-    "Reviewer 未提供可定位文件、行号或片段时，将对应 claim 标记为 unverifiable 或 unsupported。"
+    "Reviewer 未提供可定位文件、行号或片段时，将对应 claim 标记为 unverifiable 或 unsupported。",
+    "新增/拟修改代码的精确事实必须由 `proposed-code/...` artifact 支持；pseudo 摘要不能替代源码证据。"
   ],
   synthesis: [
     "本角色不得读取工程目录，也不会获得工程读取工具；只能基于待评审计划、Reviewer 意见和 Fact Check 报告合成结论。",
@@ -768,6 +982,18 @@ function workspaceReviewInput(projectRoot, plan, context = "", accessMode = "rev
     plan.trim(),
     context.trim() ? `\n## 补充上下文\n\n${context.trim()}` : ""
   ].filter(Boolean).join("\n");
+}
+
+function reviewerIssueIds(reviewerOutputs = {}) {
+  return Object.entries(reviewerOutputs).flatMap(([source, output]) => {
+    const issues = Array.isArray(output?.issues) ? output.issues : [];
+    return issues.map((issue, index) => ({
+      issue_id: `${slug(source)}-${String(index + 1).padStart(3, "0")}`,
+      source,
+      issue_title: String(issue?.title || ""),
+      reviewer_issue_index: index
+    }));
+  });
 }
 
 function buildWorkspacePrompt(
@@ -822,6 +1048,7 @@ function buildWorkspacePrompt(
     return template.replace("{{INPUT}}", input);
   }
   if (role === FACT_CHECK_ROLE) {
+    const issueIds = reviewerIssueIds(reviewerOutputs);
     const sourceSections = Object.entries(reviewerOutputs || {}).map(([source, output]) => [
       `## ${source}`,
       "",
@@ -831,6 +1058,14 @@ function buildWorkspacePrompt(
     ].join("\n")).join("\n\n");
     const input = [
       workspaceReviewInput(projectRoot, plan, context, "fact_check", readBoundary),
+      "",
+      "# Reviewer Issue IDs",
+      "",
+      "输出 `checked_issues` 时必须使用下列 `issue_id` 作为匹配主键；`source` 与 `issue_title` 也必须与这里逐字一致。",
+      "",
+      "```json",
+      JSON.stringify(issueIds, null, 2),
+      "```",
       "",
       "# Reviewer 意见",
       "",
@@ -885,9 +1120,16 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}
     "--json-schema",
     JSON.stringify(parseJsonFile(workspaceSchemaForRole(role))),
     "--max-turns",
-    String(config.execution.max_turns),
-    "--no-session-persistence"
+    String(config.execution.max_turns)
   ];
+  if (options.resumeSessionId) {
+    args.push("--resume", options.resumeSessionId);
+  } else if (options.sessionId) {
+    args.push("--session-id", options.sessionId);
+  }
+  if (options.sessionName) {
+    args.push("--name", options.sessionName);
+  }
   if (allowProjectRead) {
     args.push("--add-dir", projectRoot);
   }
@@ -979,6 +1221,7 @@ module.exports = {
   buildFactCheckReadScope,
   copyScopedWorkspace,
   compactPlanForReview,
+  createPlanReferenceManifest,
   workspaceReviewInput,
   buildWorkspacePrompt,
   buildClaudeWorkspaceArgs,

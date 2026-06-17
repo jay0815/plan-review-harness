@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "case_id": "reqa-tapd-core-migration-001",
+  "created_at": "2026-06-16T09:07:28.428Z",
+  "label_status": "reviewed",
+  "label_instructions": [
+    "Fill expected_status for every issue before scoring.",
+    "Do not use seed_status as ground truth without human review.",
+    "Allowed expected_status: verified, partially_verified, unsupported, contradicted, unverifiable."
+  ],
+  "source_workspace_run": {
+    "run_id": "workspace-review-20260616T080841Z",
+    "run_dir": "/Users/guanchengqian/.claude/plan-review-harness/mcp/workspace-runs/workspace-review-20260616T080841Z",
+    "project_root": "/Users/guanchengqian/github/reqa",
+    "report_file": "/Users/guanchengqian/.claude/plan-review-harness/mcp/workspace-runs/workspace-review-20260616T080841Z/report.json"
+  },
+  "plan": {
+    "plan_file": "/Users/guanchengqian/gitlab/tools/reqa/docs/superpowers/plans/2026-06-16-tapd-extract-core-migration.md",
+    "context": "全角色计划评审。只评审计划，不修改工程文件。",
+    "review_plan": "> 审查输入说明：为降低评审耗时，长代码块已压缩为 `pseudo` 摘要。\n> 原始计划仍保存在 run 的 `request.json`；Reviewer 应关注契约、流程、测试意图和风险，不逐字校验代码片段。\n# TAPD 文档提取核心功能迁移计划\n\n> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.\n\n**Goal:** 将 `/Users/guanchengqian/github/reqa` 中\"从指定 TAPD URL 生成 Markdown 文档、Raw HTML 文档及相关静态资源\"的核心功能，迁移到 `/Users/guanchengqian/gitlab/tools/reqa`，并移除 prompt/install/agent/eval 等非核心功能。\n\n**Architecture:** 保持原有模块边界不变：CLI 入口负责参数解析与流程编排；`cdp/` 负责 Chrome DevTools 协议连接、页面加载与 HTML 提取；`markdown/` 负责 HTML 到 Markdown 的两种转换；`assets/` 负责图片下载与本地路径重写；`utils/` 负责文件写入辅助。目标仓库只保留这些核心模块和最小运行配置。\n\n**本次范围决策：** `cdp/` 与 `assets/` 的循环依赖、CLI 中的 Chrome 进程启动逻辑，均作为已知结构性债务保持原样，不在本次迁移中重构。\n\n**Tech Stack:** TypeScript 5.x, Node.js ES modules, `commander`, `cheerio`, `node-html-markdown`, `ws`。\n\n---\n\n## 文件结构\n\n迁移后目标目录 `/Users/guanchengqian/gitlab/tools/reqa` 的文件结构：\n\n```pseudo\n[压缩自 code 代码块 #1：23 行，627 字符]\n用途：保留审查语义，不作为可直接复制的实现代码。\n审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。\n关键伪流程：根据该代码块前后的任务描述实现，避免逐字复制长代码。\n```\n\n**不迁移的内容：** `agents/`, `docs/`, `eval-cases/`, `prompts/`, `schemas/`, `scripts/`, `skills/`, `QUICK_START.md`, `QUESTIONS.md`, `TODOS.md`, `README.md`。\n\n---\n\n### Task 1: 清理目标仓库并备份旧 dist\n\n**Files:**\n- Ensure exists: `/Users/guanchengqian/gitlab/tools/reqa/`\n- Backup: `/Users/guanchengqian/gitlab/tools/reqa/dist/` → `dist.bak/`\n\n- [ ] **Step 1: 确保目标仓库存在并进入目录**\n\n  ```bash\n  mkdir -p /Users/guanchengqian/gitlab/tools/reqa\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  ```\n\n- [ ] **Step 2: 备份旧的 dist 产物（若存在）**\n\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  rm -rf dist.bak\n  if [ -d dist ]; then\n    mv dist dist.bak\n  else\n    mkdir dist.bak\n  fi\n  ```\n\n- [ ] **Step 3: 确认目标仓库根目录状态**\n\n  Run:\n  ```bash\n  ls -la /Users/guanchengqian/gitlab/tools/reqa\n  ```\n\n  Expected: 保留 `.claude/`, `.vscode/`, `node_modules/`, `dist.bak/`，`dist/` 已不存在。\n\n---\n\n### Task 2: 创建源码目录并迁移核心模块\n\n**Files:**\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/cdp/browser.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/cdp/client.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/cdp/extract.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/markdown/htmlToMarkdown.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/markdown/htmlToLlmMarkdown.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/assets/downloadImages.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/assets/imageSource.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/utils/fs.ts`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/utils/wait.ts`\n\n- [ ] **Step 1: 创建目录结构**\n\n  ```bash\n  mkdir -p /Users/guanchengqian/gitlab/tools/reqa/src/{cdp,markdown,assets,utils}\n  ```\n\n- [ ] **Step 2: 复制核心模块源码**\n\n  从源仓库原样复制以下文件：\n\n  ```bash\n  cp /Users/guanchengqian/github/reqa/src/cdp/browser.ts /Users/guanchengqian/gitlab/tools/reqa/src/cdp/browser.ts\n  cp /Users/guanchengqian/github/reqa/src/cdp/client.ts /Users/guanchengqian/gitlab/tools/reqa/src/cdp/client.ts\n  cp /Users/guanchengqian/github/reqa/src/cdp/extract.ts /Users/guanchengqian/gitlab/tools/reqa/src/cdp/extract.ts\n  cp /Users/guanchengqian/github/reqa/src/markdown/htmlToMarkdown.ts /Users/guanchengqian/gitlab/tools/reqa/src/markdown/htmlToMarkdown.ts\n  cp /Users/guanchengqian/github/reqa/src/markdown/htmlToLlmMarkdown.ts /Users/guanchengqian/gitlab/tools/reqa/src/markdown/htmlToLlmMarkdown.ts\n  cp /Users/guanchengqian/github/reqa/src/assets/downloadImages.ts /Users/guanchengqian/gitlab/tools/reqa/src/assets/downloadImages.ts\n  cp /Users/guanchengqian/github/reqa/src/assets/imageSource.ts /Users/guanchengqian/gitlab/tools/reqa/src/assets/imageSource.ts\n  cp /Users/guanchengqian/github/reqa/src/utils/fs.ts /Users/guanchengqian/gitlab/tools/reqa/src/utils/fs.ts\n  cp /Users/guanchengqian/github/reqa/src/utils/wait.ts /Users/guanchengqian/gitlab/tools/reqa/src/utils/wait.ts\n  ```\n\n- [ ] **Step 3: 统一 cdp/browser.ts 错误前缀为 get-prd**\n\n  源 `browser.ts` 第 30、44、52 行错误信息仍使用 `[doc-extract]`。由于本次入口统一为 `get-prd`，将三处前缀替换为 `[get-prd]`。\n\n  ```bash\n  sed -i '' 's/\\[doc-extract\\]/[get-prd]/g' /Users/guanchengqian/gitlab/tools/reqa/src/cdp/browser.ts\n  ```\n\n  Expected: `grep -n \"\\[get-prd\\]\" /Users/guanchengqian/gitlab/tools/reqa/src/cdp/browser.ts` 至少命中 3 行，且无 `[doc-extract]` 残留。\n\n- [ ] **Step 4: 确认文件已复制**\n\n  Run:\n  ```bash\n  find /Users/guanchengqian/gitlab/tools/reqa/src -type f\n  ```\n\n  Expected: 9 个 `.ts` 文件，与文件结构一致。\n\n---\n\n### Task 3: 编写精简版 CLI 入口\n\n**Files:**\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/src/cli.ts`\n\n**决策说明：** 统一命令入口为 `get-prd`，移除 `doc-extract`。由于命令名已无区分意义，`--tapd-defaults` 开关一并移除——TAPD 默认值直接作为各 commander 选项的 `defaultValue`，从而 `--help` 能正确显示。以下是可以直接写入 `src/cli.ts` 的完整可编译源码。\n\n- [ ] **Step 1: 写入 `src/cli.ts` 完整源码**\n\n  ```pseudo\n[压缩自 typescript 代码块 #9：426 行，12878 字符]\n用途：保留审查语义，不作为可直接复制的实现代码。\n审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。\n声明/入口：ImageSource, DEFAULT_LOGIN_SELECTOR, TAPD_SCROLL_SELECTOR, DEFAULTS, CliOptions, ResolvedCliOptions, program, rawOptions, ... 另有 37 项\n关键伪流程：\n1. await ensureChromeDebuggingEndpoint(options);\n2. const extractResult = await extractHtmlBySelectorWithResources({\n3. throw new Error(\"Extracted HTML is empty\");\n4. const imageResult = await downloadImagesInHtml({\n5. await writeTextFile(options.htmlOutput, imageResult.html);\n6. const markdown = await htmlToMarkdown(imageResult.html);\n7. throw new Error(\"Markdown output is empty\");\n8. await writeTextFile(options.output, markdown);\n9. const llmMarkdown = await htmlToLlmMarkdown(imageResult.html);\n10. throw new Error(`LLM Markdown output is empty: ${llmMarkdownPath}`);\n11. ... 另有 26 项\n```\n\n- [ ] **Step 2: 确认 `src/cli.ts` 已写入且语法大致正确**\n\n  Run:\n  ```bash\n  ls -la /Users/guanchengqian/gitlab/tools/reqa/src/cli.ts\n  ```\n\n  Expected: 文件存在且大小大于 5KB。\n\n---\n\n### Task 4: 创建项目配置文件\n\n**Files:**\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/package.json`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/tsconfig.json`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/.gitignore`\n- Create: `/Users/guanchengqian/gitlab/tools/reqa/pnpm-workspace.yaml`\n- Copy: `/Users/guanchengqian/gitlab/tools/reqa/pnpm-lock.yaml`\n\n**依赖一致性说明：** 新 `package.json` 的 `dependencies` 与 `devDependencies` 声明与源仓库完全一致（仅调整 `scripts`、`bin`、`files`），因此原样复制 `pnpm-lock.yaml` 可保证版本锁定有效。\n\n- [ ] **Step 1: 编写精简版 package.json**\n\n  只保留核心依赖与构建脚本；统一入口为 `get-prd`；移除 `doc-extract`、prompt/install/eval 等非核心脚本和 bin 别名。\n\n  ```pseudo\n[压缩自 json 代码块 #11：36 行，805 字符]\n用途：保留审查语义，不作为可直接复制的实现代码。\n审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。\n关键伪流程：根据该代码块前后的任务描述实现，避免逐字复制长代码。\n```\n\n- [ ] **Step 2: 编写 tsconfig.json**\n\n  与源仓库保持一致：\n\n  ```pseudo\n[压缩自 json 代码块 #12：17 行，393 字符]\n用途：保留审查语义，不作为可直接复制的实现代码。\n审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。\n关键伪流程：根据该代码块前后的任务描述实现，避免逐字复制长代码。\n```\n\n- [ ] **Step 3: 复制 .gitignore 并追加 .DS_Store**\n\n  源仓库 `.gitignore` 内容为 `node_modules`、`dist`、`.pnpm-store`、`* .tgz`。复制后追加 `.DS_Store`：\n\n  ```bash\n  cp /Users/guanchengqian/github/reqa/.gitignore /Users/guanchengqian/gitlab/tools/reqa/.gitignore\n  echo \".DS_Store\" >> /Users/guanchengqian/gitlab/tools/reqa/.gitignore\n  ```\n\n  Expected: `.gitignore` 包含 `node_modules`、`dist`、`.pnpm-store`、`* .tgz`、`.DS_Store`。\n\n- [ ] **Step 4: 创建 pnpm-workspace.yaml**\n\n  源仓库的 `pnpm-workspace.yaml` 包含若干非标准条目。由于本次依赖树中仅需 `esbuild`（`tsx` 的传递依赖）执行 postinstall，创建精简版：\n\n  ```yaml\n  onlyBuiltDependencies:\n    - esbuild\n  ```\n\n- [ ] **Step 5: 复制 pnpm-lock.yaml**\n\n  由于新 `package.json` 的依赖声明与源仓库完全一致，复制 lockfile 可锁定精确版本：\n\n  ```bash\n  cp /Users/guanchengqian/github/reqa/pnpm-lock.yaml /Users/guanchengqian/gitlab/tools/reqa/pnpm-lock.yaml\n  ```\n\n  Expected: 目标仓库根目录新增 `pnpm-lock.yaml`。\n\n---\n\n### Task 5: 安装依赖、构建验证与回滚\n\n**Files:**\n- Generated: `/Users/guanchengqian/gitlab/tools/reqa/dist/`\n\n- [ ] **Step 1: 安装依赖**\n\n  Run:\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  pnpm install\n  ```\n\n  Expected: 依赖安装成功，无 postinstall 安全提示阻塞；`pnpm-lock.yaml` 未被意外修改。\n\n- [ ] **Step 2: 执行 TypeScript 类型检查与构建**\n\n  Run:\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  pnpm run build\n  ```\n\n  Expected: `tsc` 成功退出，`dist/cli.js`、`dist/cli.d.ts` 及对应子目录产物生成。\n\n  **若本步骤失败，立即执行回滚：**\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  rm -rf dist src package.json tsconfig.json pnpm-workspace.yaml pnpm-lock.yaml .gitignore\n  mv dist.bak dist\n  ```\n  然后停止迁移并报告错误。\n\n- [ ] **Step 3: 验证 CLI 帮助信息**\n\n  Run:\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  node dist/cli.js --help\n  ```\n\n  Expected:\n  - 输出帮助信息，包含 `--url`、`--selector`、`--output`、`--html-output`、`--assets-dir`、`--image-source` 等选项。\n  - **不包含** `--tapd-defaults`、`prompt`、`install`、`install-skill`、`install-agent`、`uninstall`、`--role`、`--target`、`--scope` 等选项。\n\n  **若本步骤失败，执行上述回滚命令。**\n\n- [ ] **Step 4: 验证全局默认值为 TAPD 默认值**\n\n  Run:\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  node dist/cli.js --help | grep -E \"--selector|--timeout|--scroll-to-bottom|--image-source\"\n  ```\n\n  Expected:\n  - `--selector` 默认值为 `.content-wrap`\n  - `--timeout` 默认值为 `60000`\n  - `--scroll-to-bottom` 默认启用\n  - `--image-source` 默认值为 `chrome`\n\n- [ ] **Step 5: 验证源码目录无残留非核心目录**\n\n  Run:\n  ```bash\n  find /Users/guanchengqian/gitlab/tools/reqa/src -maxdepth 2 -type d\n  ```\n\n  Expected: 仅包含 `src/cdp`、`src/markdown`、`src/assets`、`src/utils`，不包含 `agents`、`prompts`、`schemas`、`scripts`、`skills` 等目录。\n\n- [ ] **Step 6: 最小功能冒烟测试（无需 Chrome）**\n\n  验证 CLI 在无 URL 时正确报错，且各模块可被导入：\n\n  ```bash\n  cd /Users/guanchengqian/gitlab/tools/reqa\n  node dist/cli.js 2>&1 | grep -q \"Missing required URL\" && echo \"CLI smoke OK\" || echo \"CLI smoke FAILED\"\n  node -e \"import('./dist/markdown/htmlToMarkdown.js').then(m => console.log('markdown module OK'))\"\n  node -e \"import('./dist/assets/downloadImages.js').then(m => console.log('assets module OK'))\"\n  node -e \"import('./dist/cdp/extract.js').then(m => console.log('cdp module OK'))\"\n  ```\n\n  Expected: 所有检查输出 `OK`；CLI 以非零退出并提示 `Missing required URL`。\n\n---\n\n### Task 6: 清理临时备份\n\n**Files:**\n- Remove: `/Users/guanchengqian/gitlab/tools/reqa/dist.bak/`\n\n- [ ] **Step 1: 删除 dist.bak 备份目录**\n\n  所有验证通过后删除旧 `dist` 备份：\n\n  ```bash\n  rm -rf /Users/guanchengqian/gitlab/tools/reqa/dist.bak\n  ```\n\n  Expected: 目标仓库根目录不再包含 `dist.bak/`。\n\n---\n\n## 已记录但未执行的结构性债务\n\n以下问题由计划审查报告提出，本次迁移**保持原样**以避免扩大改动范围；如后续需要重构，可作为独立任务处理：\n\n1. **`cdp/` 与 `assets/` 的循环依赖**\n   - 现状：`extract.ts` 从 `../assets/imageSource.js` 导入 `getImageSourceCandidates` 和 `shouldSkipImageSrc`；`downloadImages.ts` 从 `../cdp/extract.js` 导入类型 `ChromeImageResource`。\n   - 影响：模块无法作为独立发布单元演进，但当前为运行时类型安全所需的内部引用，不影响构建与执行。\n   - 建议未来：将 `ChromeImageResource` 等共享契约下沉到独立共享模块，或由 `assets/` 自行定义消费的资源类型。\n\n2. **Chrome 进程启动逻辑位于 CLI**\n   - 现状：`ensureChromeDebuggingEndpoint` 直接 `spawn` Chrome 进程，属于 `src/cli.ts`。\n   - 影响：`cdp/` 层假设调试端点已就绪，CLI 与 `cdp/` 共同拥有 CDP 连接生命周期。\n   - 建议未来：将 Chrome 调试端点的发现/启动/等待能力收拢到 `cdp/` 层，CLI 仅通过统一接口请求 CDP 会话。\n\n---\n\n## Self-Review\n\n**1. Spec coverage:**\n- TAPD URL 参数解析 → Task 3 CLI。\n- 生成 Markdown 文档 → Task 3 调用 `htmlToMarkdown`。\n- 生成 raw HTML 文档 → Task 3 保存 `htmlOutput`。\n- 生成相关静态资源（图片）→ Task 3 调用 `downloadImagesInHtml`。\n- 移除非核心功能 → Task 3 移除 prompt/install/uninstall/agent/eval/role/target/scope；Task 4 移除 `doc-extract` bin 与脚本。\n- 统一入口为 `get-prd` → Task 4 package.json + Task 2 browser.ts 前缀更新。\n- TAPD 默认值为全局默认值 → Task 3 CLI 各 `.option()` 的 `defaultValue`。\n\n**2. Placeholder scan:**\n- 无 TBD/TODO。\n- 所有代码块均为可直接写入的完整内容。\n- CLI 骨架中的函数均已在同一文件中定义。\n\n**3. Type consistency:**\n- `ImageSource`、`ChromeImageResource` 类型来源与源仓库一致。\n- `extractHtmlBySelectorWithResources`、`downloadImagesInHtml` 参数结构与源仓库一致。\n- `CliOptions` 字段与 `resolveCliOptions` 返回值字段一致。\n\n---\n\n**Plan complete.**\n"
+  },
+  "reviewer_outputs": {
+    "Risk Reviewer": {
+      "probe": "risk",
+      "issues": [
+        {
+          "title": "browser.ts 错误前缀改为 [get-prd] 后与 cli.ts formatError 的 [doc-extract] 检查不匹配，导致双重前缀",
+          "type": "risk",
+          "severity": "medium",
+          "evidence": "计划 Task 2 Step 3 用 sed 将 src/cdp/browser.ts 第 30、44、52 行的 [doc-extract] 替换为 [get-prd]。但当前 cli.ts 第 797 行 formatError 函数通过 message.startsWith(\"[doc-extract]\") 判断是否已带前缀，第 787 行 logProgress 硬编码输出 [doc-extract] 前缀，第 296、314、335、355 行的 console.warn/console.log 也直接使用 [doc-extract]。计划 Task 3 的新 cli.ts 为 pseudo 压缩，未明确指示是否将这些引用统一替换为 [get-prd]。",
+          "why_it_matters": "若新 cli.ts 保留 formatError 中 startsWith(\"[doc-extract]\") 检查，browser.ts 抛出的错误（如 [get-prd] No debuggable Chrome page found）无法匹配该检查，formatError 会再叠加 [doc-extract] 前缀，输出形如 [doc-extract] [get-prd] ... 的双重前缀。同时 logProgress 仍输出 [doc-extract] 而 browser.ts 错误输出 [get-prd]，用户可见日志前缀不一致。计划 Task 5 的验证步骤（Step 3 检查 --help 输出、Step 6 grep \"Missing required URL\"）仅检查消息内容，不检查前缀一致性，无法捕获此问题。",
+          "confidence": 0.85
+        },
+        {
+          "title": "Task 5 Step 1 pnpm install 无回滚程序，若 package.json 保留 prepare 生命周期脚本则安装阶段可能因构建失败而中断",
+          "type": "risk",
+          "severity": "medium",
+          "evidence": "当前源仓库 package.json 第 29 行包含 \"prepare\": \"pnpm run build\"。计划 Task 4 Step 1 的新 package.json 为 pseudo 压缩，仅说明\"只保留核心依赖与构建脚本\"，未明确是否保留 prepare 脚本。Task 5 仅在 Step 2（显式构建）和 Step 3（帮助信息验证）失败时提供回滚命令，Step 1（pnpm install）失败时无回滚程序。",
+          "why_it_matters": "若新 package.json 保留 prepare 脚本，pnpm install 会自动触发 tsc 构建。若构建因类型错误或文件缺失失败，install 本身以非零退出码终止，错误信息可能混淆安装失败与构建失败。此时 src/、配置文件已就位、node_modules 部分生成，但无文档化恢复路径。操作者需自行判断应清理哪些文件，增加迁移中断后目标仓库处于不一致状态的风险。",
+          "confidence": 0.7
+        }
+      ],
+      "missing_questions": [
+        "新 cli.ts 是否将 logProgress、formatError 及所有 console.warn/console.log 中的 [doc-extract] 前缀统一替换为 [get-prd]，还是仅修改 browser.ts？",
+        "新 package.json 是否保留 \"prepare\": \"pnpm run build\" 生命周期脚本？若保留，pnpm install 期间会自动触发构建，需要为 Step 1 增加回滚程序。",
+        "新 cli.ts 如何实现 --scroll-to-bottom 布尔选项默认为 true？Commander.js 对布尔标志的默认值处理需要使用 --no-scroll-to-bottom 模式或显式 default 参数，pseudo 压缩代码中无法确认具体实现方式。"
+      ],
+      "false_positive_risks": [
+        "pnpm-lock.yaml 复制后因 pnpm-workspace.yaml 差异导致依赖解析失败 — onlyBuiltDependencies 字段仅控制哪些包可执行构建脚本，不影响依赖解析和 lockfile 格式，证据不足以成立",
+        "cdp/ 与 assets/ 循环依赖导致运行时模块加载失败 — downloadImages.ts 对 extract.ts 的引用是 import type（第 3 行），TypeScript 编译后擦除，不产生运行时循环依赖，计划也明确标记为已知结构性债务",
+        "Chrome user data dir 路径 /tmp/doc-extract-chrome-profile 含旧名称导致功能异常 — 路径名不影响 Chrome 启动和调试功能，仅命名不一致，属于偏好而非风险",
+        "--image-source 默认值从 fetch 改为 chrome 导致图片下载失败 — downloadImages.ts 第 67-70 行在 chrome 模式下找不到缓存资源时会回退到 HTTP fetch，行为变化极小"
+      ]
+    },
+    "Architecture Reviewer": {
+      "probe": "architecture",
+      "issues": [
+        {
+          "title": "Chrome 调试端点生命周期由 CLI 持有，cdp/ 层假设端点已就绪",
+          "type": "ownership",
+          "severity": "high",
+          "evidence": "计划在“本次范围决策”与“已记录但未执行的结构性债务 #2”中明确将 CLI 中的 Chrome 进程启动逻辑列为结构性债务；当前 src/cli.ts:567-613 的 ensureChromeDebuggingEndpoint 直接 spawn Chrome 子进程；src/cdp/extract.ts:141-269 仅接收 browserUrl 并通过 getWebSocketDebuggerUrl 连接，不处理端点缺失或启动。",
+          "why_it_matters": "CLI 与 cdp/ 共同拥有 CDP 会话生命周期，cdp/ 无法独立复用；Chrome 启动策略、重试与超时等变化需要修改 CLI 而非 CDP 层，违反单一职责与层边界，长期会导致生命周期逻辑散落在多个调用方。",
+          "suggested_fix": "将 Chrome 调试端点的发现、启动与等待能力收拢到 cdp/ 层，CLI 仅通过统一接口请求 CDP 会话，CLI 保持流程编排职责。",
+          "confidence": 0.9
+        },
+        {
+          "title": "cdp/ 与 assets/ 存在跨模块耦合与类型所有权分裂",
+          "type": "coupling",
+          "severity": "high",
+          "evidence": "计划在“已记录但未执行的结构性债务 #1”中承认该循环依赖；src/cdp/extract.ts:5-8 从 ../assets/imageSource.js 导入运行时函数 getImageSourceCandidates 与 shouldSkipImageSrc；src/assets/downloadImages.ts:3 从 ../cdp/extract.js 导入类型 ChromeImageResource。",
+          "why_it_matters": "cdp/ 的 HTML 提取逻辑依赖 assets/ 的图片源解析策略，导致图片 URL 规则变更会波及提取层；共享类型 ChromeImageResource 的所有权分裂，两个模块无法作为独立发布单元演进，也破坏了 cdp/ 作为纯 CDP 提取层的抽象边界。",
+          "suggested_fix": "将共享资源类型与图片 URL 过滤契约下沉到独立共享模块，或由 assets/ 自行定义消费的资源形状；cdp/ 只返回原始资源，不应用图片源策略。",
+          "confidence": 0.9
+        }
+      ],
+      "missing_questions": [
+        "新 package.json 是否已将 agents/、prompts/、schemas/、scripts/、skills/ 从 files 字段中移除，避免发布时引用已删除目录？当前 package.json:8-17 仍列出这些目录。",
+        "新 src/cli.ts 是否将所有日志与错误前缀统一为 [get-prd]？当前 src/cli.ts:786-802 仍使用 [doc-extract]，而计划仅明确更新 src/cdp/browser.ts 的前缀。",
+        "精简后的 pnpm-workspace.yaml（仅 esbuild）是否与从源仓库复制的 pnpm-lock.yaml 兼容，pnpm install 是否不会因此重写 lockfile？"
+      ],
+      "false_positive_risks": [
+        "CLI 直接启动 Chrome 可被视为单一用途 CLI 的合理简化，当前没有证据表明 cdp/ 需要被其他入口复用。",
+        "cdp/ 到 assets/ 的导入仅是图片 URL 解析工具函数，且 assets/ 对 cdp/ 的导入为 type-only，运行时并不存在真正的循环依赖。",
+        "计划明确将上述两项列为已知结构性债务并有意保持原样，因此可能被误判为本次迁移必须立即重构的问题。"
+      ]
+    },
+    "Execution Reviewer": {
+      "probe": "execution",
+      "issues": [
+        {
+          "title": "未从目标仓库删除非核心目录",
+          "type": "step",
+          "severity": "blocker",
+          "evidence": "计划目标声明\"并移除 prompt/install/agent/eval 等非核心功能\"与\"目标仓库只保留这些核心模块和最小运行配置\"；Task 1 Step 3 仅要求保留 .claude/、.vscode/、node_modules/、dist.bak/，未要求删除目标仓库已有的 agents/、docs/、prompts/、schemas/、scripts/、skills/、README.md、TODOS.md、QUESTIONS.md、QUICK_START.md；agents/claude/reqa-prd-analyzer.md 第 15 行仍引用将被移除的 `get-prd prompt --role <role>`；skills/reqa/SKILL.md 第 11 行引用 `reqa [tapd_url] [--role ...]`；Task 5 Step 5 仅检查 src/ 下无残留目录。",
+          "why_it_matters": "目标仓库已存在的 agents/、skills/、scripts/、docs/、prompts/、schemas/ 等非核心目录与文件会继续保留，其中部分配置引用新 CLI 已移除的 `prompt`/`install`/`role` 等子命令，导致这些 agent/skill 实际不可用，违反\"移除非核心功能\"的目标，使迁移后的验收无法通过。",
+          "suggested_fix": "在 Task 1 或 Task 2 中增加显式删除步骤：删除目标仓库根目录下的 agents/、docs/、eval-cases/（若存在）、prompts/、schemas/、scripts/、skills/、README.md、QUESTIONS.md、QUICK_START.md、TODOS.md；若需保留历史文件，可先备份到 dist.bak/ 或临时归档目录。",
+          "confidence": 0.9
+        },
+        {
+          "title": "sed 命令使用 macOS 专用语法",
+          "type": "command",
+          "severity": "medium",
+          "evidence": "Task 2 Step 3 使用 `sed -i '' 's/\\[doc-extract\\]/[get-prd]/g' /Users/guanchengqian/gitlab/tools/reqa/src/cdp/browser.ts`。",
+          "why_it_matters": "`sed -i ''` 是 BSD/macOS 语法；在 GNU/Linux 上该命令会把空字符串当作脚本参数而报错，导致 browser.ts 前缀替换失败，整个迁移中断。计划未声明必须在 macOS 上执行。",
+          "suggested_fix": "使用跨平台命令，例如 `sed -i.bak 's/\\[doc-extract\\]/[get-prd]/g' ... && rm -f .../browser.ts.bak`，或在 Node 脚本中完成替换并删除 backup。",
+          "confidence": 0.85
+        },
+        {
+          "title": "日志前缀统一不完整",
+          "type": "ambiguity",
+          "severity": "low",
+          "evidence": "Task 2 Step 3 仅要求将 src/cdp/browser.ts 第 30、44、52 行的 `[doc-extract]` 替换为 `[get-prd]`；现有 src/cli.ts 第 296、314、335、352、356、786、797 行仍使用 `[doc-extract]`，计划未说明是否一并更新。",
+          "why_it_matters": "若新的 src/cli.ts 保留原有 logProgress/formatError 实现，CLI 运行日志将同时出现 `[doc-extract]` 与 `[get-prd]` 两种前缀，与\"统一入口为 get-prd\"的品牌一致性要求相矛盾，并可能导致 Task 5 的验收对日志前缀产生歧义。",
+          "suggested_fix": "明确说明新 cli.ts 中所有日志/错误前缀是否统一为 `[get-prd]`，并增加 grep 验收步骤确认 dist/cli.js 中不存在 `[doc-extract]`。",
+          "confidence": 0.7
+        },
+        {
+          "title": ".vscode/launch.json 仍指向源仓库路径",
+          "type": "file",
+          "severity": "low",
+          "evidence": "Task 1 Step 3 要求保留 .vscode/；.vscode/launch.json 第 11 行 `\"file\": \"/Users/guanchengqian/github/reqa/output/1416998.12s.raw.html\"` 指向源仓库而非目标仓库。",
+          "why_it_matters": "迁移后该调试配置会打开源仓库的旧文件（若存在）或报错，导致 .vscode/launch.json 失效，影响开发者体验。",
+          "suggested_fix": "在迁移后增加一步：将 launch.json 中的文件路径更新为 `/Users/guanchengqian/gitlab/tools/reqa/requirements/...` 或删除该 launch 配置，或说明保留旧配置是预期行为。",
+          "confidence": 0.8
+        }
+      ],
+      "missing_questions": [],
+      "false_positive_risks": [
+        "计划中 Task 3 与 Task 4 的源码块在评审输入里被压缩为 pseudo 摘要，但计划正文已声明提供可直接写入的完整可编译源码；执行缺口应基于原始 request.json 是否包含完整源码判断，而非评审摘要。",
+        "cdp/ 与 assets/ 之间的循环依赖在\"已记录但未执行的结构性债务\"中明确保留，计划已说明不影响构建与执行，不应视为执行缺口。",
+        "Task 5 Step 6 的冒烟测试仅验证无 URL 报错与模块可导入，未连接 Chrome 或访问 TAPD；该范围与迁移目标一致，不应要求端到端抓取测试。"
+      ]
+    },
+    "Rebuttal Reviewer": {
+      "probe": "rebuttal",
+      "issues": [
+        {
+          "title": ".gitignore 描述将 *.tgz 误写为 * .tgz（含空格），导致 Expected 验证文本与实际模式语义不同",
+          "type": "defect",
+          "severity": "low",
+          "evidence": "计划 Task 4 Step 3 描述称\"源仓库 .gitignore 内容为 node_modules、dist、.pnpm-store、* .tgz\"，Expected 也写\".gitignore 包含 node_modules、dist、.pnpm-store、* .tgz、.DS_Store\"。但项目目录中 .gitignore 第 4 行实际为 *.tgz（无空格）。在 gitignore 语义中，*.tgz 匹配所有 .tgz 文件；* .tgz 含空格则表示两个独立模式：* 匹配一切文件（忽略全部），.tgz 匹配名为 .tgz 的文件——两者语义完全不同。",
+          "why_it_matters": "执行步骤使用 cp 从源仓库复制，产出文件不受描述错误影响，但 Expected 验证文本会误导审查者或实施者：若按 Expected 检查并发现 *.tgz 而非 * .tgz，可能误判迁移失败；若有人按描述手动重建 .gitignore 并写入含空格的 * .tgz，则 * 模式会忽略所有文件，破坏仓库。",
+          "suggested_fix": "将描述和 Expected 中的 * .tgz 改为 *.tgz，与 gitignore 标准模式一致。",
+          "confidence": 0.7
+        }
+      ],
+      "missing_questions": [
+        "源仓库 /Users/guanchengqian/github/reqa/.gitignore 的实际内容无法直接验证——当前仅可访问目标仓库的 .gitignore。若源仓库确实为 *.tgz，则计划描述为事实错误；若源仓库含空格变体，则需确认该模式是否有意为之。"
+      ],
+      "false_positive_risks": [
+        "可能将 * .tgz 中的空格视为排版格式问题而非语义错误，但实际上 gitignore 中 * 和 *.tgz 是完全不同的模式——前者忽略一切，后者只忽略 .tgz 文件——因此空格不是纯排版差异。"
+      ]
+    }
+  },
+  "issues": [
+    {
+      "id": "Risk-Reviewer-001",
+      "source": "Risk Reviewer",
+      "issue_title": "browser.ts 错误前缀改为 [get-prd] 后与 cli.ts formatError 的 [doc-extract] 检查不匹配，导致双重前缀",
+      "reviewer_issue_index": 0,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "contradicted",
+      "expected_evidence_status": "quote_mismatch",
+      "expected_claim_support": "contradicted",
+      "label_notes": "当前 scoped mirror 中 src/cli.ts 与 src/cdp/browser.ts 均已统一为 [get-prd]，Reviewer 引用的是旧源码行号和旧前缀，双重前缀风险被当前证据反驳。"
+    },
+    {
+      "id": "Risk-Reviewer-002",
+      "source": "Risk Reviewer",
+      "issue_title": "Task 5 Step 1 pnpm install 无回滚程序，若 package.json 保留 prepare 生命周期脚本则安装阶段可能因构建失败而中断",
+      "reviewer_issue_index": 1,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "partially_verified",
+      "expected_evidence_status": "quote_mismatch",
+      "expected_claim_support": "partial",
+      "label_notes": "当前 scoped mirror 的 package.json 没有 prepare 脚本，install 触发自动构建的具体假设不成立；但计划 Task 5 Step 1 仍缺少 install 失败回滚程序。"
+    },
+    {
+      "id": "Architecture-Reviewer-001",
+      "source": "Architecture Reviewer",
+      "issue_title": "Chrome 调试端点生命周期由 CLI 持有，cdp/ 层假设端点已就绪",
+      "reviewer_issue_index": 0,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "partially_verified",
+      "expected_evidence_status": "quote_matches",
+      "expected_claim_support": "partial",
+      "label_notes": "CLI 持有 Chrome 调试端点、cdp 假设端点已就绪的事实成立；但计划已列为已知结构债并出范围，作为高优先级计划缺陷需要降级。"
+    },
+    {
+      "id": "Architecture-Reviewer-002",
+      "source": "Architecture Reviewer",
+      "issue_title": "cdp/ 与 assets/ 存在跨模块耦合与类型所有权分裂",
+      "reviewer_issue_index": 1,
+      "seed_status": "verified",
+      "seed_evidence_status": "plan_only",
+      "seed_claim_support": "direct",
+      "expected_status": "partially_verified",
+      "expected_evidence_status": "file_missing",
+      "expected_claim_support": "partial",
+      "label_notes": "计划承认 cdp/assets 结构债存在并明确出范围；但 Reviewer 引用的具体 import 文件未暴露读取，不能完全验证代码级证据或当前迁移阻塞性。"
+    },
+    {
+      "id": "Execution-Reviewer-001",
+      "source": "Execution Reviewer",
+      "issue_title": "未从目标仓库删除非核心目录",
+      "reviewer_issue_index": 0,
+      "seed_status": "verified",
+      "seed_evidence_status": "plan_only",
+      "seed_claim_support": "direct",
+      "expected_status": "partially_verified",
+      "expected_evidence_status": "plan_only",
+      "expected_claim_support": "partial",
+      "label_notes": "计划缺少根目录非核心内容清理动作，但 Reviewer 列举的具体目录未全部被事实验证，证据覆盖不足。"
+    },
+    {
+      "id": "Execution-Reviewer-002",
+      "source": "Execution Reviewer",
+      "issue_title": "sed 命令使用 macOS 专用语法",
+      "reviewer_issue_index": 1,
+      "seed_status": "verified",
+      "seed_evidence_status": "plan_only",
+      "seed_claim_support": "direct",
+      "expected_status": "verified",
+      "expected_evidence_status": "plan_only",
+      "expected_claim_support": "direct",
+      "label_notes": "sed -i \"\" 是 macOS/BSD sed 语法，计划未声明 macOS-only，跨平台执行风险直接成立。"
+    },
+    {
+      "id": "Execution-Reviewer-003",
+      "source": "Execution Reviewer",
+      "issue_title": "日志前缀统一不完整",
+      "reviewer_issue_index": 2,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "contradicted",
+      "expected_evidence_status": "quote_mismatch",
+      "expected_claim_support": "contradicted",
+      "label_notes": "当前 scoped mirror 中 src/cli.ts 所有日志和错误前缀均为 [get-prd]，Reviewer 关于 [doc-extract] 残留的旧行号证据被当前文件反驳。"
+    },
+    {
+      "id": "Execution-Reviewer-004",
+      "source": "Execution Reviewer",
+      "issue_title": ".vscode/launch.json 仍指向源仓库路径",
+      "reviewer_issue_index": 3,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "unverifiable",
+      "expected_evidence_status": "file_missing",
+      "expected_claim_support": "unverifiable",
+      "label_notes": ".vscode/launch.json 未暴露在 read scope 中，无法验证 Reviewer 引用的第 11 行源仓库路径；只能确认计划保留 .vscode/ 的弱事实。"
+    },
+    {
+      "id": "Rebuttal-Reviewer-001",
+      "source": "Rebuttal Reviewer",
+      "issue_title": ".gitignore 描述将 *.tgz 误写为 * .tgz（含空格），导致 Expected 验证文本与实际模式语义不同",
+      "reviewer_issue_index": 0,
+      "seed_status": "verified",
+      "seed_evidence_status": "quote_matches",
+      "seed_claim_support": "direct",
+      "expected_status": "verified",
+      "expected_evidence_status": "quote_matches",
+      "expected_claim_support": "direct",
+      "label_notes": "计划文本写成 * .tgz，实际 .gitignore 为 *.tgz，模式描述与实际语义不一致。"
+    }
+  ]
+}

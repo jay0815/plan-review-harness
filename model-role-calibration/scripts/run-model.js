@@ -262,6 +262,7 @@ function positiveInteger(value, name) {
 
 function buildCliArgs(wrapperArgs, schema, options) {
   const maxTurns = options.jsonValidator ? "4" : "1";
+  const tools = options.tools === undefined ? "" : options.tools;
   const cliArgs = [
     ...wrapperArgs,
     "--bare",
@@ -270,10 +271,10 @@ function buildCliArgs(wrapperArgs, schema, options) {
     "--strict-mcp-config",
     "--disable-slash-commands",
     "--tools",
-    "",
+    tools,
     "--no-chrome",
     "--permission-mode",
-    "default",
+    options.permissionMode || "default",
     "--system-prompt",
     CALIBRATION_SYSTEM_PROMPT,
     "--input-format",
@@ -305,7 +306,12 @@ function buildCliArgs(wrapperArgs, schema, options) {
         }
       }
     }));
-    cliArgs.push("--allowed-tools", "mcp__json_validator__validate_json_output");
+    cliArgs.push(
+      "--allowed-tools",
+      [tools, "mcp__json_validator__validate_json_output"].filter(Boolean).join(",")
+    );
+  } else if (tools) {
+    cliArgs.push("--allowed-tools", tools);
   } else {
     cliArgs.push("--disallowed-tools", "mcp__*");
   }
@@ -314,6 +320,10 @@ function buildCliArgs(wrapperArgs, schema, options) {
     cliArgs.push("--name", `mrc-${options.run}-${options.model}-${options.probe}`);
   } else {
     cliArgs.push("--no-session-persistence");
+  }
+
+  if (options.addDir) {
+    cliArgs.push("--add-dir", options.addDir);
   }
 
   cliArgs.push("-p");

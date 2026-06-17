@@ -58,6 +58,12 @@ function main() {
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "verify-workspace-review-run.js")
     ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "retry-workspace-review-stage.js")
+    ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "claude-plan-authoring.md")
+    ));
     assert(fs.statSync(
       path.join(result.packageDir, "skill", "plan-review", "SKILL.md")
     ).isFile());
@@ -69,6 +75,9 @@ function main() {
     assert(packagedSkill.includes("只传 `plan_file: $ARGUMENTS`"));
     assert(packagedSkill.includes("请粘贴需要审查的完整计划正文。"));
     assert(packagedSkill.includes("不要求用户创建文件"));
+    assert(packagedSkill.includes("--check"));
+    assert(packagedSkill.includes("configuration_status"));
+    assert(packagedSkill.includes("ANTHROPIC_AUTH_TOKEN"));
     assert(!packagedSkill.includes("\n  - Read\n"));
     const packagedReadme = fs.readFileSync(
       path.join(result.packageDir, "README.md"),
@@ -202,7 +211,7 @@ exit 0
     const status = JSON.parse(validate.stdout);
     assert.equal(status.valid, true);
     assert.equal(status.roles.risk, "qwen");
-    assert.equal(status.roles.fact_check, "deepseek");
+    assert.equal(status.roles.fact_check, "glm");
     assert.equal(status.roles.synthesis, "kimi");
     assert.equal(status.models.kimi.auth_env, "ANTHROPIC_AUTH_TOKEN");
     assert(!validate.stdout.includes("test-auth-token"));

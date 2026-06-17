@@ -23,6 +23,7 @@ const {
   buildFactCheckReadScope,
   copyScopedWorkspace,
   compactPlanForReview,
+  createPlanReferenceManifest,
   buildWorkspacePrompt,
   buildClaudeWorkspaceArgs,
   appendExecutionLog,
@@ -39,6 +40,30 @@ const SOURCE_NAME_BY_ROLE = {
 
 function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+function materializeProposedArtifacts(runDir, artifacts = []) {
+  return artifacts.map((artifact) => {
+    const relativePath = artifact.relative_path;
+    if (
+      typeof relativePath !== "string" ||
+      !relativePath.startsWith("proposed-code/") ||
+      relativePath.includes("\0") ||
+      relativePath.split("/").includes("..")
+    ) {
+      throw new Error(`Invalid proposed artifact path: ${relativePath}`);
+    }
+    const sourceFile = path.join(runDir, relativePath);
+    writeGenerated(sourceFile, artifact.content || "");
+    return {
+      block_index: artifact.block_index,
+      language: artifact.language,
+      relative_path: relativePath,
+      source_file: sourceFile,
+      line_count: artifact.line_count,
+      char_count: artifact.char_count
+    };
+  });
 }
 
 function countBy(items, key) {
@@ -133,6 +158,138 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
   };
 }
 
+function readJsonIfExists(file) {
+  if (!fs.existsSync(file)) {
+    return null;
+  }
+  return parseJsonFile(file);
+}
+
+function loadCompletedReviewerResults(runDir, roles) {
+  return roles.map((role) => {
+    const roleDir = path.join(runDir, "roles", role);
+    const outputFile = path.join(roleDir, "output.json");
+    const metadataFile = path.join(roleDir, "metadata.json");
+    if (!fs.existsSync(outputFile)) {
+      throw new Error(`Cannot retry synthesis: missing ${role} output: ${outputFile}`);
+    }
+    if (!fs.existsSync(metadataFile)) {
+      throw new Error(`Cannot retry synthesis: missing ${role} metadata: ${metadataFile}`);
+    }
+    const metadata = parseJsonFile(metadataFile);
+    if (metadata.status !== "completed") {
+      throw new Error(`Cannot retry synthesis: ${role} status is ${metadata.status || "unknown"}`);
+    }
+    return {
+      role,
+      model: metadata.model,
+      output: parseJsonFile(outputFile),
+      output_file: path.relative(runDir, outputFile)
+    };
+  });
+}
+
+function loadCompletedFactCheckResult(runDir) {
+  const roleDir = path.join(runDir, "roles", FACT_CHECK_ROLE);
+  const outputFile = path.join(roleDir, "output.json");
+  const summaryFile = path.join(roleDir, "fact-check-summary.json");
+  const metadataFile = path.join(roleDir, "metadata.json");
+  if (!fs.existsSync(outputFile)) {
+    throw new Error(`Cannot retry synthesis: missing fact_check output: ${outputFile}`);
+  }
+  if (!fs.existsSync(summaryFile)) {
+    throw new Error(`Cannot retry synthesis: missing fact_check summary: ${summaryFile}`);
+  }
+  if (!fs.existsSync(metadataFile)) {
+    throw new Error(`Cannot retry synthesis: missing fact_check metadata: ${metadataFile}`);
+  }
+  const metadata = parseJsonFile(metadataFile);
+  if (metadata.status !== "completed") {
+    throw new Error(`Cannot retry synthesis: fact_check status is ${metadata.status || "unknown"}`);
+  }
+  return {
+    role: FACT_CHECK_ROLE,
+    model: metadata.model,
+    output: parseJsonFile(outputFile),
+    output_file: path.relative(runDir, outputFile),
+    summary: parseJsonFile(summaryFile),
+    summary_file: path.relative(runDir, summaryFile)
+  };
+}
+
+function loadRequestForRun(config, runDir) {
+  const requestFile = path.join(runDir, "request.json");
+  if (!fs.existsSync(requestFile)) {
+    throw new Error(`Missing workspace review request: ${requestFile}`);
+  }
+  const request = parseJsonFile(requestFile);
+  request.project_root = validateProjectRoot(request.project_root);
+  request.review_plan = fs.existsSync(path.join(runDir, "review-plan.md"))
+    ? fs.readFileSync(path.join(runDir, "review-plan.md"), "utf8")
+    : request.plan;
+  request.plan_compaction = readJsonIfExists(path.join(runDir, "plan-compaction.json"));
+  const proposedManifest = readJsonIfExists(path.join(runDir, "proposed-code-manifest.json"));
+  request.proposed_artifacts = Array.isArray(proposedManifest?.artifacts)
+    ? proposedManifest.artifacts
+    : [];
+  request.review_plan_refs = readJsonIfExists(path.join(runDir, "review-plan-refs.json")) || null;
+  const roles = Array.isArray(request.roles) && request.roles.length
+    ? request.roles
+    : REVIEW_ROLES;
+  for (const role of roles) {
+    if (!REVIEW_ROLES.includes(role)) {
+      throw new Error(`Invalid workspace review role: ${role}`);
+    }
+  }
+  if (!request.plan_compaction) {
+    request.plan_compaction = {
+      original_chars: String(request.plan || "").length,
+      compacted_chars: String(request.review_plan || request.plan || "").length,
+      saved_chars: String(request.plan || "").length - String(request.review_plan || request.plan || "").length,
+      code_blocks: 0,
+      compacted_blocks: 0,
+      preserved_blocks: 0,
+      proposed_artifact_count: request.proposed_artifacts.length,
+      proposed_artifact_chars: 0
+    };
+  }
+  return { request, roles };
+}
+
+function writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synthesis, infraErrors = []) {
+  const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors);
+  const report = {
+    run_id: request.run_id,
+    project_root: request.project_root,
+    created_at: new Date().toISOString(),
+    plan_compaction: request.plan_compaction,
+    outcome,
+    reviewers: Object.fromEntries(reviewerResults.map((item) => [
+      item.role,
+      {
+        model: item.model,
+        output_file: item.output_file,
+        output: item.output
+      }
+    ])),
+    infra_errors: infraErrors,
+    fact_check: {
+      model: factCheck.model,
+      output_file: factCheck.output_file,
+      summary_file: factCheck.summary_file,
+      summary: factCheck.summary,
+      output: factCheck.output
+    },
+    synthesis: {
+      model: synthesis.model,
+      output_file: synthesis.output_file,
+      output: synthesis.output
+    }
+  };
+  writeJson(path.join(runDir, "report.json"), report);
+  return report;
+}
+
 function extractFinalOutputText(stdout) {
   const lines = String(stdout || "").trim().split(/\n/).filter(Boolean);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
@@ -195,6 +352,7 @@ function prepareReadBoundary(config, request, runDir, role, readScope) {
     role,
     mode: boundary.mode,
     files: boundary.files.length,
+    proposed_artifacts: (boundary.proposed_artifacts || []).length,
     blocked_refs: boundary.blocked_refs.length,
     skipped_refs: boundary.skipped_refs.length
   });
@@ -216,7 +374,8 @@ async function runRole(config, request, role, runDir) {
     request.project_root,
     request.review_plan || request.plan,
     {
-      maxFiles: config.execution.read_scope_max_files
+      maxFiles: config.execution.read_scope_max_files,
+      proposedArtifacts: request.proposed_artifacts || []
     }
   );
   const readBoundary = prepareReadBoundary(config, request, runDir, role, readScope);
@@ -282,6 +441,7 @@ async function runRole(config, request, role, runDir) {
       source_root: readBoundary.boundary.source_root,
       exposed_root: readBoundary.boundary.exposed_root,
       file_count: readBoundary.boundary.files.length,
+      proposed_artifacts: readBoundary.boundary.proposed_artifacts || [],
       read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
     }
   };
@@ -352,7 +512,8 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     request.project_root,
     reviewerOutputs,
     {
-      maxFiles: config.execution.read_scope_max_files
+      maxFiles: config.execution.read_scope_max_files,
+      proposedArtifacts: request.proposed_artifacts || []
     }
   );
   const readBoundary = prepareReadBoundary(config, request, runDir, role, readScope);
@@ -427,6 +588,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
       source_root: readBoundary.boundary.source_root,
       exposed_root: readBoundary.boundary.exposed_root,
       file_count: readBoundary.boundary.files.length,
+      proposed_artifacts: readBoundary.boundary.proposed_artifacts || [],
       read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
     }
   };
@@ -648,16 +810,97 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
   };
 }
 
+function archiveRoleAttempt(runDir, role) {
+  const roleDir = path.join(runDir, "roles", role);
+  if (!fs.existsSync(roleDir)) {
+    return null;
+  }
+  const attemptsDir = path.join(runDir, "roles", `${role}-attempts`);
+  fs.mkdirSync(attemptsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  let target = path.join(attemptsDir, stamp);
+  let index = 2;
+  while (fs.existsSync(target)) {
+    target = path.join(attemptsDir, `${stamp}-${index}`);
+    index += 1;
+  }
+  fs.renameSync(roleDir, target);
+  return path.relative(runDir, target);
+}
+
+async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
+  if (stage !== "synthesis") {
+    throw new Error(`Unsupported retry stage: ${stage}. Currently only synthesis is supported.`);
+  }
+  const absoluteRunDir = path.resolve(runDir);
+  const state = readJsonIfExists(path.join(absoluteRunDir, "state.json")) || {};
+  if (state.status === "running" && !options.force) {
+    throw new Error("Cannot retry while run status is running. Use force only if the previous process is known to be dead.");
+  }
+  const { request, roles } = loadRequestForRun(config, absoluteRunDir);
+  const reviewerResults = loadCompletedReviewerResults(absoluteRunDir, roles);
+  const factCheck = loadCompletedFactCheckResult(absoluteRunDir);
+  const archived = archiveRoleAttempt(absoluteRunDir, "synthesis");
+  updateState(absoluteRunDir, {
+    status: "running",
+    pid: process.pid,
+    retry_stage: stage,
+    retry_started_at: new Date().toISOString(),
+    project_root: request.project_root,
+    roles,
+    error: null
+  });
+  appendExecutionLog(absoluteRunDir, "stage_retry_started", {
+    stage,
+    archived_attempt: archived
+  });
+  try {
+    const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, absoluteRunDir);
+    writeWorkspaceReport(absoluteRunDir, request, reviewerResults, factCheck, synthesis, []);
+    updateState(absoluteRunDir, {
+      status: "completed",
+      finished_at: new Date().toISOString(),
+      report_file: "report.json",
+      error: null,
+      retry_stage: null
+    });
+    appendExecutionLog(absoluteRunDir, "stage_retry_completed", {
+      stage
+    });
+    appendExecutionLog(absoluteRunDir, "run_completed", {
+      run_id: request.run_id,
+      reviewer_count: reviewerResults.length,
+      infra_error_count: 0
+    });
+    return {
+      run_id: request.run_id,
+      stage,
+      status: "completed",
+      archived_attempt: archived,
+      report_file: path.join(absoluteRunDir, "report.json")
+    };
+  } catch (error) {
+    appendExecutionLog(absoluteRunDir, "stage_retry_failed", {
+      stage
+    });
+    appendExecutionLog(absoluteRunDir, "run_failed", {
+      run_id: request.run_id
+    });
+    updateState(absoluteRunDir, {
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error: error.stack || error.message,
+      retry_stage: null
+    });
+    throw error;
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const runDir = path.resolve(requireArg(args, "run-dir"));
   const config = loadWorkspaceReviewFromArgs(args);
-  const requestFile = path.join(runDir, "request.json");
-  if (!fs.existsSync(requestFile)) {
-    throw new Error(`Missing workspace review request: ${requestFile}`);
-  }
-  const request = parseJsonFile(requestFile);
-  request.project_root = validateProjectRoot(request.project_root);
+  const { request, roles } = loadRequestForRun(config, runDir);
   const reviewPlan = config.execution.compact_plan
     ? compactPlanForReview(request.plan)
     : {
@@ -673,16 +916,19 @@ async function main() {
     };
   request.review_plan = reviewPlan.text;
   request.plan_compaction = reviewPlan.stats;
+  request.proposed_artifacts = materializeProposedArtifacts(runDir, reviewPlan.artifacts || []);
+  request.review_plan_refs = createPlanReferenceManifest(
+    request.project_root,
+    request.plan,
+    request.proposed_artifacts
+  );
   writeGenerated(path.join(runDir, "review-plan.md"), request.review_plan);
   writeJson(path.join(runDir, "plan-compaction.json"), request.plan_compaction);
-  const roles = Array.isArray(request.roles) && request.roles.length
-    ? request.roles
-    : REVIEW_ROLES;
-  for (const role of roles) {
-    if (!REVIEW_ROLES.includes(role)) {
-      throw new Error(`Invalid workspace review role: ${role}`);
-    }
-  }
+  writeJson(path.join(runDir, "proposed-code-manifest.json"), {
+    artifact_count: request.proposed_artifacts.length,
+    artifacts: request.proposed_artifacts
+  });
+  writeJson(path.join(runDir, "review-plan-refs.json"), request.review_plan_refs);
 
   updateState(runDir, {
     status: "running",
@@ -699,6 +945,9 @@ async function main() {
     max_concurrency: config.execution.max_concurrency
   });
   appendExecutionLog(runDir, "plan_compacted", request.plan_compaction);
+  appendExecutionLog(runDir, "proposed_artifacts_prepared", {
+    artifacts: request.proposed_artifacts.length
+  });
 
   try {
     const { reviewerResults, infraErrors } = await runReviewers(config, request, roles, runDir);
@@ -707,36 +956,7 @@ async function main() {
     }
     const factCheck = await runFactCheck(config, request, reviewerResults, runDir);
     const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, runDir);
-    const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors);
-    const report = {
-      run_id: request.run_id,
-      project_root: request.project_root,
-      created_at: new Date().toISOString(),
-      plan_compaction: request.plan_compaction,
-      outcome,
-      reviewers: Object.fromEntries(reviewerResults.map((item) => [
-        item.role,
-        {
-          model: item.model,
-          output_file: item.output_file,
-          output: item.output
-        }
-      ])),
-      infra_errors: infraErrors,
-      fact_check: {
-        model: factCheck.model,
-        output_file: factCheck.output_file,
-        summary_file: factCheck.summary_file,
-        summary: factCheck.summary,
-        output: factCheck.output
-      },
-      synthesis: {
-        model: synthesis.model,
-        output_file: synthesis.output_file,
-        output: synthesis.output
-      }
-    };
-    writeJson(path.join(runDir, "report.json"), report);
+    writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synthesis, infraErrors);
     updateState(runDir, {
       status: "completed",
       finished_at: new Date().toISOString(),
@@ -773,5 +993,9 @@ module.exports = {
   runRole,
   runWithConcurrency,
   summarizeReviewOutcome,
-  runSynthesis
+  runSynthesis,
+  retryWorkspaceReviewStage,
+  loadCompletedReviewerResults,
+  loadCompletedFactCheckResult,
+  writeWorkspaceReport
 };

@@ -150,7 +150,11 @@ function printText(summary) {
       role.stdout_bytes,
       toolCalls,
       role.read_boundary
-        ? `${role.read_boundary.mode}:${role.read_boundary.file_count ?? "-"} files, out:${role.out_of_boundary_read_files.length}`
+        ? [
+          `${role.read_boundary.mode}:${role.read_boundary.file_count ?? "-"} files`,
+          `proposed:${(role.read_boundary.proposed_artifacts || []).length}`,
+          `out:${role.out_of_boundary_read_files.length}`
+        ].join(", ")
         : "-",
       role.usage?.max_input_tokens ?? "-"
     ].join(" | ") + " |");
@@ -162,6 +166,12 @@ function printText(summary) {
     console.log(`tools: ${role.tools.join(", ") || "-"}`);
     if (role.read_boundary) {
       console.log(`read_boundary: ${role.read_boundary.mode} (${role.read_boundary.file_count ?? "-"} file(s))`);
+      if ((role.read_boundary.proposed_artifacts || []).length) {
+        console.log("proposed_artifacts:");
+        for (const artifact of role.read_boundary.proposed_artifacts) {
+          console.log(`- ${artifact.relative_path}:1-${artifact.line_count || "?"}`);
+        }
+      }
       if (role.out_of_boundary_read_files.length) {
         console.log("out_of_boundary_read_files:");
         for (const file of role.out_of_boundary_read_files) {

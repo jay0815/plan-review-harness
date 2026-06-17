@@ -177,6 +177,7 @@ function main() {
       output: {
         probe: "fact_check",
         checked_issues: [{
+          issue_id: "risk-001",
           source: "risk",
           issue_title: "示例",
           status: "verified",

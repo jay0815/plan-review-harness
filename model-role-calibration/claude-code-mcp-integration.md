@@ -43,7 +43,6 @@ ANTHROPIC_API_KEY
 --tools Read,Glob,Grep
 --allowed-tools Read,Glob,Grep
 --permission-mode dontAsk
---no-session-persistence
 ```
 
 不提供 `Bash`、`Edit`、`Write`、`NotebookEdit`。模型 settings 中即使存在 Bash 权限规则，也不会获得 Bash 工具。
@@ -105,7 +104,7 @@ chmod 600 <settings-dir>/*.json
 | Architecture Reviewer | Kimi |
 | Execution Reviewer | Kimi |
 | Rebuttal Reviewer | GLM |
-| Fact Judge / Evidence Verifier | DeepSeek |
+| Fact Judge / Evidence Verifier | GLM |
 | Synthesizer | Kimi |
 | Planner 备选 | DeepSeek |
 

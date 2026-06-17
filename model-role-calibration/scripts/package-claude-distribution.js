@@ -12,9 +12,11 @@ const RUNTIME_FILES = [
   "scripts/run-model.js",
   "scripts/workspace-review-lib.js",
   "scripts/run-workspace-review.js",
+  "scripts/retry-workspace-review-stage.js",
   "scripts/plan-review-mcp.js",
   "scripts/inspect-workspace-run.js",
   "scripts/verify-workspace-review-run.js",
+  "claude-plan-authoring.md",
   "prompts/probe-risk.md",
   "prompts/probe-architecture.md",
   "prompts/probe-execution.md",
@@ -108,7 +110,7 @@ printf '\\n安装完成。\\n'
 printf 'MCP runtime：%s\\n' "$MCP_TARGET"
 printf 'Skill：%s\\n' "$SKILL_TARGET"
 printf 'Settings：%s\\n' "$SETTINGS_DIR"
-printf '请重启 Claude Code，然后执行：/plan-review [计划文件路径]\\n'
+printf '请重启 Claude Code，然后执行：/plan-review --check 或 /plan-review [计划文件路径]\\n'
 `;
 }
 
@@ -176,6 +178,32 @@ qwen.json
 cd /absolute/path/to/project
 claude
 \`\`\`
+
+## 连接检查
+
+重启后先执行连接检查，确认 MCP 和模型路由正常：
+
+\`\`\`text
+/plan-review --check
+\`\`\`
+
+预期输出应包含：
+
+\`\`\`text
+valid: true
+auth_env: ANTHROPIC_AUTH_TOKEN
+
+roles:
+  risk:       qwen
+  architecture: kimi
+  execution:  kimi
+  rebuttal:   glm
+  fact_check: glm
+  synthesis:  kimi
+  planner:    deepseek
+\`\`\`
+
+此步骤不会调用模型。如果检查失败，请重新核对 settings 目录路径、四份 json 文件内容以及 Claude Code 版本。
 
 ## 使用流程
 

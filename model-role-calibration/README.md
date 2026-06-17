@@ -17,6 +17,8 @@ npm run plan-review:package
 Workspace Plan Review 的执行顺序是四个 Reviewer 并发审查，随后由
 Fact Check 校验 Reviewer evidence，最后由 Synthesizer 在不读取工程目录的情况下合成结论。
 
+Fact Checker 的模型选择使用独立校准流程。该流程只比较事实校验能力，不让候选模型重新发现问题或合成结论。当前 `role-calibration-v3` 校准推荐默认 Fact Checker 使用 `glm`。
+
 当前版本不直接调用模型 API，也不接 LangGraph。模型通过本机 Claude Code wrapper CLI 运行：
 
 - 创建可编辑的校准 case。
@@ -86,6 +88,98 @@ rubric.md
 ```bash
 node model-role-calibration/scripts/create-case.js --group synthetic --id case-004
 ```
+
+### Fact Checker 校准
+
+第一版 Fact Checker 校准保持半自动：不自动调用模型，只生成 prompt、录入候选输出、按人工标签评分。
+
+从一次已完成的 workspace review 抽取校准 case：
+
+```bash
+npm run fact-check:create-case -- \
+  --run-id workspace-review-20260616T080841Z \
+  --case reqa-tapd-core-migration-001
+```
+
+生成后先人工编辑：
+
+```text
+model-role-calibration/fact-check-calibration/cases/<case>/case.json
+```
+
+必须为每个 issue 填写 `expected_status`。可选填写 `expected_evidence_status` 和
+`expected_claim_support`。`seed_status` 只来自原始 run 的 Fact Check 输出，禁止未确认就当作金标。
+
+为候选模型生成同一份 Fact Check prompt：
+
+```bash
+npm run fact-check:generate-prompts -- \
+  --run fact-check-001 \
+  --case reqa-tapd-core-migration-001 \
+  --models deepseek,kimi,glm,qwen
+```
+
+prompt 输出目录：
+
+```text
+model-role-calibration/fact-check-calibration/runs/<run>/<case>/prompts/
+```
+
+将候选模型输出保存成 JSON 后录入：
+
+```bash
+npm run fact-check:ingest-output -- \
+  --run fact-check-001 \
+  --case reqa-tapd-core-migration-001 \
+  --model kimi \
+  --file /path/to/kimi-fact-check-output.json
+```
+
+评分单个候选模型：
+
+```bash
+npm run fact-check:score-output -- \
+  --run fact-check-001 \
+  --case reqa-tapd-core-migration-001 \
+  --model kimi
+```
+
+汇总一次 Fact Checker 校准：
+
+```bash
+npm run fact-check:summarize -- --run fact-check-001
+```
+
+报告输出：
+
+```text
+model-role-calibration/fact-check-calibration/outputs/<run>.summary.json
+model-role-calibration/fact-check-calibration/outputs/<run>.summary.md
+```
+
+评分重点：
+
+- `status_accuracy`：候选输出的 `status` 是否匹配人工标签。
+- `challenge_recall`：对非 `verified` 的错误 claim，是否能拒绝全部 verified。
+- `false_verified`：人工标为非 `verified`，候选却标为 `verified` 的数量。
+- `over_challenged`：人工标为 `verified`，候选却过度挑战的数量。
+- `extra` / `missing`：是否新增未要求检查的问题，或漏掉应检查的问题。
+
+执行同一份 Fact Check prompt 并批量调用候选模型：
+
+```bash
+npm run fact-check:run -- \
+  --run fact-check-reqa-post-migration-002 \
+  --case reqa-tapd-core-migration-001 \
+  --models deepseek,kimi,glm,qwen \
+  --project-root /Users/guanchengqian/gitlab/tools/reqa \
+  --concurrency 2 \
+  --timeout-ms 600000
+```
+
+传入 `--project-root` 后，runner 会基于 Reviewer evidence 构造 scoped mirror，并只向候选模型开放 `Read` 和 JSON validator。四个模型仍使用同一份 prompt，runner 会校验 prompt hash 完全一致。
+
+如果模型在超时前已经调用 JSON validator 且候选 JSON 通过 schema，但未及时返回最终 answer，runner 会从 validator tool call 中恢复该输出并继续评分。这个路径主要用于处理 Qwen 这类长时间思考后临近超时才完成 JSON 的情况。
 
 一键生成 run、生成全部 prompt 并启动三并发模型池：
 

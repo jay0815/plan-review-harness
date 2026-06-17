@@ -243,6 +243,27 @@ function main() {
     validatorCliArgs[validatorCliArgs.indexOf("--output-format") + 1],
     "stream-json"
   );
+
+  const readValidatorCliArgs = buildCliArgs(["--settings", "glm.json"], { type: "object" }, {
+    persistSession: false,
+    jsonValidator: true,
+    run: "run-001",
+    model: "glm",
+    probe: "fact_check",
+    schemaFile: "/tmp/fact-check-output.schema.json",
+    validatorLogFile: "/tmp/attempt-001.validator.log",
+    attemptLabel: "attempt-001",
+    tools: "Read",
+    permissionMode: "dontAsk",
+    addDir: "/tmp/scoped-project"
+  });
+  assert.equal(readValidatorCliArgs[readValidatorCliArgs.indexOf("--tools") + 1], "Read");
+  assert.equal(
+    readValidatorCliArgs[readValidatorCliArgs.indexOf("--allowed-tools") + 1],
+    "Read,mcp__json_validator__validate_json_output"
+  );
+  assert.equal(readValidatorCliArgs[readValidatorCliArgs.indexOf("--permission-mode") + 1], "dontAsk");
+  assert.equal(readValidatorCliArgs[readValidatorCliArgs.indexOf("--add-dir") + 1], "/tmp/scoped-project");
   const validatorMcpConfig = JSON.parse(validatorCliArgs[validatorCliArgs.indexOf("--mcp-config") + 1]);
   assert.equal(
     validatorMcpConfig.mcpServers.json_validator.env.MODEL_ROLE_CALIBRATION_VALIDATOR_LOG,

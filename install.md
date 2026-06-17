@@ -111,26 +111,33 @@ claude
 
 ## 五、连接检查
 
-在 Claude Code 中输入：
+在 Claude Code 中执行：
 
-调用 plan-review-harness 的 configuration_status。
-只展示模型和角色路由，不要调用 start_plan_review。
+```text
+/plan-review --check
+```
+
+该 Skill 会自动调用 `plan-review-harness` 的 `configuration_status`，只展示模型和角色路由，不会调用 `start_plan_review`，也不会调用任何模型。
 
 预期结果应包含：
 
+```text
 risk: qwen
 architecture: kimi
 execution: kimi
 rebuttal: glm
-fact_check: deepseek
+fact_check: glm
 synthesis: kimi
 planner: deepseek
+```
 
 同时确认：
-```
+
+```text
 valid: true
 auth_env: ANTHROPIC_AUTH_TOKEN
 ```
+
 此步骤不会调用模型。
 
 ## 六、执行完整 Plan Review
@@ -360,10 +367,21 @@ roles/fact_check/fact-check-summary.json
 
 ## 九、更新安装
 
-拿到新版压缩包后重新解压并执行：
+拿到新版压缩包后，建议先卸载旧版本，再重新安装：
+
+```bash
+# 在旧版解压目录执行卸载
+./uninstall.sh
+
+# 解压新版压缩包
+cd /path/to/new-package
+tar -xzf plan-review-harness-claude-code.tar.gz
+cd plan-review-harness-claude-code
+
+# 重新安装
+./install.sh /Users/{real-path-to}/claude-settings
 ```
-./install.sh /Users/guanchengqian/gitlab/claude-settings
-```
+
 安装器会更新 MCP runtime 和 Skill，并重新注册 MCP。
 
 更新后重启 Claude Code。

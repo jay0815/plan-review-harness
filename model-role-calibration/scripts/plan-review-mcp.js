@@ -122,6 +122,41 @@ function toolList() {
       }
     },
     {
+      name: "retry_plan_review_stage",
+      description: [
+        "对已失败但已有中间产物的 Plan Review 执行断点重试。",
+        "当前只支持 stage=synthesis：复用已完成的 Reviewer 与 Fact Check 输出，只重跑 Synthesizer。",
+        "返回后必须立即使用 next_action 指定的参数调用 get_plan_review。"
+      ].join(" "),
+      annotations: {
+        title: "重试计划评审阶段",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true
+      },
+      inputSchema: {
+        type: "object",
+        required: ["run_id", "stage"],
+        properties: {
+          run_id: {
+            type: "string",
+            description: "需要断点重试的 workspace review run_id。"
+          },
+          stage: {
+            type: "string",
+            enum: ["synthesis"],
+            description: "当前仅支持 synthesis。"
+          },
+          force: {
+            type: "boolean",
+            description: "仅当确认旧进程已死亡但 state 仍为 running 时使用；默认 false。"
+          }
+        },
+        additionalProperties: false
+      }
+    },
+    {
       name: "get_plan_review",
       description: [
         "这是等待 Plan Review 完成的唯一状态接口。",
@@ -297,6 +332,97 @@ function startPlanReview(config, input) {
     pid: child.pid,
     project_root: projectRoot,
     roles,
+    run_dir: runDir,
+    execution_log: executionLogPath(runDir),
+    next_action: {
+      tool: "get_plan_review",
+      arguments: {
+        run_id: runId,
+        include_report: true,
+        wait_ms: DEFAULT_WAIT_MS
+      },
+      instruction: [
+        "立即调用 get_plan_review，并保持该工具调用等待 progress notification。",
+        "不要调用 Bash、sleep、Monitor、execution_log 或其他状态检查方式。"
+      ].join("")
+    }
+  };
+}
+
+function retryPlanReviewStage(config, input) {
+  const runId = String(input.run_id || "");
+  if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
+    throw new Error(`Invalid run_id: ${runId}`);
+  }
+  if (input.stage !== "synthesis") {
+    throw new Error(`Unsupported retry stage: ${input.stage}`);
+  }
+  const runDir = runDirectory(config, runId);
+  const stateFile = path.join(runDir, "state.json");
+  if (!fs.existsSync(stateFile)) {
+    throw new Error(`Unknown plan review run: ${runId}`);
+  }
+  const state = parseJsonFile(stateFile);
+  if (state.status === "running" && !input.force) {
+    throw new Error("Run is still marked running. Retry only after it fails, or pass force when the old process is known to be dead.");
+  }
+  const roles = Array.isArray(state.roles) && state.roles.length ? state.roles : REVIEW_ROLES;
+  const requiredFiles = [
+    ...roles.map((role) => `roles/${role}/output.json`),
+    "roles/fact_check/output.json",
+    "roles/fact_check/fact-check-summary.json"
+  ];
+  const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(runDir, file)));
+  if (missing.length) {
+    throw new Error(`Cannot retry synthesis; missing prerequisite artifact(s): ${missing.join(", ")}`);
+  }
+
+  updateState(runDir, {
+    status: "queued",
+    retry_stage: input.stage,
+    retry_queued_at: new Date().toISOString(),
+    error: null
+  });
+  appendExecutionLog(runDir, "stage_retry_queued", {
+    stage: input.stage
+  });
+
+  const stdoutFd = fs.openSync(path.join(runDir, "runner.stdout.log"), "a");
+  const stderrFd = fs.openSync(path.join(runDir, "runner.stderr.log"), "a");
+  const runner = path.join(ROOT, "scripts", "retry-workspace-review-stage.js");
+  const child = spawn(process.execPath, [
+    runner,
+    ...config.loader_args,
+    "--run-dir",
+    runDir,
+    "--stage",
+    input.stage,
+    ...(input.force ? ["--force"] : [])
+  ], {
+    cwd: path.resolve(ROOT, ".."),
+    detached: true,
+    stdio: ["ignore", stdoutFd, stderrFd],
+    env: withoutAnthropicApiKey(process.env)
+  });
+  child.on("error", (error) => {
+    appendExecutionLog(runDir, "stage_retry_start_failed", {
+      stage: input.stage
+    });
+    updateState(runDir, {
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error: `Unable to start workspace review stage retry: ${error.message}`
+    });
+  });
+  child.unref();
+  fs.closeSync(stdoutFd);
+  fs.closeSync(stderrFd);
+
+  return {
+    run_id: runId,
+    status: "queued",
+    stage: input.stage,
+    pid: child.pid,
     run_dir: runDir,
     execution_log: executionLogPath(runDir),
     next_action: {
@@ -554,6 +680,7 @@ function createHandler(config) {
           "随后立即使用返回的 next_action 参数调用 get_plan_review。",
           "收到 progress notification 时保持当前 get_plan_review 调用等待。",
           "只有 get_plan_review 返回 status=running 和 next_action 时才再次调用。",
+          "若 get_plan_review 返回 synthesis 阶段失败，可调用 retry_plan_review_stage stage=synthesis 做断点重试。",
           "禁止使用 Bash、sleep、Monitor、execution_log 或外部命令观察评审状态。",
           "禁止暴露或请求 ANTHROPIC_API_KEY。"
         ].join(" ")
@@ -579,6 +706,9 @@ function createHandler(config) {
       }
       if (name === "start_plan_review") {
         return textResult(startPlanReview(config, input));
+      }
+      if (name === "retry_plan_review_stage") {
+        return textResult(retryPlanReviewStage(config, input));
       }
       if (name === "get_plan_review") {
         const progressToken = message.params?._meta?.progressToken;
@@ -688,6 +818,7 @@ module.exports = {
   toolList,
   resolvePlanInput,
   startPlanReview,
+  retryPlanReviewStage,
   parseExecutionLogLine,
   progressSnapshot,
   planReviewResult,

@@ -15,6 +15,7 @@ const {
   buildWorkspacePrompt,
   buildClaudeWorkspaceArgs,
   compactPlanForReview,
+  createPlanReferenceManifest,
   executionLogPath,
   appendExecutionLog,
   withoutAnthropicApiKey
@@ -107,12 +108,12 @@ async function main() {
     assert.equal(directoryConfig.settings_dir, settingsDir);
     assert.deepEqual(directoryConfig.loader_args, ["--settings-dir", settingsDir]);
     assert.equal(directoryConfig.roles.risk, "qwen");
-    assert.equal(directoryConfig.roles.fact_check, "deepseek");
+    assert.equal(directoryConfig.roles.fact_check, "glm");
     assert.equal(directoryConfig.roles.synthesis, "kimi");
     assert.equal(directoryConfig.execution.max_concurrency, 4);
     assert.equal(directoryConfig.execution.isolate_reviewers, true);
     assert.equal(directoryConfig.execution.read_scope_max_files, 80);
-    assert.equal(directoryConfig.models.deepseek.settings_file, path.join(settingsDir, "deepseek.json"));
+    assert.equal(directoryConfig.models.glm.settings_file, path.join(settingsDir, "glm.json"));
 
     const logRunDir = path.join(tempDir, "log-run");
     fs.mkdirSync(logRunDir);
@@ -133,7 +134,8 @@ async function main() {
       "只允许只读访问"
     );
     assert(prompt.includes("检查当前计划"));
-    assert(prompt.includes("相对文件路径和行号"));
+    assert(prompt.includes("现有工程文件的相对路径和行号"));
+    assert(prompt.includes("proposed-code/..."));
 
     const projectRoot = path.join(tempDir, "project");
     fs.mkdirSync(path.join(projectRoot, "src", "cdp"), { recursive: true });
@@ -209,6 +211,8 @@ async function main() {
     assert(factCheckPrompt.includes("Fact Judge"));
     assert(factCheckPrompt.includes("只能使用 Read"));
     assert(factCheckPrompt.includes("\"probe\": \"fact_check\""));
+    assert(factCheckPrompt.includes("# Reviewer Issue IDs"));
+    assert(factCheckPrompt.includes("\"issue_id\": \"Risk-Reviewer-001\""));
     assert(factCheckPrompt.includes("## Risk Reviewer"));
     assert(factCheckPrompt.includes("读取边界"));
     assert(factCheckPrompt.includes("packages/example.ts"));
@@ -247,12 +251,65 @@ async function main() {
     ].join("\n");
     const compactedPlan = compactPlanForReview(longPlan);
     assert(compactedPlan.text.includes("```pseudo"));
+    assert(compactedPlan.text.includes("源码 artifact：proposed-code/block-001.ts:1-"));
     assert(compactedPlan.text.includes("声明/入口"));
     assert(compactedPlan.text.includes("测试意图"));
     assert(compactedPlan.text.includes("```bash"));
     assert.equal(compactedPlan.stats.code_blocks, 2);
     assert.equal(compactedPlan.stats.compacted_blocks, 1);
+    assert.equal(compactedPlan.stats.proposed_artifact_count, 1);
+    assert.equal(compactedPlan.artifacts.length, 1);
+    assert.equal(compactedPlan.artifacts[0].relative_path, "proposed-code/block-001.ts");
+    assert(compactedPlan.artifacts[0].content.includes("clearHostResolverCache"));
     assert(compactedPlan.stats.saved_chars > 0);
+
+    const proposedArtifactDir = path.join(tempDir, "artifact-source");
+    const proposedArtifacts = compactedPlan.artifacts.map((artifact) => {
+      const sourceFile = path.join(proposedArtifactDir, artifact.relative_path);
+      fs.mkdirSync(path.dirname(sourceFile), { recursive: true });
+      fs.writeFileSync(sourceFile, artifact.content, "utf8");
+      return {
+        ...artifact,
+        source_file: sourceFile,
+        content: null
+      };
+    });
+    const artifactScope = buildRoleReadScope(
+      "risk",
+      projectRoot,
+      compactedPlan.text,
+      {
+        maxFiles: 10,
+        proposedArtifacts
+      }
+    );
+    assert(artifactScope.files.includes("proposed-code/block-001.ts"));
+    assert.equal(artifactScope.proposed_artifacts.length, 1);
+    const artifactMirrorParent = fs.mkdtempSync(path.join(tempDir, "artifact-mirror-"));
+    const artifactBoundary = copyScopedWorkspace(projectRoot, artifactScope, artifactMirrorParent);
+    assert(fs.existsSync(path.join(artifactBoundary.exposed_root, "proposed-code", "block-001.ts")));
+    assert(fs.readFileSync(
+      path.join(artifactBoundary.exposed_root, "proposed-code", "block-001.ts"),
+      "utf8"
+    ).includes("clearHostResolverCache"));
+    fs.rmSync(artifactMirrorParent, { recursive: true, force: true });
+
+    const refs = createPlanReferenceManifest(
+      projectRoot,
+      [
+        "## Existing Code Refs",
+        "- `src/cli.ts:1-1`",
+        "- `/outside/project.ts:10`",
+        "## Proposed Code Artifacts",
+        "- `proposed-code/block-001.ts:1-10`"
+      ].join("\n"),
+      proposedArtifacts
+    );
+    assert.equal(refs.format_status.has_existing_code_refs_section, true);
+    assert.equal(refs.format_status.has_proposed_code_artifacts_section, true);
+    assert(refs.existing_code_refs.some((item) => item.path === "src/cli.ts" && item.line_ref === "1-1"));
+    assert(refs.proposed_code_artifacts.some((item) => item.path === "proposed-code/block-001.ts"));
+    assert(refs.blocked_refs.includes("/outside/project.ts"));
 
     const args = buildClaudeWorkspaceArgs(config, "qwen", "risk", tempDir);
     assert.equal(args[args.indexOf("--tools") + 1], "Read,Glob,Grep");
@@ -262,13 +319,15 @@ async function main() {
     assert(!args.includes("Bash"));
     assert(!args.includes("Edit"));
     assert(!args.includes("Write"));
-    const factCheckArgs = buildClaudeWorkspaceArgs(config, "deepseek", "fact_check", tempDir, {
+    assert(!args.includes("--no-session-persistence"));
+    const factCheckArgs = buildClaudeWorkspaceArgs(config, "glm", "fact_check", tempDir, {
       tools: "Read",
       allowProjectRead: true
     });
     assert.equal(factCheckArgs[factCheckArgs.indexOf("--tools") + 1], "Read");
     assert.equal(factCheckArgs[factCheckArgs.indexOf("--allowed-tools") + 1], "Read");
     assert.equal(factCheckArgs[factCheckArgs.indexOf("--add-dir") + 1], tempDir);
+    assert(!factCheckArgs.includes("--no-session-persistence"));
     const synthesisArgs = buildClaudeWorkspaceArgs(config, "kimi", "synthesis", tempDir, {
       tools: "",
       allowProjectRead: false
@@ -276,6 +335,7 @@ async function main() {
     assert.equal(synthesisArgs[synthesisArgs.indexOf("--tools") + 1], "");
     assert.equal(synthesisArgs[synthesisArgs.indexOf("--allowed-tools") + 1], "");
     assert(!synthesisArgs.includes("--add-dir"));
+    assert(!synthesisArgs.includes("--no-session-persistence"));
     assert(args[args.indexOf("--system-prompt") + 1].includes("Return only one raw JSON object"));
 
     const readyOutcome = summarizeReviewOutcome(
@@ -369,14 +429,17 @@ async function main() {
 
     assert.deepEqual(
       toolList().map((tool) => tool.name),
-      ["configuration_status", "start_plan_review", "get_plan_review"]
+      ["configuration_status", "start_plan_review", "retry_plan_review_stage", "get_plan_review"]
     );
     const startTool = toolList().find((tool) => tool.name === "start_plan_review");
+    const retryTool = toolList().find((tool) => tool.name === "retry_plan_review_stage");
     const getTool = toolList().find((tool) => tool.name === "get_plan_review");
     assert(startTool.description.includes("同一计划只调用一次"));
     assert.equal(startTool.inputSchema.oneOf.length, 2);
     assert(startTool.inputSchema.properties.plan_file.description.includes("优先使用"));
     assert(startTool.inputSchema.properties.project_root.description.includes("CLAUDE_PROJECT_DIR"));
+    assert(retryTool.description.includes("stage=synthesis"));
+    assert.deepEqual(retryTool.inputSchema.properties.stage.enum, ["synthesis"]);
     assert(getTool.description.includes("progress notification"));
     assert(getTool.description.includes("禁止使用 Bash"));
     assert.equal(getTool.inputSchema.properties.wait_ms.default, undefined);
@@ -423,6 +486,9 @@ async function main() {
       "utf8"
     ));
     assert.equal(factCheckSchema.properties.probe.const, "fact_check");
+    assert(
+      factCheckSchema.properties.checked_issues.items.required.includes("issue_id")
+    );
     assert(synthesisSchema.required.includes("process_map"));
     assert(
       synthesisSchema.properties.consensus_issues.items.required.includes("affected_nodes")
@@ -574,7 +640,7 @@ async function main() {
     const responses = result.stdout.trim().split("\n").map(JSON.parse);
     assert.equal(responses.length, 2);
     assert.equal(responses[0].result.serverInfo.name, "plan-review-harness");
-    assert.equal(responses[1].result.tools.length, 3);
+    assert.equal(responses[1].result.tools.length, 4);
     assert(!result.stdout.includes("must-not-appear"));
 
     const rpcRunId = "rpc-wait-run";
