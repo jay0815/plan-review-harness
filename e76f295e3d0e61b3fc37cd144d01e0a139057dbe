@@ -1,0 +1,32 @@
+model-role-calibration/scripts/run-fact-check-calibration.js
+  298417bd8fa1271b 2-7,12,14-15,17,28-33,35-36,40-44
+model-role-calibration/scripts/calibration/core.js
+  298417bd8fa1271b 1-189
+model-role-calibration/scripts/calibration/fact-check-executor.js
+  298417bd8fa1271b 1-378
+package.json
+  298417bd8fa1271b 28
+model-role-calibration/scripts/calibration/runner.js
+  298417bd8fa1271b 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "e76f295e3d0e61b3fc37cd144d01e0a139057dbe",
+  "prompts": {
+    "298417bd8fa1271b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d5f09a8-ccce-4bd3-b6b4-410902450729",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 696,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/e1c2bdf1bb7eb3a365bd4645b513d9ae5f96353f5d4e5529a222c68721505ce6"
+    }
+  }
+}
