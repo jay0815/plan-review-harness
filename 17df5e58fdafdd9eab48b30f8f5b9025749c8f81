@@ -1,0 +1,121 @@
+model-role-calibration/claude-plan-authoring.md
+  298417bd8fa1271b 1-107
+model-role-calibration/scripts/workspace-review-lib.js
+  60554d4c68de868d 484-488,512-559,952-954,958-959,1224
+model-role-calibration/prompts/probe-rebuttal.md
+  298417bd8fa1271b 21-22
+model-role-calibration/prompts/probe-fact_check.md
+  60554d4c68de868d 20-21,43
+model-role-calibration/scripts/run-workspace-review.js
+  60554d4c68de868d 26,161-292,813-898,903,920-924,931,959,996-1000
+model-role-calibration/claude-code/skills/plan-review/SKILL.md
+  28e3d8070fc47979 3,8,15-73,94,96,100,111,120,124,128,132,136
+model-role-calibration/scripts/fact-check-calibration-lib.js
+  f73807472e155f6c 134-138,146-147,149,217-222,243-250,325-327,343-346,376-381,384-385,387,392,408-413,455
+  1e05bb5b3bcb8fa2 1-133,139-145,148,150-216,223-242,251-324,328-342,347-375,382-383,386,388-391,393-407,414-454,456-557
+package.json
+  60554d4c68de868d 28
+model-role-calibration/prompts/probe-risk.md
+  298417bd8fa1271b 21-22
+model-role-calibration/prompts/probe-synthesis.md
+  298417bd8fa1271b 26-28
+model-role-calibration/scripts/plan-review-mcp.js
+  298417bd8fa1271b 125-158,352-425,683,710-711,821
+model-role-calibration/scripts/test-plan-review-mcp.js
+  60554d4c68de868d 18,137-138,254,260-263,266-295,297-313,432,435,441-442,643
+model-role-calibration/scripts/test-claude-distribution.js
+  60554d4c68de868d 62-64
+  28e3d8070fc47979 78-80,214
+install.md
+  28e3d8070fc47979 114,116-118,120,124,132,135-136,140,370-382,384
+model-role-calibration/scripts/retry-workspace-review-stage.js
+  298417bd8fa1271b 1-31
+model-role-calibration/prompts/probe-architecture.md
+  298417bd8fa1271b 25-26
+"Plan Review Flow 完整安装与使用.md"
+  28e3d8070fc47979 1-267,269,271,273,275,283,285,287-293,297,299-304,306,308-311,314,317-318,320,322,324-329,331,334,339,341,347,349-350,353,355,357,359,361,363,366-368,370,374,376-378,380,382-387,389-409,411,413-416,418,420,422,424-430,432-441,444,446-447,450,452-453,455-457,459,461-465,468,470-472,474,476-478,480,482,484-500,502-511,513-519,521-522,525,528,531,533-536,539,541,543-545,548,550,552-556,559,561-578,581-688,690-713
+model-role-calibration/scripts/inspect-workspace-run.js
+  298417bd8fa1271b 153-157,169-174
+model-role-calibration/scripts/package-claude-distribution.js
+  60554d4c68de868d 15
+  28e3d8070fc47979 113,182-207
+model-role-calibration/prompts/probe-execution.md
+  298417bd8fa1271b 26-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "17df5e58fdafdd9eab48b30f8f5b9025749c8f81",
+  "prompts": {
+    "1e05bb5b3bcb8fa2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb605-98ef-7780-a30b-3812ad075261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 523,
+      "total_deletions": 2,
+      "accepted_lines": 511,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/b1680cd19133be3e57ac99a00b669ff6515ac6beafe5722707b6125bfff11eb5"
+    },
+    "28e3d8070fc47979": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ed58723f-0509-46ed-b632-35c5244b134f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 921,
+      "total_deletions": 262,
+      "accepted_lines": 741,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/3db5b5e381fe86d551d9fd86f10afac7db8364b6d78e6610009de6b6cb3b56b2"
+    },
+    "298417bd8fa1271b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d5f09a8-ccce-4bd3-b6b4-410902450729",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 291,
+      "total_deletions": 2,
+      "accepted_lines": 291,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/902f52cf71119e08472ca81e8cd62c6d892cd23a1459cb88256956ad99b20c94"
+    },
+    "60554d4c68de868d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed434-b212-76f3-be69-34ce878427d2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 360,
+      "total_deletions": 51,
+      "accepted_lines": 360,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/2e98e6a90982301c5504d0433cb88f99c57392c0af5ae7177ab6171b3d5bb490"
+    },
+    "f73807472e155f6c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed019-d759-7cd0-8512-ed9827c2cf34",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 46,
+      "total_deletions": 10,
+      "accepted_lines": 46,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/5c05c86a82d63a7e52db202ca384dafc6d5454ec349ac20828f8c6badb488ad3"
+    }
+  }
+}
