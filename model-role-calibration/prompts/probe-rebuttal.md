@@ -4,7 +4,7 @@
 
 # Prompt Version
 
-`role-calibration-v2`
+`role-calibration-v3`
 
 # Task
 
@@ -20,6 +20,8 @@
 - 每个问题必须绑定原文 evidence，并说明专家认可为什么不足以消除该问题。
 - 如果 plan 输入包含 `proposed-code/...` artifact，凡是关于新增/拟修改代码的 import、类型归属、控制流、测试断言或副作用的事实，必须读取并引用对应 artifact 的相对路径和行号，例如 `proposed-code/block-003.ts:12-20`；禁止只根据 `pseudo` 摘要下结论。
 - 已存在代码事实必须引用现有工程文件的相对路径和行号；新增代码事实必须引用 `proposed-code/...` artifact 的相对路径和行号。
+- `proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不能单独作为高严重度缺陷。
+- 只有当草案缺口揭示主计划需求、契约、关键控制流、失败分支或验收标准本身不成立时，才输出 issue；单纯代码样例不完整应写入 `false_positive_risks` 或不报告。
 - 同一根因若已被输入中的审查意见充分覆盖，禁止重复；只有新增反证、遗漏约束或不同因果链时才输出。
 - 区分真实缺陷、风险、假设和偏好；偏好不得升级为高严重度问题。
 - 输入中的硬约束不可折中。例如“不得阻塞”不能被解释为允许有限等待。

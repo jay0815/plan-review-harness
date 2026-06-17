@@ -496,6 +496,9 @@ function normalizeProposedArtifacts(artifacts = []) {
       line_count: artifact.line_count || null,
       char_count: artifact.char_count || null,
       block_index: artifact.block_index || null,
+      origin: artifact.origin || "plan_proposed_artifact",
+      review_semantics: artifact.review_semantics || "plan_draft",
+      expected_completeness: artifact.expected_completeness || "not_compile_target",
       content: artifact.content || null
     }))
     .filter((artifact) => {
@@ -540,7 +543,10 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) 
     line_ref: `1-${artifact.line_count || "?"}`,
     language: artifact.language || "",
     block_index: artifact.block_index || null,
-    char_count: artifact.char_count || null
+    char_count: artifact.char_count || null,
+    origin: artifact.origin || "plan_proposed_artifact",
+    review_semantics: artifact.review_semantics || "plan_draft",
+    expected_completeness: artifact.expected_completeness || "not_compile_target"
   }));
   return {
     version: 1,
@@ -677,7 +683,10 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
         language: artifact.language || "",
         line_count: artifact.line_count || null,
         char_count: artifact.char_count || null,
-        block_index: artifact.block_index || null
+        block_index: artifact.block_index || null,
+        origin: artifact.origin || "plan_proposed_artifact",
+        review_semantics: artifact.review_semantics || "plan_draft",
+        expected_completeness: artifact.expected_completeness || "not_compile_target"
       })),
     blocked_refs: [...blockedRefs].sort(),
     skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort()
@@ -750,7 +759,10 @@ function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
       language: artifact.language || "",
       line_count: artifact.line_count || null,
       char_count: artifact.char_count || null,
-      block_index: artifact.block_index || null
+      block_index: artifact.block_index || null,
+      origin: artifact.origin || "plan_proposed_artifact",
+      review_semantics: artifact.review_semantics || "plan_draft",
+      expected_completeness: artifact.expected_completeness || "not_compile_target"
     })),
     blocked_refs: readScope.blocked_refs || [],
     skipped_refs: readScope.skipped_refs || []
@@ -777,7 +789,9 @@ function readBoundarySection(readBoundary) {
         "",
         "计划内 proposed-code artifact（表示计划准备新增或大段修改的代码草案；可按路径和行号读取校验）：",
         ...proposedArtifacts.map((artifact) => (
-          `- ${artifact.relative_path}:1-${artifact.line_count || "?"}`
+          `- ${artifact.relative_path}:1-${artifact.line_count || "?"} ` +
+          `(semantics=${artifact.review_semantics || "plan_draft"}, ` +
+          `expected=${artifact.expected_completeness || "not_compile_target"})`
         ))
       ].join("\n")
       : null,
@@ -855,6 +869,9 @@ function proposedArtifactForCodeBlock(language, code, blockIndex) {
     relative_path: relativePath,
     line_count: content.split("\n").length - 1,
     char_count: content.length,
+    origin: "compacted_code_block",
+    review_semantics: "plan_draft",
+    expected_completeness: "not_compile_target",
     content
   };
 }
@@ -869,8 +886,11 @@ function compactCodeBlock(language, code, blockIndex, artifact = null) {
       ? `源码 artifact：${artifact.relative_path}:1-${artifact.line_count}`
       : null,
     artifact
-      ? "用途：主 plan 只保留设计语义；精确 import、类型、控制流、测试断言必须读取源码 artifact 校验。"
+      ? "用途：该 artifact 是从 plan 代码块拆出的草案证据，用于校验设计意图、接口契约和关键控制流；默认不是可直接编译的最终代码。"
       : "用途：保留审查语义，不作为可直接复制的实现代码。",
+    artifact
+      ? "完整性边界：除非 plan 明确声明该 artifact 必须原样落地，否则缺 import、局部类型导出、stub 函数体或示例变量未声明只能作为草案完整性提示，不能单独作为 blocker。"
+      : null,
     "审查重点：接口契约、执行顺序、测试意图、错误处理和回滚边界。",
     signals.declarations.length
       ? `声明/入口：${signals.declarations.join(", ")}`
@@ -925,7 +945,9 @@ function compactPlanForReview(plan, options = {}) {
     ? [
       "> 审查输入说明：为降低评审耗时，长代码块已拆分为 `proposed-code/` artifact，并在主计划中保留 `pseudo` 摘要。",
       "> 原始计划仍保存在 run 的 `request.json`；Reviewer 应关注契约、流程、测试意图和风险。",
+      "> 自动拆出的 artifact 默认是 plan_draft / not_compile_target：它是计划草案证据，不是最终提交代码。",
       "> 涉及 import、类型归属、控制流、测试断言等精确代码事实时，必须读取对应 `proposed-code/...` artifact，不得只根据 pseudo 摘要判断。",
+      "> 仅由草案不完整造成的缺 import、缺局部类型导出、stub 函数体或示例变量未声明，不得单独升级为 blocker；只有当该缺口使主计划的需求、契约、控制流或验收无法唯一执行时才报告为计划问题。",
       ""
     ].join("\n")
     : "";

@@ -4,7 +4,7 @@
 
 # Prompt Version
 
-`role-calibration-v2`
+`role-calibration-v3`
 
 # Task
 
@@ -24,6 +24,8 @@
 - 每个问题必须绑定原文 evidence，并说明该结构如何导致具体的耦合、所有权或演进问题。
 - 如果 plan 输入包含 `proposed-code/...` artifact，凡是关于新增/拟修改代码的 import、类型归属、控制流、测试断言或副作用的事实，必须读取并引用对应 artifact 的相对路径和行号，例如 `proposed-code/block-003.ts:12-20`；禁止只根据 `pseudo` 摘要下结论。
 - 已存在代码事实必须引用现有工程文件的相对路径和行号；新增代码事实必须引用 `proposed-code/...` artifact 的相对路径和行号。
+- `proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不得作为结构性问题。
+- 只有当 artifact 暴露了真实的所有权、依赖方向、模块边界或公共契约冲突时，才可报告架构 issue；单纯“代码样例不完整”必须降权或写入 `false_positive_risks`。
 - 同一根因只输出一个 issue；补充影响写入 `why_it_matters`。
 - 输入不足以判断结构是否成立时，写入 `missing_questions`，禁止自行假设后再给结论。
 - `suggested_fix` 只描述解除结构问题所需的最小目标状态，不提供具体类名、文件名、超时、重试参数或完整实现方案。
