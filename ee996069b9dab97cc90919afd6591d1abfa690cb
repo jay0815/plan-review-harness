@@ -1,0 +1,40 @@
+model-role-calibration/scripts/workspace-review-lib.js
+  60554d4c68de868d 499-501,546-549,686-689,762-765,792-794,872-874,889,891-893,948,950
+.gitignore
+  298417bd8fa1271b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "ee996069b9dab97cc90919afd6591d1abfa690cb",
+  "prompts": {
+    "298417bd8fa1271b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d5f09a8-ccce-4bd3-b6b4-410902450729",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 3,
+      "total_deletions": 0,
+      "accepted_lines": 3,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/4d879635b1d68392601f1820b44816355b9f6e87503c1b0a09a05e1aab753a7a"
+    },
+    "60554d4c68de868d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed434-b212-76f3-be69-34ce878427d2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 5,
+      "accepted_lines": 27,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/a026dd7a37bd8cbcc53ee66c0c0d4368471482debe7c26ce026fd0c4bac4d189"
+    }
+  }
+}
