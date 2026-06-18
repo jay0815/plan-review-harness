@@ -16,6 +16,8 @@ const {
 const REVIEW_ROLES = ["risk", "architecture", "execution", "rebuttal"];
 const FACT_CHECK_ROLE = "fact_check";
 const SYNTHESIS_ROLE = "synthesis";
+const JSON_VALIDATOR_TOOL = "mcp__json_validator__validate_json_output";
+const MAX_EXECUTOR_RETRIES = 3;
 const WORKSPACE_ROLES = [...REVIEW_ROLES, FACT_CHECK_ROLE, SYNTHESIS_ROLE];
 const REQUIRED_ROLES = [...REVIEW_ROLES, FACT_CHECK_ROLE, SYNTHESIS_ROLE];
 const PLACEHOLDER_PATTERN = /REPLACE_|YOUR_|CHANGEME|<[^>]+>/i;
@@ -699,7 +701,8 @@ function buildRoleReadScope(role, projectRoot, plan, options = {}) {
     includeAllProposedArtifacts: true
   });
   scope.description = [
-    "只暴露计划中明确引用的工程文件、计划内 proposed-code artifact 和少量项目配置文件。",
+    "只暴露计划中明确引用的现有工程文件、兼容保留的 proposed-code 草案和少量项目配置文件。",
+    "proposed-code 仅用于传输兼容和定位计划作者写下的未来代码，不是推荐 Plan 结构、现有工程事实或最终实现承诺。",
     "Reviewer 若需要未暴露文件，应写入 missing_questions，不应猜测。"
   ].join("");
   return scope;
@@ -787,7 +790,7 @@ function readBoundarySection(readBoundary) {
     proposedArtifacts.length
       ? [
         "",
-        "计划内 proposed-code artifact（表示计划准备新增或大段修改的代码草案；可按路径和行号读取校验）：",
+        "兼容保留的未来代码草案（仅说明计划文本设想，不得作为现有工程事实或实现完备性依据）：",
         ...proposedArtifacts.map((artifact) => (
           `- ${artifact.relative_path}:1-${artifact.line_count || "?"} ` +
           `(semantics=${artifact.review_semantics || "plan_draft"}, ` +
@@ -918,11 +921,14 @@ function compactCodeBlock(language, code, blockIndex, artifact = null) {
 function compactPlanForReview(plan, options = {}) {
   const lineThreshold = options.lineThreshold || COMPACT_CODE_BLOCK_LINE_THRESHOLD;
   const charThreshold = options.charThreshold || COMPACT_CODE_BLOCK_CHAR_THRESHOLD;
+  const originalPlan = String(plan);
   let codeBlocks = 0;
   let compactedBlocks = 0;
   let preservedBlocks = 0;
+  let implementationDetailChars = 0;
+  let implementationDetailLines = 0;
   const artifacts = [];
-  const compacted = String(plan).replace(
+  const compacted = originalPlan.replace(
     /```([^\n`]*)\n([\s\S]*?)```/g,
     (match, rawLanguage, code) => {
       codeBlocks += 1;
@@ -936,31 +942,50 @@ function compactPlanForReview(plan, options = {}) {
         return match;
       }
       compactedBlocks += 1;
+      implementationDetailChars += code.length;
+      implementationDetailLines += lineCount;
       const artifact = proposedArtifactForCodeBlock(language, code, codeBlocks);
       artifacts.push(artifact);
       return compactCodeBlock(language, code, codeBlocks, artifact);
     }
   );
+  const implementationDetailRatio = originalPlan.length
+    ? Number((implementationDetailChars / originalPlan.length).toFixed(4))
+    : 0;
+  const originalLineCount = originalPlan.split("\n").length;
+  const planBloatWarning =
+    codeBlocks >= 6 ||
+    compactedBlocks >= 3 ||
+    implementationDetailChars >= 6000 ||
+    implementationDetailRatio >= 0.25 ||
+    originalLineCount >= 800;
   const header = compactedBlocks > 0
     ? [
-      "> 审查输入说明：为降低评审耗时，长代码块已拆分为 `proposed-code/` artifact，并在主计划中保留 `pseudo` 摘要。",
-      "> 原始计划仍保存在 run 的 `request.json`；Reviewer 应关注契约、流程、测试意图和风险。",
-      "> 自动拆出的 artifact 默认是 plan_draft / not_compile_target：它是计划草案证据，不是最终提交代码。",
-      "> 涉及 import、类型归属、控制流、测试断言等精确代码事实时，必须读取对应 `proposed-code/...` artifact，不得只根据 pseudo 摘要判断。",
-      "> 仅由草案不完整造成的缺 import、缺局部类型导出、stub 函数体或示例变量未声明，不得单独升级为 blocker；只有当该缺口使主计划的需求、契约、控制流或验收无法唯一执行时才报告为计划问题。",
+      "> 审查输入说明：长代码块已压缩为非权威摘要，原始计划仍保存在 run 的 `request.json`。",
+      "> 计划应做到决策完备，而不是实现完备。未来代码示例不能作为现有工程事实或最终实现承诺。",
+      "> 自动抽取的 `proposed-code/` artifact 只是 legacy 传输兼容机制，不是推荐的 Plan 结构，也不表示代码应原样实现。",
+      "> Reviewer 不得要求补全 import、props、函数体、JSX、mock 或测试源码；只审查业务、架构、公共契约、失败语义和阻塞决策。",
+      planBloatWarning
+        ? "> 计划膨胀提示：实现细节占比较高。仅当其淹没关键决策、引入未经确认的实现假设或造成契约矛盾时，才报告 plan_bloat。"
+        : null,
       ""
-    ].join("\n")
+    ].filter(Boolean).join("\n")
     : "";
   const text = `${header}${compacted}`;
   return {
     text,
     stats: {
-      original_chars: String(plan).length,
+      original_chars: originalPlan.length,
       compacted_chars: text.length,
-      saved_chars: String(plan).length - text.length,
+      saved_chars: originalPlan.length - text.length,
+      original_lines: originalLineCount,
       code_blocks: codeBlocks,
       compacted_blocks: compactedBlocks,
       preserved_blocks: preservedBlocks,
+      implementation_detail_chars: implementationDetailChars,
+      implementation_detail_lines: implementationDetailLines,
+      implementation_detail_ratio: implementationDetailRatio,
+      plan_bloat_warning: planBloatWarning,
       proposed_artifact_count: artifacts.length,
       proposed_artifact_chars: artifacts.reduce((sum, artifact) => sum + artifact.char_count, 0)
     },
@@ -972,15 +997,14 @@ const ACCESS_NOTES = {
   reviewer: [
     "你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。",
     "涉及已存在代码的工程事实，evidence 必须包含现有工程文件的相对路径和行号。",
-    "涉及计划准备新增或大段修改的代码事实，evidence 必须读取并引用 `proposed-code/...` artifact 的相对路径和行号；不要只引用 pseudo 摘要。",
-    "`proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，它是计划草案证据，不是最终提交代码；缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不能单独作为 blocker。",
+    "计划中的未来代码、伪代码和示例不是现有工程事实，也不是最终实现承诺；不要审查其源码完整性。",
+    "判断标准是实现者能否在不重新做关键业务或架构决策的前提下开始编码，不是能否机械复制计划中的代码。",
     "找不到证据时放入 missing_questions。"
   ],
   fact_check: [
     "你只能使用 Read 读取 Reviewer evidence 明确引用的相对文件；不要使用 Glob/Grep 搜索新证据，不要发现新问题。",
     "Reviewer 未提供可定位文件、行号或片段时，将对应 claim 标记为 unverifiable 或 unsupported。",
-    "新增/拟修改代码的精确事实必须由 `proposed-code/...` artifact 支持；pseudo 摘要不能替代源码证据。",
-    "`proposed-code/...` 若标注为 `semantics=plan_draft` 或 `expected=not_compile_target`，只能证明草案内容，不能自动证明最终代码会原样提交；草案完整性事实成立时也要单独判断 blocker/修订因果是否成立。"
+    "未来代码、伪代码和示例只能证明计划文本写了什么，不能证明现有工程事实或最终实现；源码草案不完整不能单独支持 blocker。"
   ],
   synthesis: [
     "本角色不得读取工程目录，也不会获得工程读取工具；只能基于待评审计划、Reviewer 意见和 Fact Check 报告合成结论。",
@@ -1115,11 +1139,22 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}
   }
   const tools = options.tools === undefined ? "Read,Glob,Grep" : options.tools;
   const allowProjectRead = options.allowProjectRead !== false;
-  const systemPrompt = options.systemPrompt || (
+  const validatorLogFile = options.validatorLogFile;
+  if (!validatorLogFile) {
+    throw new Error(`Missing validator log file for workspace role "${role}"`);
+  }
+  const schemaFile = workspaceSchemaForRole(role);
+  const rolePrompt = options.systemPrompt || (
     allowProjectRead
       ? "You are a non-interactive plan review agent. Inspect only the provided project directory. Never modify files or execute shell commands. Return only one raw JSON object that conforms to the provided schema; no prose before or after JSON."
       : "You are a non-interactive plan review synthesis agent. Do not inspect project files, modify files, or execute shell commands. Return only one raw JSON object that conforms to the provided schema; no prose before or after JSON."
   );
+  const systemPrompt = [
+    rolePrompt,
+    "Before the final answer, call mcp__json_validator__validate_json_output with the exact raw JSON candidate.",
+    "If validation fails, correct the candidate and validate it again. Return the validated raw JSON only."
+  ].join(" ");
+  const allowedTools = [tools, JSON_VALIDATOR_TOOL].filter(Boolean).join(",");
   const args = [
     "--settings",
     modelConfig.settings_file,
@@ -1131,7 +1166,26 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}
     "--tools",
     tools,
     "--allowed-tools",
-    tools,
+    allowedTools,
+    "--mcp-config",
+    JSON.stringify({
+      mcpServers: {
+        json_validator: {
+          type: "stdio",
+          command: process.execPath,
+          args: [path.join(ROOT, "scripts", "json-validator-mcp.js")],
+          env: {
+            MODEL_ROLE_CALIBRATION_SCHEMA_FILE: schemaFile,
+            MODEL_ROLE_CALIBRATION_VALIDATOR_LOG: validatorLogFile,
+            MODEL_ROLE_CALIBRATION_ATTEMPT: options.attemptLabel || `workspace-${role}`,
+            MODEL_ROLE_CALIBRATION_MODEL: model,
+            MODEL_ROLE_CALIBRATION_PROBE: role
+          },
+          alwaysLoad: true,
+          timeout: 10000
+        }
+      }
+    }),
     "--no-chrome",
     "--permission-mode",
     "dontAsk",
@@ -1142,7 +1196,7 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options = {}
     "--output-format",
     "stream-json",
     "--json-schema",
-    JSON.stringify(parseJsonFile(workspaceSchemaForRole(role))),
+    JSON.stringify(parseJsonFile(schemaFile)),
     "--max-turns",
     String(config.execution.max_turns)
   ];
@@ -1227,6 +1281,8 @@ module.exports = {
   REVIEW_ROLES,
   FACT_CHECK_ROLE,
   SYNTHESIS_ROLE,
+  JSON_VALIDATOR_TOOL,
+  MAX_EXECUTOR_RETRIES,
   WORKSPACE_ROLES,
   REQUIRED_ROLES,
   DEFAULT_MODEL_FILES,
@@ -1248,6 +1304,7 @@ module.exports = {
   createPlanReferenceManifest,
   workspaceReviewInput,
   buildWorkspacePrompt,
+  workspaceSchemaForRole,
   buildClaudeWorkspaceArgs,
   runDirectory,
   executionLogPath,

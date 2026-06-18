@@ -14,9 +14,13 @@ const {
   parseAssistantOutput,
   runCommand
 } = require("./run-model");
+const { validateJsonText } = require("./json-validator-mcp");
+const { lintPlan } = require("./plan-authoring-lint");
 const {
   REVIEW_ROLES,
   FACT_CHECK_ROLE,
+  JSON_VALIDATOR_TOOL,
+  MAX_EXECUTOR_RETRIES,
   loadWorkspaceReviewFromArgs,
   validateProjectRoot,
   buildRoleReadScope,
@@ -25,6 +29,7 @@ const {
   compactPlanForReview,
   createPlanReferenceManifest,
   buildWorkspacePrompt,
+  workspaceSchemaForRole,
   buildClaudeWorkspaceArgs,
   appendExecutionLog,
   updateState,
@@ -40,6 +45,112 @@ const SOURCE_NAME_BY_ROLE = {
 
 function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+function validateSynthesisSemantics(output, factCheckOutput) {
+  const findings = Array.isArray(output?.source_findings) ? output.source_findings : [];
+  const byId = new Map();
+  const bySourceTitle = new Map();
+  for (const finding of findings) {
+    if (byId.has(finding.id)) {
+      throw new Error(`Synthesis semantic validation failed: duplicate source finding id ${finding.id}`);
+    }
+    byId.set(finding.id, finding);
+    bySourceTitle.set(`${finding.source}\u0000${finding.source_title}`, finding);
+  }
+
+  const checkedIssues = Array.isArray(factCheckOutput?.checked_issues)
+    ? factCheckOutput.checked_issues
+    : [];
+  for (const checked of checkedIssues) {
+    const key = `${checked.source}\u0000${checked.issue_title}`;
+    const finding = bySourceTitle.get(key);
+    if (!finding) {
+      throw new Error(
+        `Synthesis semantic validation failed: missing source finding for ${checked.source}/${checked.issue_title}`
+      );
+    }
+    if (finding.fact_check_status !== checked.status) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} fact_check_status ` +
+        `${finding.fact_check_status} != ${checked.status}`
+      );
+    }
+    if (finding.scope_status !== checked.scope_status) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} scope_status ` +
+        `${finding.scope_status} != ${checked.scope_status}`
+      );
+    }
+    const requiredDisposition = checked.scope_status === "out_of_scope"
+      ? "out_of_scope"
+      : ["unsupported", "contradicted", "unverifiable"].includes(checked.status)
+        ? checked.status
+        : null;
+    if (requiredDisposition && finding.disposition !== requiredDisposition) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} must use disposition ${requiredDisposition}`
+      );
+    }
+  }
+
+  const referencedIds = (items, field = "source_finding_ids") => (
+    (Array.isArray(items) ? items : []).flatMap((item) => item?.[field] || [])
+  );
+  const activeIds = [
+    ...referencedIds(output.consensus_issues),
+    ...referencedIds(output.disagreements),
+    ...referencedIds(output.revision_instructions)
+  ];
+  const excludedDispositions = new Set([
+    "duplicate",
+    "unsupported",
+    "contradicted",
+    "unverifiable",
+    "out_of_scope"
+  ]);
+  for (const id of [
+    ...activeIds,
+    ...referencedIds(output.likely_false_positives)
+  ]) {
+    if (!byId.has(id)) {
+      throw new Error(`Synthesis semantic validation failed: unknown source finding id ${id}`);
+    }
+  }
+  for (const id of activeIds) {
+    const finding = byId.get(id);
+    if (excludedDispositions.has(finding.disposition)) {
+      throw new Error(
+        `Synthesis semantic validation failed: excluded finding ${id} re-entered active conclusions`
+      );
+    }
+  }
+  for (const disagreement of output.disagreements || []) {
+    const shouldNeedHuman = disagreement.level === "L3_direction_decision";
+    if (disagreement.needs_human_decision !== shouldNeedHuman) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${disagreement.title} needs_human_decision ` +
+        `must be ${shouldNeedHuman} for ${disagreement.level}`
+      );
+    }
+  }
+}
+
+function validateWorkspaceOutput(role, output, context = {}) {
+  const validation = validateJsonText(
+    JSON.stringify(output),
+    parseJsonFile(workspaceSchemaForRole(role))
+  );
+  if (!validation.valid) {
+    const details = (validation.errors || [])
+      .slice(0, 5)
+      .map((item) => `${item.path}: ${item.message}`)
+      .join("; ");
+    throw new Error(`Schema validation failed for ${role}: ${details || validation.stage}`);
+  }
+  if (role === "synthesis") {
+    validateSynthesisSemantics(output, context.factCheckOutput);
+  }
 }
 
 function materializeProposedArtifacts(runDir, artifacts = []) {
@@ -78,6 +189,7 @@ function countBy(items, key) {
 function summarizeFactCheckOutput(output) {
   const checkedIssues = Array.isArray(output?.checked_issues) ? output.checked_issues : [];
   const statusCounts = countBy(checkedIssues, "status");
+  const scopeStatusCounts = countBy(checkedIssues, "scope_status");
   const evidenceStatusCounts = countBy(checkedIssues, "evidence_status");
   const claimSupportCounts = countBy(checkedIssues, "claim_support");
   const total = checkedIssues.length;
@@ -91,6 +203,7 @@ function summarizeFactCheckOutput(output) {
   return {
     total_checked: total,
     status_counts: statusCounts,
+    scope_status_counts: scopeStatusCounts,
     evidence_status_counts: evidenceStatusCounts,
     claim_support_counts: claimSupportCounts,
     verified_ratio: total ? Number((verified / total).toFixed(4)) : null,
@@ -104,7 +217,13 @@ function summarizeFactCheckOutput(output) {
   };
 }
 
-function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors) {
+function summarizeReviewOutcome(
+  reviewerResults,
+  factCheck,
+  synthesis,
+  infraErrors,
+  authoringLint = null
+) {
   const reviewerIssueCount = reviewerResults.reduce((sum, item) => (
     sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0)
   ), 0);
@@ -119,6 +238,29 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
     : 0;
   const factChecked = factCheck.summary?.total_checked || 0;
   const challenged = factCheck.summary?.challenged_count || 0;
+  const authoringErrorCount = Array.isArray(authoringLint?.errors)
+    ? authoringLint.errors.length
+    : 0;
+  const authoringWarningCount = Array.isArray(authoringLint?.warnings)
+    ? authoringLint.warnings.length
+    : 0;
+  if (authoringErrorCount > 0) {
+    return {
+      status: "needs_revision",
+      message: infraErrors.length
+        ? "Plan 结构检查存在错误，且审查存在基础设施错误；必须先修订计划，当前结果也不是全角色完整审查。"
+        : "Plan 结构检查存在错误；必须先修订计划再执行。",
+      reviewer_issue_count: reviewerIssueCount,
+      consensus_issue_count: consensusCount,
+      disagreement_count: disagreementCount,
+      revision_instruction_count: revisionCount,
+      fact_checked_issue_count: factChecked,
+      fact_check_challenged_count: challenged,
+      authoring_lint_error_count: authoringErrorCount,
+      authoring_lint_warning_count: authoringWarningCount,
+      infra_error_count: infraErrors.length
+    };
+  }
   if (infraErrors.length) {
     return {
       status: "review_completed_with_infra_errors",
@@ -129,6 +271,8 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
       revision_instruction_count: revisionCount,
       fact_checked_issue_count: factChecked,
       fact_check_challenged_count: challenged,
+      authoring_lint_error_count: authoringErrorCount,
+      authoring_lint_warning_count: authoringWarningCount,
       infra_error_count: infraErrors.length
     };
   }
@@ -142,6 +286,8 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
       revision_instruction_count: revisionCount,
       fact_checked_issue_count: factChecked,
       fact_check_challenged_count: challenged,
+      authoring_lint_error_count: authoringErrorCount,
+      authoring_lint_warning_count: authoringWarningCount,
       infra_error_count: 0
     };
   }
@@ -154,6 +300,8 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
     revision_instruction_count: revisionCount,
     fact_checked_issue_count: factChecked,
     fact_check_challenged_count: challenged,
+    authoring_lint_error_count: authoringErrorCount,
+    authoring_lint_warning_count: authoringWarningCount,
     infra_error_count: 0
   };
 }
@@ -165,47 +313,52 @@ function readJsonIfExists(file) {
   return parseJsonFile(file);
 }
 
-function loadCompletedReviewerResults(runDir, roles) {
+function completedReviewerResult(runDir, role) {
+  const roleDir = path.join(runDir, "roles", role);
+  const outputFile = path.join(roleDir, "output.json");
+  const metadataFile = path.join(roleDir, "metadata.json");
+  if (!fs.existsSync(outputFile) || !fs.existsSync(metadataFile)) {
+    return null;
+  }
+  const metadata = parseJsonFile(metadataFile);
+  if (metadata.status !== "completed") {
+    return null;
+  }
+  return {
+    role,
+    model: metadata.model,
+    output: parseJsonFile(outputFile),
+    output_file: path.relative(runDir, outputFile)
+  };
+}
+
+function loadCompletedReviewerResults(runDir, roles, retryStage = "synthesis") {
   return roles.map((role) => {
-    const roleDir = path.join(runDir, "roles", role);
-    const outputFile = path.join(roleDir, "output.json");
-    const metadataFile = path.join(roleDir, "metadata.json");
-    if (!fs.existsSync(outputFile)) {
-      throw new Error(`Cannot retry synthesis: missing ${role} output: ${outputFile}`);
+    const result = completedReviewerResult(runDir, role);
+    if (!result) {
+      throw new Error(`Cannot retry ${retryStage}: reviewer ${role} is not completed`);
     }
-    if (!fs.existsSync(metadataFile)) {
-      throw new Error(`Cannot retry synthesis: missing ${role} metadata: ${metadataFile}`);
-    }
-    const metadata = parseJsonFile(metadataFile);
-    if (metadata.status !== "completed") {
-      throw new Error(`Cannot retry synthesis: ${role} status is ${metadata.status || "unknown"}`);
-    }
-    return {
-      role,
-      model: metadata.model,
-      output: parseJsonFile(outputFile),
-      output_file: path.relative(runDir, outputFile)
-    };
+    return result;
   });
 }
 
-function loadCompletedFactCheckResult(runDir) {
+function loadCompletedFactCheckResult(runDir, retryStage = "synthesis") {
   const roleDir = path.join(runDir, "roles", FACT_CHECK_ROLE);
   const outputFile = path.join(roleDir, "output.json");
   const summaryFile = path.join(roleDir, "fact-check-summary.json");
   const metadataFile = path.join(roleDir, "metadata.json");
   if (!fs.existsSync(outputFile)) {
-    throw new Error(`Cannot retry synthesis: missing fact_check output: ${outputFile}`);
+    throw new Error(`Cannot retry ${retryStage}: missing fact_check output: ${outputFile}`);
   }
   if (!fs.existsSync(summaryFile)) {
-    throw new Error(`Cannot retry synthesis: missing fact_check summary: ${summaryFile}`);
+    throw new Error(`Cannot retry ${retryStage}: missing fact_check summary: ${summaryFile}`);
   }
   if (!fs.existsSync(metadataFile)) {
-    throw new Error(`Cannot retry synthesis: missing fact_check metadata: ${metadataFile}`);
+    throw new Error(`Cannot retry ${retryStage}: missing fact_check metadata: ${metadataFile}`);
   }
   const metadata = parseJsonFile(metadataFile);
   if (metadata.status !== "completed") {
-    throw new Error(`Cannot retry synthesis: fact_check status is ${metadata.status || "unknown"}`);
+    throw new Error(`Cannot retry ${retryStage}: fact_check status is ${metadata.status || "unknown"}`);
   }
   return {
     role: FACT_CHECK_ROLE,
@@ -233,6 +386,14 @@ function loadRequestForRun(config, runDir) {
     ? proposedManifest.artifacts
     : [];
   request.review_plan_refs = readJsonIfExists(path.join(runDir, "review-plan-refs.json")) || null;
+  request.authoring_lint = readJsonIfExists(path.join(runDir, "plan-authoring-lint.json"));
+  if (!request.authoring_lint) {
+    request.authoring_lint = lintPlan({
+      plan: request.plan,
+      projectRoot: request.project_root
+    });
+    writeJson(path.join(runDir, "plan-authoring-lint.json"), request.authoring_lint);
+  }
   const roles = Array.isArray(request.roles) && request.roles.length
     ? request.roles
     : REVIEW_ROLES;
@@ -257,12 +418,19 @@ function loadRequestForRun(config, runDir) {
 }
 
 function writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synthesis, infraErrors = []) {
-  const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors);
+  const outcome = summarizeReviewOutcome(
+    reviewerResults,
+    factCheck,
+    synthesis,
+    infraErrors,
+    request.authoring_lint
+  );
   const report = {
     run_id: request.run_id,
     project_root: request.project_root,
     created_at: new Date().toISOString(),
     plan_compaction: request.plan_compaction,
+    authoring_lint: request.authoring_lint,
     outcome,
     reviewers: Object.fromEntries(reviewerResults.map((item) => [
       item.role,
@@ -390,8 +558,11 @@ async function runRole(config, request, role, runDir) {
     readBoundary.boundary
   );
   const promptFile = path.join(roleDir, "prompt.md");
+  const validatorLogFile = path.join(roleDir, "validator.log");
   writeGenerated(promptFile, prompt);
-  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot);
+  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot, {
+    validatorLogFile
+  });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-role-"));
   const startedAt = new Date().toISOString();
   appendExecutionLog(runDir, "agent_started", {
@@ -407,7 +578,7 @@ async function runRole(config, request, role, runDir) {
       timeoutMs: config.execution.timeout_ms,
       killSignal: "SIGKILL",
       maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile: null
+      validatorLogFile
     });
   } catch (error) {
     appendExecutionLog(runDir, "agent_failed", {
@@ -435,6 +606,10 @@ async function runRole(config, request, role, runDir) {
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
     allowed_tools: ["Read", "Glob", "Grep"],
+    json_validator_enabled: true,
+    validator_tool: JSON_VALIDATOR_TOOL,
+    validator_log_file: path.relative(runDir, validatorLogFile),
+    schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
     project_root: request.project_root,
     read_boundary: {
       mode: readBoundary.boundary.mode,
@@ -463,6 +638,7 @@ async function runRole(config, request, role, runDir) {
   let parsed;
   try {
     parsed = parseAssistantOutput(child.stdout, role);
+    validateWorkspaceOutput(role, parsed.output);
   } catch (error) {
     writeGenerated(path.join(roleDir, "output.invalid.txt"), extractFinalOutputText(child.stdout));
     appendExecutionLog(runDir, "agent_invalid_output", {
@@ -528,14 +704,17 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     readBoundary.boundary
   );
   const promptFile = path.join(roleDir, "prompt.md");
+  const validatorLogFile = path.join(roleDir, "validator.log");
   writeGenerated(promptFile, prompt);
   const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot, {
     tools: "Read",
     allowProjectRead: true,
+    validatorLogFile,
     systemPrompt: [
       "You are a non-interactive evidence verification agent.",
       "Read only files explicitly cited by reviewer evidence.",
-      "Never search for new issues, modify files, or execute shell commands."
+      "Never search for new issues, modify files, or execute shell commands.",
+      "Return only one raw JSON object that conforms to the provided schema."
     ].join(" ")
   });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-fact-check-"));
@@ -554,7 +733,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
       timeoutMs: config.execution.timeout_ms,
       killSignal: "SIGKILL",
       maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile: null
+      validatorLogFile
     });
   } catch (error) {
     appendExecutionLog(runDir, "fact_check_failed", {
@@ -582,6 +761,10 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
     allowed_tools: ["Read"],
+    json_validator_enabled: true,
+    validator_tool: JSON_VALIDATOR_TOOL,
+    validator_log_file: path.relative(runDir, validatorLogFile),
+    schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
     project_root: request.project_root,
     read_boundary: {
       mode: readBoundary.boundary.mode,
@@ -610,6 +793,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
   let parsed;
   try {
     parsed = parseAssistantOutput(child.stdout, role);
+    validateWorkspaceOutput(role, parsed.output);
   } catch (error) {
     appendExecutionLog(runDir, "fact_check_invalid_output", {
       role,
@@ -711,10 +895,12 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
     factCheckResult.output
   );
   const promptFile = path.join(roleDir, "prompt.md");
+  const validatorLogFile = path.join(roleDir, "validator.log");
   writeGenerated(promptFile, prompt);
   const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root, {
     tools: "",
-    allowProjectRead: false
+    allowProjectRead: false,
+    validatorLogFile
   });
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-synthesis-"));
   const startedAt = new Date().toISOString();
@@ -732,7 +918,7 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
       timeoutMs: config.execution.timeout_ms,
       killSignal: "SIGKILL",
       maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile: null
+      validatorLogFile
     });
   } catch (error) {
     appendExecutionLog(runDir, "synthesis_failed", {
@@ -759,6 +945,10 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
     prompt_file: path.relative(runDir, promptFile),
     settings_file: config.models[model].settings_file,
     allowed_tools: [],
+    json_validator_enabled: true,
+    validator_tool: JSON_VALIDATOR_TOOL,
+    validator_log_file: path.relative(runDir, validatorLogFile),
+    schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
     project_root: null
   };
   if (child.error || child.status !== 0) {
@@ -778,6 +968,9 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
   let parsed;
   try {
     parsed = parseAssistantOutput(child.stdout, role);
+    validateWorkspaceOutput(role, parsed.output, {
+      factCheckOutput: factCheckResult.output
+    });
   } catch (error) {
     appendExecutionLog(runDir, "synthesis_invalid_output", {
       role,
@@ -828,9 +1021,45 @@ function archiveRoleAttempt(runDir, role) {
   return path.relative(runDir, target);
 }
 
+function normalizedRetryCounts(state) {
+  const counts = {};
+  for (const role of [...REVIEW_ROLES, FACT_CHECK_ROLE, "synthesis"]) {
+    const value = Number(state.retry_counts?.[role] || 0);
+    counts[role] = Number.isInteger(value) && value >= 0 ? value : 0;
+  }
+  return counts;
+}
+
+function assertRetryAvailable(retryCounts, executors) {
+  const exhausted = [...new Set(executors)].filter(
+    (executor) => retryCounts[executor] >= MAX_EXECUTOR_RETRIES
+  );
+  if (exhausted.length) {
+    throw new Error(
+      `Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(", ")}`
+    );
+  }
+}
+
+function consumeExecutorRetries(runDir, retryCounts, executors) {
+  for (const executor of [...new Set(executors)]) {
+    retryCounts[executor] += 1;
+  }
+  updateState(runDir, {
+    retry_counts: retryCounts
+  });
+  appendExecutionLog(runDir, "executor_retries_consumed", {
+    executors: [...new Set(executors)],
+    retry_counts: retryCounts,
+    retry_limit: MAX_EXECUTOR_RETRIES
+  });
+}
+
 async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
-  if (stage !== "synthesis") {
-    throw new Error(`Unsupported retry stage: ${stage}. Currently only synthesis is supported.`);
+  if (!["reviewers", FACT_CHECK_ROLE, "synthesis"].includes(stage)) {
+    throw new Error(
+      `Unsupported retry stage: ${stage}. Expected reviewers, ${FACT_CHECK_ROLE}, or synthesis.`
+    );
   }
   const absoluteRunDir = path.resolve(runDir);
   const state = readJsonIfExists(path.join(absoluteRunDir, "state.json")) || {};
@@ -838,9 +1067,44 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
     throw new Error("Cannot retry while run status is running. Use force only if the previous process is known to be dead.");
   }
   const { request, roles } = loadRequestForRun(config, absoluteRunDir);
-  const reviewerResults = loadCompletedReviewerResults(absoluteRunDir, roles);
-  const factCheck = loadCompletedFactCheckResult(absoluteRunDir);
-  const archived = archiveRoleAttempt(absoluteRunDir, "synthesis");
+  const runRoleStage = options.runRole || runRole;
+  const runFactCheckStage = options.runFactCheck || runFactCheck;
+  const runSynthesisStage = options.runSynthesis || runSynthesis;
+  const completedReviewers = new Map(
+    roles
+      .map((role) => completedReviewerResult(absoluteRunDir, role))
+      .filter(Boolean)
+      .map((result) => [result.role, result])
+  );
+  const retryRoles = stage === "reviewers"
+    ? roles.filter((role) => !completedReviewers.has(role))
+    : [];
+  if (stage === "reviewers" && !retryRoles.length) {
+    throw new Error("Cannot retry reviewers: all requested reviewers are already completed");
+  }
+  if (stage !== "reviewers") {
+    loadCompletedReviewerResults(absoluteRunDir, roles, stage);
+  }
+  const retryCounts = normalizedRetryCounts(state);
+  const plannedExecutors = stage === "reviewers"
+    ? [...retryRoles, FACT_CHECK_ROLE, "synthesis"]
+    : stage === FACT_CHECK_ROLE
+      ? [FACT_CHECK_ROLE, "synthesis"]
+      : ["synthesis"];
+  assertRetryAvailable(retryCounts, plannedExecutors);
+
+  const archivedAttempts = {};
+  if (stage === "reviewers") {
+    for (const role of retryRoles) {
+      archivedAttempts[role] = archiveRoleAttempt(absoluteRunDir, role);
+    }
+  } else if (stage === FACT_CHECK_ROLE) {
+    archivedAttempts[FACT_CHECK_ROLE] = archiveRoleAttempt(absoluteRunDir, FACT_CHECK_ROLE);
+    archivedAttempts.synthesis = archiveRoleAttempt(absoluteRunDir, "synthesis");
+  } else {
+    archivedAttempts.synthesis = archiveRoleAttempt(absoluteRunDir, "synthesis");
+  }
+
   updateState(absoluteRunDir, {
     status: "running",
     pid: process.pid,
@@ -848,21 +1112,91 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
     retry_started_at: new Date().toISOString(),
     project_root: request.project_root,
     roles,
-    error: null
+    error: null,
+    report_file: null
   });
   appendExecutionLog(absoluteRunDir, "stage_retry_started", {
     stage,
-    archived_attempt: archived
+    retry_roles: retryRoles,
+    archived_attempts: archivedAttempts
   });
   try {
-    const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, absoluteRunDir);
+    let reviewerResults;
+    if (stage === "reviewers") {
+      consumeExecutorRetries(absoluteRunDir, retryCounts, retryRoles);
+      const settled = await runWithConcurrency(
+        retryRoles,
+        config.execution.max_concurrency,
+        async (role) => {
+          try {
+            return {
+              ok: true,
+              result: await runRoleStage(config, request, role, absoluteRunDir)
+            };
+          } catch (error) {
+            return {
+              ok: false,
+              role,
+              error
+            };
+          }
+        }
+      );
+      const failures = settled.filter((item) => !item.ok);
+      if (failures.length) {
+        throw new Error(
+          `Reviewer retry failed: ${failures.map((item) => `${item.role}: ${item.error.message}`).join("; ")}`
+        );
+      }
+      for (const item of settled) {
+        completedReviewers.set(item.result.role, item.result);
+      }
+      reviewerResults = roles.map((role) => completedReviewers.get(role));
+      archivedAttempts[FACT_CHECK_ROLE] = archiveRoleAttempt(absoluteRunDir, FACT_CHECK_ROLE);
+      archivedAttempts.synthesis = archiveRoleAttempt(absoluteRunDir, "synthesis");
+      appendExecutionLog(absoluteRunDir, "stage_retry_downstream_invalidated", {
+        stage,
+        archived_attempts: {
+          fact_check: archivedAttempts[FACT_CHECK_ROLE],
+          synthesis: archivedAttempts.synthesis
+        }
+      });
+    } else {
+      reviewerResults = loadCompletedReviewerResults(absoluteRunDir, roles, stage);
+    }
+
+    let factCheck;
+    if (stage === "synthesis") {
+      factCheck = loadCompletedFactCheckResult(absoluteRunDir, stage);
+    } else {
+      if (stage === FACT_CHECK_ROLE) {
+        consumeExecutorRetries(absoluteRunDir, retryCounts, [FACT_CHECK_ROLE]);
+      }
+      factCheck = await runFactCheckStage(
+        config,
+        request,
+        reviewerResults,
+        absoluteRunDir
+      );
+    }
+    if (stage === "synthesis" || stage === FACT_CHECK_ROLE) {
+      consumeExecutorRetries(absoluteRunDir, retryCounts, ["synthesis"]);
+    }
+    const synthesis = await runSynthesisStage(
+      config,
+      request,
+      reviewerResults,
+      factCheck,
+      absoluteRunDir
+    );
     writeWorkspaceReport(absoluteRunDir, request, reviewerResults, factCheck, synthesis, []);
     updateState(absoluteRunDir, {
       status: "completed",
       finished_at: new Date().toISOString(),
       report_file: "report.json",
       error: null,
-      retry_stage: null
+      retry_stage: null,
+      infra_errors: []
     });
     appendExecutionLog(absoluteRunDir, "stage_retry_completed", {
       stage
@@ -876,7 +1210,11 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
       run_id: request.run_id,
       stage,
       status: "completed",
-      archived_attempt: archived,
+      retried_reviewers: retryRoles,
+      retry_counts: retryCounts,
+      retry_limit: MAX_EXECUTOR_RETRIES,
+      archived_attempt: archivedAttempts[stage] || null,
+      archived_attempts: archivedAttempts,
       report_file: path.join(absoluteRunDir, "report.json")
     };
   } catch (error) {
@@ -945,6 +1283,12 @@ async function main() {
     max_concurrency: config.execution.max_concurrency
   });
   appendExecutionLog(runDir, "plan_compacted", request.plan_compaction);
+  appendExecutionLog(runDir, "plan_authoring_linted", {
+    errors: request.authoring_lint.errors.length,
+    warnings: request.authoring_lint.warnings.length,
+    complexity: request.authoring_lint.complexity.level,
+    total_lines: request.authoring_lint.metrics.total_lines
+  });
   appendExecutionLog(runDir, "proposed_artifacts_prepared", {
     artifacts: request.proposed_artifacts.length
   });
@@ -995,7 +1339,12 @@ module.exports = {
   summarizeReviewOutcome,
   runSynthesis,
   retryWorkspaceReviewStage,
+  completedReviewerResult,
+  normalizedRetryCounts,
+  assertRetryAvailable,
   loadCompletedReviewerResults,
   loadCompletedFactCheckResult,
-  writeWorkspaceReport
+  writeWorkspaceReport,
+  validateWorkspaceOutput,
+  validateSynthesisSemantics
 };

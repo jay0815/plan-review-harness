@@ -116,7 +116,143 @@ function parseOutputValue(value) {
   return parseJsonEnvelope(result);
 }
 
-function parseArrayEnvelope(envelope) {
+function findOutputCandidate(value, probe) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    let fallback = null;
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+      const candidate = findOutputCandidate(value[index], probe);
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.matched) {
+        return candidate;
+      }
+      fallback ||= candidate;
+    }
+    return fallback;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, "probe")) {
+    return {
+      output: value,
+      matched: value.probe === probe
+    };
+  }
+  if (value.structured_output && typeof value.structured_output === "object") {
+    return findOutputCandidate(value.structured_output, probe) || {
+      output: value.structured_output,
+      matched: false
+    };
+  }
+  if (value.result !== undefined) {
+    const parsedResult = parseOutputValue(value.result);
+    const candidate = findOutputCandidate(parsedResult, probe);
+    if (candidate) {
+      return candidate;
+    }
+    if (parsedResult && typeof parsedResult === "object") {
+      return {
+        output: parsedResult,
+        matched: false
+      };
+    }
+  }
+  const content = value.message?.content;
+  if (Array.isArray(content)) {
+    let fallback = null;
+    for (let index = content.length - 1; index >= 0; index -= 1) {
+      const block = content[index];
+      if (block?.type !== "text" || typeof block.text !== "string") {
+        continue;
+      }
+      try {
+        const parsedText = parseOutputValue(block.text);
+        const candidate = findOutputCandidate(parsedText, probe);
+        if (candidate?.matched) {
+          return candidate;
+        }
+        fallback ||= candidate;
+      } catch {
+        // Continue to earlier text blocks.
+      }
+    }
+    return fallback;
+  }
+  return null;
+}
+
+function parseToolResultBlock(block) {
+  if (!block || block.type !== "tool_result" || !block.tool_use_id) {
+    return null;
+  }
+  const content = Array.isArray(block.content)
+    ? block.content.map((item) => typeof item?.text === "string" ? item.text : "").join("\n")
+    : String(block.content || "");
+  if (!content.trim()) {
+    return null;
+  }
+  try {
+    return {
+      toolUseId: block.tool_use_id,
+      result: parseJsonEnvelope(content)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function validatedToolUseIds(envelope) {
+  const ids = new Set();
+  for (const item of envelope) {
+    const content = item?.message?.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      const parsed = parseToolResultBlock(block);
+      if (parsed?.result?.valid === true) {
+        ids.add(parsed.toolUseId);
+      }
+    }
+  }
+  return ids;
+}
+
+function findValidatedToolCandidate(envelope, probe) {
+  const validIds = validatedToolUseIds(envelope);
+  if (!validIds.size) {
+    return null;
+  }
+  for (let itemIndex = envelope.length - 1; itemIndex >= 0; itemIndex -= 1) {
+    const content = envelope[itemIndex]?.message?.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (let blockIndex = content.length - 1; blockIndex >= 0; blockIndex -= 1) {
+      const block = content[blockIndex];
+      if (
+        block?.type !== "tool_use" ||
+        block.name !== "mcp__json_validator__validate_json_output" ||
+        !validIds.has(block.id) ||
+        typeof block.input?.candidate_text !== "string"
+      ) {
+        continue;
+      }
+      const parsed = parseOutputValue(block.input.candidate_text);
+      const candidate = findOutputCandidate(parsed, probe);
+      if (candidate?.matched) {
+        return candidate.output;
+      }
+    }
+  }
+  return null;
+}
+
+function parseArrayEnvelope(envelope, probe) {
+  let fallback = null;
+  let parseError = null;
   for (let index = envelope.length - 1; index >= 0; index -= 1) {
     const item = envelope[index];
     if (!item || typeof item !== "object") {
@@ -125,27 +261,27 @@ function parseArrayEnvelope(envelope) {
     if (item.type === "result" && item.is_error) {
       throw new Error(`Claude Code result is_error: ${item.result || item.error || "unknown"}`);
     }
-    if (item.structured_output && typeof item.structured_output === "object") {
-      return item.structured_output;
+    let candidate = null;
+    try {
+      candidate = findOutputCandidate(item, probe);
+    } catch (error) {
+      parseError ||= error;
+      continue;
     }
-    const resultOutput = parseOutputValue(item.result);
-    if (resultOutput) {
-      return resultOutput;
+    if (candidate?.matched) {
+      return candidate.output;
     }
-    const content = item.message?.content;
-    if (Array.isArray(content)) {
-      for (let contentIndex = content.length - 1; contentIndex >= 0; contentIndex -= 1) {
-        const block = content[contentIndex];
-        if (block?.type !== "text" || typeof block.text !== "string") {
-          continue;
-        }
-        try {
-          return parseOutputValue(block.text);
-        } catch {
-          // Continue to earlier text blocks.
-        }
-      }
-    }
+    fallback ||= candidate?.output || null;
+  }
+  const validatedCandidate = findValidatedToolCandidate(envelope, probe);
+  if (validatedCandidate) {
+    return validatedCandidate;
+  }
+  if (fallback) {
+    return fallback;
+  }
+  if (parseError) {
+    throw parseError;
   }
   return null;
 }
@@ -155,7 +291,7 @@ function parseAssistantOutput(stdout, probe) {
   let output;
 
   if (Array.isArray(envelope)) {
-    output = parseArrayEnvelope(envelope);
+    output = parseArrayEnvelope(envelope, probe);
   } else if (envelope?.type === "result" && envelope.is_error) {
     throw new Error(`Claude Code result is_error: ${envelope.result || envelope.error || "unknown"}`);
   } else if (envelope && typeof envelope === "object" && envelope.probe) {
@@ -163,9 +299,10 @@ function parseAssistantOutput(stdout, probe) {
   } else if (envelope && typeof envelope.structured_output === "object") {
     output = envelope.structured_output;
   } else if (envelope && typeof envelope.result === "object") {
-    output = envelope.result;
+    output = findOutputCandidate(envelope.result, probe)?.output || envelope.result;
   } else if (envelope && typeof envelope.result === "string") {
-    output = parseOutputValue(envelope.result);
+    const parsedResult = parseOutputValue(envelope.result);
+    output = findOutputCandidate(parsedResult, probe)?.output || parsedResult;
   } else {
     throw new Error("Claude Code JSON output does not contain result or structured_output");
   }

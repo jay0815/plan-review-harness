@@ -16,6 +16,28 @@ npm run plan-review:package
 
 Workspace Plan Review 的执行顺序是四个 Reviewer 并发审查，随后由
 Fact Check 校验 Reviewer evidence，最后由 Synthesizer 在不读取工程目录的情况下合成结论。
+调用模型前会先执行本地确定性 Plan 结构检查，结果写入：
+
+```text
+runs/<run-id>/plan-authoring-lint.json
+```
+
+统一完成标准是：实现者可以在不重新做关键业务、架构或公共契约决策的情况下开始编码。
+计划不需要提供可直接复制的完整实现。结构检查 error 会使最终 outcome 至少为
+`needs_revision`；warning 只展示，不自动阻塞。
+三个阶段都把 JSON 作为阶段间契约：每个角色会加载对应 schema，调用
+`mcp__json_validator__validate_json_output` 自检，并写入独立的
+`roles/<role>/validator.log`。runner 接收输出后还会再次执行同一 schema 校验；
+validator 不替代最终拒收边界。
+
+Workspace Plan Review 支持按阶段断点重试：
+
+- `reviewers` 只重跑失败或缺失的 Reviewer，然后继续下游。
+- `fact_check` 复用全部 Reviewer，重跑 Fact Check 和 Synthesis。
+- `synthesis` 复用 Reviewer 与 Fact Check，只重跑 Synthesis。
+
+每个 Reviewer、Fact Check、Synthesis executor 最多重试 3 次；计数保存在 run 的
+`state.json.retry_counts`，达到上限后会在调用模型前拒绝。
 
 Fact Checker 的模型选择使用独立校准流程。该流程只比较事实校验能力，不让候选模型重新发现问题或合成结论。当前 `role-calibration-v3` 校准推荐默认 Fact Checker 使用 `glm`。
 
@@ -82,6 +104,16 @@ rubric.md
 旧 case 的 `input.md + context.md` 格式继续兼容。
 
 ## 命令速查
+
+本地检查任意 Plan：
+
+```bash
+npm run plan-review:lint-plan -- \
+  --plan /absolute/path/to/plan.md \
+  --project-root /absolute/path/to/project
+```
+
+输出包含复杂度、篇幅预算、代码块指标、Existing Code Refs 校验结果以及 errors/warnings。
 
 创建 case：
 
@@ -245,7 +277,13 @@ node model-role-calibration/scripts/run-calibration.js \
   --probes planner,risk,architecture,execution,rebuttal,synthesis
 ```
 
-该命令会生成 prompt 并启动三并发模型池。四个模型在同一 role 下读取同一份 `probe-<role>.md`，不得添加模型专属提示。
+该命令通过通用 calibration runner 生成 prompt，并由 `RoleCalibrationExecutor` 启动默认三并发任务。四个模型在同一 role 下读取同一份 `probe-<role>.md`，不得添加模型专属提示。当前批次写入：
+
+```text
+model-role-calibration/runs/<run-id>/batch.json
+```
+
+重跑相同参数时，已存在成功结果的 job 会标记为 `skipped`，失败 job 继续由 `run-model.js` 创建下一个 attempt。
 
 生成 prompt：
 
@@ -303,19 +341,20 @@ node model-role-calibration/scripts/score-output.js \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
-  --probe planner
+  --probe planner \
+  --score-version manual-v1
 ```
 
 手工填写生成的评分文件：
 
 ```text
-model-role-calibration/runs/<run-id>/<case-id>/scores/<model>-<probe>.score.json
+model-role-calibration/runs/<run-id>/<case-id>/scores/versions/manual-v1/<model>-<probe>.score.json
 ```
 
 汇总一次 run：
 
 ```bash
-node model-role-calibration/scripts/summarize-results.js --run <run-id>
+node model-role-calibration/scripts/summarize-results.js --run <run-id> --score-version manual-v1
 ```
 
 生成报告：
@@ -540,13 +579,14 @@ node model-role-calibration/scripts/score-output.js \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
-  --probe planner
+  --probe planner \
+  --score-version manual-v1
 ```
 
 填写这个文件：
 
 ```text
-model-role-calibration/runs/<run-id>/synthetic/event-reporting/scores/kimi-planner.score.json
+model-role-calibration/runs/<run-id>/synthetic/event-reporting/scores/versions/manual-v1/kimi-planner.score.json
 ```
 
 评分时参考 case rubric：
@@ -560,7 +600,7 @@ model-role-calibration/cases/synthetic/event-reporting/rubric.md
 至少填写一个 score 文件后，执行：
 
 ```bash
-node model-role-calibration/scripts/summarize-results.js --run <run-id>
+node model-role-calibration/scripts/summarize-results.js --run <run-id> --score-version manual-v1
 ```
 
 报告会写入：

@@ -21,11 +21,15 @@ const {
   withoutAnthropicApiKey
 } = require("./workspace-review-lib");
 const {
-  summarizeReviewOutcome
+  summarizeReviewOutcome,
+  retryWorkspaceReviewStage,
+  validateWorkspaceOutput
 } = require("./run-workspace-review");
 const {
   toolList,
   resolvePlanInput,
+  retryPlanReviewStage,
+  progressSnapshot,
   getPlanReview
 } = require("./plan-review-mcp");
 
@@ -91,6 +95,175 @@ function configFixture(tempDir) {
   return { configFile, settingsDir };
 }
 
+function writeReviewerAttempt(runDir, role, model, status = "completed") {
+  const roleDir = path.join(runDir, "roles", role);
+  writeJson(path.join(roleDir, "output.json"), {
+    probe: role,
+    issues: [],
+    missing_questions: [],
+    false_positive_risks: []
+  });
+  writeJson(path.join(roleDir, "metadata.json"), {
+    role,
+    model,
+    status
+  });
+}
+
+function writeFactCheckAttempt(runDir, model, status = "completed") {
+  const roleDir = path.join(runDir, "roles", "fact_check");
+  writeJson(path.join(roleDir, "output.json"), {
+    probe: "fact_check",
+    checked_issues: [],
+    source_summaries: [],
+    limits: []
+  });
+  writeJson(path.join(roleDir, "fact-check-summary.json"), {
+    total_checked: 0,
+    challenged_count: 0
+  });
+  writeJson(path.join(roleDir, "metadata.json"), {
+    role: "fact_check",
+    model,
+    status
+  });
+}
+
+function writeSynthesisAttempt(runDir, model, status = "completed") {
+  const roleDir = path.join(runDir, "roles", "synthesis");
+  writeJson(path.join(roleDir, "output.json"), {
+    probe: "synthesis",
+    source_findings: [],
+    process_map: {
+      title: "test",
+      mermaid: "flowchart TD\n  A[Test]",
+      nodes: [{
+        id: "A",
+        label: "Test",
+        stage: "test",
+        status: "normal",
+        related_issue_titles: [],
+        evidence: "test"
+      }]
+    },
+    consensus_issues: [],
+    disagreements: [],
+    likely_false_positives: [],
+    revision_instructions: []
+  });
+  writeJson(path.join(roleDir, "metadata.json"), {
+    role: "synthesis",
+    model,
+    status
+  });
+}
+
+function createRetryRun(config, tempDir, runId, roles, retryCounts = {}) {
+  const projectRoot = path.join(tempDir, `${runId}-project`);
+  const runDir = path.join(tempDir, `${runId}-run`);
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.mkdirSync(runDir, { recursive: true });
+  writeJson(path.join(runDir, "request.json"), {
+    run_id: runId,
+    project_root: projectRoot,
+    plan: "# Test plan",
+    roles
+  });
+  writeJson(path.join(runDir, "state.json"), {
+    run_id: runId,
+    project_root: projectRoot,
+    roles,
+    status: "failed",
+    retry_counts: retryCounts
+  });
+  return {
+    runDir,
+    projectRoot,
+    config: {
+      ...config,
+      execution: {
+        ...config.execution,
+        max_concurrency: 2
+      }
+    }
+  };
+}
+
+function retryExecutors(calls) {
+  return {
+    runRole: async (config, request, role, runDir) => {
+      calls.reviewers.push(role);
+      const model = config.roles[role];
+      writeReviewerAttempt(runDir, role, model);
+      return {
+        role,
+        model,
+        output: {
+          probe: role,
+          issues: [],
+          missing_questions: [],
+          false_positive_risks: []
+        },
+        output_file: path.join("roles", role, "output.json")
+      };
+    },
+    runFactCheck: async (config, request, reviewerResults, runDir) => {
+      calls.fact_check += 1;
+      calls.fact_check_reviewers = reviewerResults.map((item) => item.role);
+      const model = config.roles.fact_check;
+      writeFactCheckAttempt(runDir, model);
+      return {
+        role: "fact_check",
+        model,
+        output: {
+          probe: "fact_check",
+          checked_issues: [],
+          source_summaries: [],
+          limits: []
+        },
+        output_file: "roles/fact_check/output.json",
+        summary: {
+          total_checked: 0,
+          challenged_count: 0
+        },
+        summary_file: "roles/fact_check/fact-check-summary.json"
+      };
+    },
+    runSynthesis: async (config, request, reviewerResults, factCheck, runDir) => {
+      calls.synthesis += 1;
+      calls.synthesis_reviewers = reviewerResults.map((item) => item.role);
+      calls.synthesis_fact_check_probe = factCheck.output.probe;
+      const model = config.roles.synthesis;
+      writeSynthesisAttempt(runDir, model);
+      return {
+        role: "synthesis",
+        model,
+        output: {
+          probe: "synthesis",
+          source_findings: [],
+          process_map: {
+            title: "test",
+            mermaid: "flowchart TD\n  A[Test]",
+            nodes: [{
+              id: "A",
+              label: "Test",
+              stage: "test",
+              status: "normal",
+              related_issue_titles: [],
+              evidence: "test"
+            }]
+          },
+          consensus_issues: [],
+          disagreements: [],
+          likely_false_positives: [],
+          revision_instructions: []
+        },
+        output_file: "roles/synthesis/output.json"
+      };
+    }
+  };
+}
+
 async function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "plan-review-mcp-test-"));
   const server = path.join(__dirname, "plan-review-mcp.js");
@@ -135,8 +308,8 @@ async function main() {
     );
     assert(prompt.includes("检查当前计划"));
     assert(prompt.includes("现有工程文件的相对路径和行号"));
-    assert(prompt.includes("proposed-code/..."));
-    assert(prompt.includes("semantics=plan_draft"));
+    assert(prompt.includes("未来代码、伪代码和示例"));
+    assert(prompt.includes("不重新做关键业务或架构决策"));
 
     const projectRoot = path.join(tempDir, "project");
     fs.mkdirSync(path.join(projectRoot, "src", "cdp"), { recursive: true });
@@ -252,8 +425,10 @@ async function main() {
     ].join("\n");
     const compactedPlan = compactPlanForReview(longPlan);
     assert(compactedPlan.text.includes("```pseudo"));
+    assert(compactedPlan.text.includes("非权威摘要"));
+    assert(compactedPlan.text.includes("决策完备"));
     assert(compactedPlan.text.includes("源码 artifact：proposed-code/block-001.ts:1-"));
-    assert(compactedPlan.text.includes("not_compile_target"));
+    assert(compactedPlan.text.includes("legacy 传输兼容机制"));
     assert(compactedPlan.text.includes("声明/入口"));
     assert(compactedPlan.text.includes("测试意图"));
     assert(compactedPlan.text.includes("```bash"));
@@ -265,6 +440,9 @@ async function main() {
     assert.equal(compactedPlan.artifacts[0].review_semantics, "plan_draft");
     assert.equal(compactedPlan.artifacts[0].expected_completeness, "not_compile_target");
     assert(compactedPlan.artifacts[0].content.includes("clearHostResolverCache"));
+    assert(compactedPlan.stats.implementation_detail_chars > 0);
+    assert(compactedPlan.stats.implementation_detail_lines > 0);
+    assert.equal(compactedPlan.stats.plan_bloat_warning, true);
     assert(compactedPlan.stats.saved_chars > 0);
 
     const proposedArtifactDir = path.join(tempDir, "artifact-source");
@@ -303,26 +481,29 @@ async function main() {
       [
         "## Existing Code Refs",
         "- `src/cli.ts:1-1`",
-        "- `/outside/project.ts:10`",
-        "## Proposed Code Artifacts",
-        "- `proposed-code/block-001.ts:1-10`"
+        "- `/outside/project.ts:10`"
       ].join("\n"),
-      proposedArtifacts
+      []
     );
     assert.equal(refs.format_status.has_existing_code_refs_section, true);
-    assert.equal(refs.format_status.has_proposed_code_artifacts_section, true);
+    assert.equal(refs.format_status.has_proposed_code_artifacts_section, false);
     assert(refs.existing_code_refs.some((item) => item.path === "src/cli.ts" && item.line_ref === "1-1"));
-    assert(refs.proposed_code_artifacts.some((item) => item.path === "proposed-code/block-001.ts"));
-    assert(refs.proposed_code_artifacts.some((item) => (
-      item.path === "proposed-code/block-001.ts" &&
-      item.review_semantics === "plan_draft" &&
-      item.expected_completeness === "not_compile_target"
-    )));
+    assert.deepEqual(refs.proposed_code_artifacts, []);
     assert(refs.blocked_refs.includes("/outside/project.ts"));
 
-    const args = buildClaudeWorkspaceArgs(config, "qwen", "risk", tempDir);
+    const riskValidatorLog = path.join(tempDir, "risk.validator.log");
+    assert.throws(
+      () => buildClaudeWorkspaceArgs(config, "qwen", "risk", tempDir),
+      /Missing validator log file/
+    );
+    const args = buildClaudeWorkspaceArgs(config, "qwen", "risk", tempDir, {
+      validatorLogFile: riskValidatorLog
+    });
     assert.equal(args[args.indexOf("--tools") + 1], "Read,Glob,Grep");
-    assert.equal(args[args.indexOf("--allowed-tools") + 1], "Read,Glob,Grep");
+    assert.equal(
+      args[args.indexOf("--allowed-tools") + 1],
+      "Read,Glob,Grep,mcp__json_validator__validate_json_output"
+    );
     assert.equal(args[args.indexOf("--permission-mode") + 1], "dontAsk");
     assert.equal(args[args.indexOf("--add-dir") + 1], tempDir);
     assert(!args.includes("Bash"));
@@ -331,21 +512,140 @@ async function main() {
     assert(!args.includes("--no-session-persistence"));
     const factCheckArgs = buildClaudeWorkspaceArgs(config, "glm", "fact_check", tempDir, {
       tools: "Read",
-      allowProjectRead: true
+      allowProjectRead: true,
+      validatorLogFile: path.join(tempDir, "fact-check.validator.log")
     });
     assert.equal(factCheckArgs[factCheckArgs.indexOf("--tools") + 1], "Read");
-    assert.equal(factCheckArgs[factCheckArgs.indexOf("--allowed-tools") + 1], "Read");
+    assert.equal(
+      factCheckArgs[factCheckArgs.indexOf("--allowed-tools") + 1],
+      "Read,mcp__json_validator__validate_json_output"
+    );
     assert.equal(factCheckArgs[factCheckArgs.indexOf("--add-dir") + 1], tempDir);
     assert(!factCheckArgs.includes("--no-session-persistence"));
     const synthesisArgs = buildClaudeWorkspaceArgs(config, "kimi", "synthesis", tempDir, {
       tools: "",
-      allowProjectRead: false
+      allowProjectRead: false,
+      validatorLogFile: path.join(tempDir, "synthesis.validator.log")
     });
     assert.equal(synthesisArgs[synthesisArgs.indexOf("--tools") + 1], "");
-    assert.equal(synthesisArgs[synthesisArgs.indexOf("--allowed-tools") + 1], "");
+    assert.equal(
+      synthesisArgs[synthesisArgs.indexOf("--allowed-tools") + 1],
+      "mcp__json_validator__validate_json_output"
+    );
     assert(!synthesisArgs.includes("--add-dir"));
     assert(!synthesisArgs.includes("--no-session-persistence"));
     assert(args[args.indexOf("--system-prompt") + 1].includes("Return only one raw JSON object"));
+    assert(args[args.indexOf("--system-prompt") + 1].includes(
+      "mcp__json_validator__validate_json_output"
+    ));
+    for (const [role, model, roleArgs, validatorLog] of [
+      ["risk", "qwen", args, riskValidatorLog],
+      ["fact_check", "glm", factCheckArgs, path.join(tempDir, "fact-check.validator.log")],
+      ["synthesis", "kimi", synthesisArgs, path.join(tempDir, "synthesis.validator.log")]
+    ]) {
+      const mcpConfig = JSON.parse(roleArgs[roleArgs.indexOf("--mcp-config") + 1]);
+      const validator = mcpConfig.mcpServers.json_validator;
+      assert.equal(validator.command, process.execPath);
+      assert(validator.args[0].endsWith("scripts/json-validator-mcp.js"));
+      assert.equal(validator.env.MODEL_ROLE_CALIBRATION_MODEL, model);
+      assert.equal(validator.env.MODEL_ROLE_CALIBRATION_PROBE, role);
+      assert.equal(validator.env.MODEL_ROLE_CALIBRATION_VALIDATOR_LOG, validatorLog);
+    }
+    assert.doesNotThrow(() => validateWorkspaceOutput("fact_check", {
+      probe: "fact_check",
+      checked_issues: [],
+      source_summaries: [],
+      limits: []
+    }));
+    assert.throws(() => validateWorkspaceOutput("synthesis", {
+      probe: "synthesis",
+      source_findings: [],
+      process_map: {
+        title: "test",
+        mermaid: "flowchart TD",
+        nodes: []
+      },
+      consensus_issues: [],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: []
+    }), /expected at least 1 item/);
+    const outOfScopeFactCheck = {
+      probe: "fact_check",
+      checked_issues: [{
+        issue_id: "Architecture-Reviewer-001",
+        source: "Architecture Reviewer",
+        issue_title: "必须建设在线 marketplace",
+        status: "verified",
+        scope_status: "out_of_scope",
+        evidence_status: "plan_only",
+        claim_support: "direct",
+        reason: "需求明确排除在线 marketplace",
+        checked_files: []
+      }],
+      source_summaries: [],
+      limits: []
+    };
+    const validDiscardedSynthesis = {
+      probe: "synthesis",
+      source_findings: [{
+        id: "F1",
+        source: "Architecture Reviewer",
+        source_title: "必须建设在线 marketplace",
+        fact_check_status: "verified",
+        scope_status: "out_of_scope",
+        disposition: "out_of_scope",
+        reason: "与需求范围冲突"
+      }],
+      process_map: {
+        title: "test",
+        mermaid: "flowchart TD\n  A[Test]",
+        nodes: [{
+          id: "A",
+          label: "Test",
+          stage: "test",
+          status: "normal",
+          related_issue_titles: [],
+          evidence: "当前计划"
+        }]
+      },
+      consensus_issues: [],
+      disagreements: [],
+      likely_false_positives: [{
+        source_finding_ids: ["F1"],
+        reason: "需求明确排除在线 marketplace"
+      }],
+      revision_instructions: []
+    };
+    assert.doesNotThrow(() => validateWorkspaceOutput(
+      "synthesis",
+      validDiscardedSynthesis,
+      { factCheckOutput: outOfScopeFactCheck }
+    ));
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...validDiscardedSynthesis,
+        disagreements: [{
+          title: "是否建设 marketplace",
+          positions: [{
+            source: "Architecture Reviewer",
+            position: "建设",
+            reason: "reviewer 建议"
+          }, {
+            source: "需求",
+            position: "不建设",
+            reason: "明确范围"
+          }],
+          affected_nodes: ["A"],
+          source_finding_ids: ["F1"],
+          level: "L3_direction_decision",
+          needs_human_decision: true,
+          decision_options: ["建设", "不建设"]
+        }]
+      },
+      { factCheckOutput: outOfScopeFactCheck }
+    ), /excluded finding F1 re-entered/);
 
     const readyOutcome = summarizeReviewOutcome(
       [{
@@ -370,6 +670,41 @@ async function main() {
       []
     );
     assert.equal(readyOutcome.status, "plan_ready");
+
+    const lintBlockedOutcome = summarizeReviewOutcome(
+      [{
+        role: "risk",
+        output: {
+          issues: []
+        }
+      }],
+      {
+        summary: {
+          total_checked: 0,
+          challenged_count: 0
+        }
+      },
+      {
+        output: {
+          consensus_issues: [],
+          disagreements: [],
+          revision_instructions: []
+        }
+      },
+      [],
+      {
+        errors: [{
+          code: "implementation_code_block",
+          message: "Plan contains complete Hook implementation"
+        }],
+        warnings: [],
+        metrics: {
+          total_lines: 120
+        }
+      }
+    );
+    assert.equal(lintBlockedOutcome.status, "needs_revision");
+    assert.equal(lintBlockedOutcome.authoring_lint_error_count, 1);
 
     const infraOutcome = summarizeReviewOutcome(
       [{
@@ -447,8 +782,14 @@ async function main() {
     assert.equal(startTool.inputSchema.oneOf.length, 2);
     assert(startTool.inputSchema.properties.plan_file.description.includes("优先使用"));
     assert(startTool.inputSchema.properties.project_root.description.includes("CLAUDE_PROJECT_DIR"));
+    assert(retryTool.description.includes("stage=reviewers"));
+    assert(retryTool.description.includes("stage=fact_check"));
     assert(retryTool.description.includes("stage=synthesis"));
-    assert.deepEqual(retryTool.inputSchema.properties.stage.enum, ["synthesis"]);
+    assert(retryTool.description.includes("最多重试 3 次"));
+    assert.deepEqual(
+      retryTool.inputSchema.properties.stage.enum,
+      ["reviewers", "fact_check", "synthesis"]
+    );
     assert(getTool.description.includes("progress notification"));
     assert(getTool.description.includes("禁止使用 Bash"));
     assert.equal(getTool.inputSchema.properties.wait_ms.default, undefined);
@@ -498,9 +839,16 @@ async function main() {
     assert(
       factCheckSchema.properties.checked_issues.items.required.includes("issue_id")
     );
+    assert(
+      factCheckSchema.properties.checked_issues.items.required.includes("scope_status")
+    );
     assert(synthesisSchema.required.includes("process_map"));
+    assert(synthesisSchema.required.includes("source_findings"));
     assert(
       synthesisSchema.properties.consensus_issues.items.required.includes("affected_nodes")
+    );
+    assert(
+      synthesisSchema.properties.consensus_issues.items.required.includes("source_finding_ids")
     );
     const synthesisPrompt = buildWorkspacePrompt(
       "synthesis",
@@ -524,6 +872,7 @@ async function main() {
     );
     assert(synthesisPrompt.includes("\"process_map\""));
     assert(synthesisPrompt.includes("\"affected_nodes\""));
+    assert(synthesisPrompt.includes("\"source_findings\""));
     assert(synthesisPrompt.includes("Fact Check 报告"));
     assert(synthesisPrompt.includes("不得读取工程目录"));
 
@@ -593,6 +942,228 @@ async function main() {
     assert(waitedResult.progress.message.includes("基础设施错误"));
     assert(progressEvents.length >= 1);
     assert(progressEvents[0].message.includes("risk/qwen"));
+
+    const reviewerRetry = createRetryRun(
+      directoryConfig,
+      tempDir,
+      "reviewer-retry",
+      ["risk", "architecture"]
+    );
+    writeJson(path.join(reviewerRetry.runDir, "state.json"), {
+      run_id: "reviewer-retry",
+      project_root: reviewerRetry.projectRoot,
+      roles: ["risk", "architecture"],
+      status: "completed",
+      infra_errors: [{
+        role: "architecture",
+        model: "kimi",
+        type: "invalid_output"
+      }]
+    });
+    writeReviewerAttempt(reviewerRetry.runDir, "risk", "qwen");
+    writeReviewerAttempt(reviewerRetry.runDir, "architecture", "kimi", "failed");
+    writeFactCheckAttempt(reviewerRetry.runDir, "glm", "failed");
+    writeSynthesisAttempt(reviewerRetry.runDir, "kimi", "failed");
+    const reviewerCalls = {
+      reviewers: [],
+      fact_check: 0,
+      synthesis: 0
+    };
+    const reviewerRetryResult = await retryWorkspaceReviewStage(
+      reviewerRetry.config,
+      reviewerRetry.runDir,
+      "reviewers",
+      retryExecutors(reviewerCalls)
+    );
+    assert.deepEqual(reviewerCalls.reviewers, ["architecture"]);
+    assert.deepEqual(reviewerCalls.fact_check_reviewers, ["risk", "architecture"]);
+    assert.deepEqual(reviewerCalls.synthesis_reviewers, ["risk", "architecture"]);
+    assert.equal(reviewerCalls.fact_check, 1);
+    assert.equal(reviewerCalls.synthesis, 1);
+    assert.equal(reviewerRetryResult.retry_counts.risk, 0);
+    assert.equal(reviewerRetryResult.retry_counts.architecture, 1);
+    assert.equal(reviewerRetryResult.retry_counts.fact_check, 0);
+    assert.equal(reviewerRetryResult.retry_counts.synthesis, 0);
+    assert.equal(
+      fs.readdirSync(path.join(reviewerRetry.runDir, "roles", "architecture-attempts")).length,
+      1
+    );
+    assert.equal(
+      fs.readdirSync(path.join(reviewerRetry.runDir, "roles", "fact_check-attempts")).length,
+      1
+    );
+    assert.equal(
+      fs.readdirSync(path.join(reviewerRetry.runDir, "roles", "synthesis-attempts")).length,
+      1
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(reviewerRetry.runDir, "state.json"))).status,
+      "completed"
+    );
+
+    const factCheckRetry = createRetryRun(
+      directoryConfig,
+      tempDir,
+      "fact-check-retry",
+      ["risk", "architecture"],
+      {
+        fact_check: 1,
+        synthesis: 1
+      }
+    );
+    writeReviewerAttempt(factCheckRetry.runDir, "risk", "qwen");
+    writeReviewerAttempt(factCheckRetry.runDir, "architecture", "kimi");
+    writeFactCheckAttempt(factCheckRetry.runDir, "glm", "failed");
+    writeSynthesisAttempt(factCheckRetry.runDir, "kimi", "failed");
+    const factCheckCalls = {
+      reviewers: [],
+      fact_check: 0,
+      synthesis: 0
+    };
+    const factCheckRetryResult = await retryWorkspaceReviewStage(
+      factCheckRetry.config,
+      factCheckRetry.runDir,
+      "fact_check",
+      retryExecutors(factCheckCalls)
+    );
+    assert.deepEqual(factCheckCalls.reviewers, []);
+    assert.equal(factCheckCalls.fact_check, 1);
+    assert.equal(factCheckCalls.synthesis, 1);
+    assert.equal(factCheckRetryResult.retry_counts.fact_check, 2);
+    assert.equal(factCheckRetryResult.retry_counts.synthesis, 2);
+
+    const synthesisRetry = createRetryRun(
+      directoryConfig,
+      tempDir,
+      "synthesis-retry",
+      ["risk", "architecture"],
+      {
+        synthesis: 2
+      }
+    );
+    writeReviewerAttempt(synthesisRetry.runDir, "risk", "qwen");
+    writeReviewerAttempt(synthesisRetry.runDir, "architecture", "kimi");
+    writeFactCheckAttempt(synthesisRetry.runDir, "glm");
+    writeSynthesisAttempt(synthesisRetry.runDir, "kimi", "failed");
+    const synthesisCalls = {
+      reviewers: [],
+      fact_check: 0,
+      synthesis: 0
+    };
+    const synthesisRetryResult = await retryWorkspaceReviewStage(
+      synthesisRetry.config,
+      synthesisRetry.runDir,
+      "synthesis",
+      retryExecutors(synthesisCalls)
+    );
+    assert.deepEqual(synthesisCalls.reviewers, []);
+    assert.equal(synthesisCalls.fact_check, 0);
+    assert.equal(synthesisCalls.synthesis, 1);
+    assert.equal(synthesisRetryResult.retry_counts.synthesis, 3);
+
+    const exhaustedRetry = createRetryRun(
+      directoryConfig,
+      tempDir,
+      "exhausted-retry",
+      ["risk"],
+      {
+        fact_check: 3
+      }
+    );
+    writeReviewerAttempt(exhaustedRetry.runDir, "risk", "qwen");
+    writeFactCheckAttempt(exhaustedRetry.runDir, "glm", "failed");
+    writeSynthesisAttempt(exhaustedRetry.runDir, "kimi", "failed");
+    await assert.rejects(
+      retryWorkspaceReviewStage(
+        exhaustedRetry.config,
+        exhaustedRetry.runDir,
+        "fact_check",
+        retryExecutors({
+          reviewers: [],
+          fact_check: 0,
+          synthesis: 0
+        })
+      ),
+      /Retry limit reached \(3\).*fact_check/
+    );
+    assert(fs.existsSync(path.join(exhaustedRetry.runDir, "roles", "fact_check")));
+    assert(!fs.existsSync(path.join(exhaustedRetry.runDir, "roles", "fact_check-attempts")));
+
+    const progressRetry = createRetryRun(
+      directoryConfig,
+      tempDir,
+      "progress-retry",
+      ["risk", "architecture"]
+    );
+    appendExecutionLog(progressRetry.runDir, "agent_completed", {
+      role: "risk",
+      model: "qwen"
+    });
+    appendExecutionLog(progressRetry.runDir, "agent_failed", {
+      role: "architecture",
+      model: "kimi"
+    });
+    appendExecutionLog(progressRetry.runDir, "fact_check_failed", {
+      model: "glm"
+    });
+    appendExecutionLog(progressRetry.runDir, "synthesis_failed", {
+      model: "kimi"
+    });
+    appendExecutionLog(progressRetry.runDir, "stage_retry_queued", {
+      stage: "reviewers",
+      retry_roles: ["architecture"]
+    });
+    appendExecutionLog(progressRetry.runDir, "synthesis_started", {
+      model: "kimi"
+    });
+    const retryProgress = progressSnapshot(
+      progressRetry.config,
+      progressRetry.runDir,
+      {
+        status: "queued",
+        roles: ["risk", "architecture"]
+      }
+    );
+    assert.equal(retryProgress.reviewers.risk.status, "completed");
+    assert.equal(retryProgress.reviewers.architecture.status, "pending");
+    assert.equal(retryProgress.fact_check.status, "pending");
+    assert.equal(retryProgress.synthesis.status, "running");
+    assert(retryProgress.active.includes("synthesis/kimi"));
+
+    const queuedRetry = createRetryRun(
+      {
+        ...directoryConfig,
+        workspace_runs_dir: path.join(tempDir, "queued-runs")
+      },
+      tempDir,
+      "queued-retry",
+      ["risk"]
+    );
+    const queuedRunDir = path.join(
+      tempDir,
+      "queued-runs",
+      "queued-retry"
+    );
+    fs.mkdirSync(path.dirname(queuedRunDir), { recursive: true });
+    fs.renameSync(queuedRetry.runDir, queuedRunDir);
+    writeJson(path.join(queuedRunDir, "state.json"), {
+      run_id: "queued-retry",
+      status: "queued",
+      roles: ["risk"]
+    });
+    assert.throws(
+      () => retryPlanReviewStage(
+        {
+          ...directoryConfig,
+          workspace_runs_dir: path.join(tempDir, "queued-runs")
+        },
+        {
+          run_id: "queued-retry",
+          stage: "reviewers"
+        }
+      ),
+      /still queued or running/
+    );
 
     let result = spawnSync(process.execPath, [
       server,

@@ -9,7 +9,8 @@ const {
   loadConfig,
   sumScore,
   walk,
-  writeGenerated
+  writeGenerated,
+  optionalSlugArg
 } = require("./lib");
 
 const PROBE_COLUMNS = ["planner", "risk", "architecture", "execution", "rebuttal", "synthesis"];
@@ -43,6 +44,29 @@ function formatScore(value) {
 function formatProbeCell(item, probe, requiredCount) {
   const coverage = item.coverage[probe].length;
   return `${formatScore(item.averages[probe])} (${coverage}/${requiredCount})`;
+}
+
+function listScoreFiles(runDir, scoreVersion = null) {
+  const draftsSegment = `${path.sep}scores${path.sep}drafts${path.sep}`;
+  const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`;
+  if (scoreVersion) {
+    const versionSegment = `${versionsSegment}${scoreVersion}${path.sep}`;
+    return walk(runDir, (file) => (
+      file.endsWith(".score.json") && file.includes(versionSegment)
+    ));
+  }
+  return walk(runDir, (file) => (
+    file.endsWith(".score.json") &&
+    !file.includes(draftsSegment) &&
+    !file.includes(versionsSegment)
+  ));
+}
+
+function listVersionedScoreFiles(runDir) {
+  const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`;
+  return walk(runDir, (file) => (
+    file.endsWith(".score.json") && file.includes(versionsSegment)
+  ));
 }
 
 function roleRecommendation(probe, modelStats, config) {
@@ -114,10 +138,14 @@ function main() {
   const run = requireArg(args, "run");
   const config = loadConfig();
   const runDir = path.join(ROOT, "runs", run);
-  const draftSegment = `${path.sep}scores${path.sep}drafts${path.sep}`;
-  const scoreFiles = walk(runDir, (file) => (
-    file.endsWith(".score.json") && !file.includes(draftSegment)
-  ));
+  const scoreVersion = optionalSlugArg(args, "score-version");
+  const scoreFiles = listScoreFiles(runDir, scoreVersion);
+  if (!scoreVersion && !scoreFiles.length && listVersionedScoreFiles(runDir).length) {
+    throw new Error(
+      "No unversioned score files found, but versioned scores exist. " +
+      "Pass --score-version <version> to summarize them."
+    );
+  }
   const scores = scoreFiles.map((file) => {
     const data = parseJsonFile(file);
     const computedTotal = sumScore(data.score || {});
@@ -164,6 +192,7 @@ function main() {
 
   const results = {
     run,
+    ...(scoreVersion ? { score_version: scoreVersion } : {}),
     generated_at: new Date().toISOString(),
     cases,
     models,
@@ -194,6 +223,9 @@ function main() {
   writeGenerated(path.join(ROOT, "outputs", "model-role-map.md"), renderRoleMap(results));
 
   console.log(`Scores read: ${scores.length}`);
+  if (scoreVersion) {
+    console.log(`Score version: ${scoreVersion}`);
+  }
   console.log("Generated outputs/calibration-results.json");
   console.log("Generated outputs/calibration-summary.md");
   console.log("Generated outputs/model-role-map.md");
@@ -299,5 +331,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  roleRecommendation
+  roleRecommendation,
+  listScoreFiles,
+  listVersionedScoreFiles
 };

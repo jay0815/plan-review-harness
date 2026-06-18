@@ -9,29 +9,31 @@
 # Task
 
 请阅读下面三组审查意见，完成：
-1. 合并重复问题。
-2. 识别真正的分歧。
-3. 区分互补意见和冲突意见。
-4. 标记哪些需要用户裁决。
-5. 禁止把所有意见都总结成“三方都有道理”。
-6. 从计划和已确认的工程事实中提取主流程，标出问题发生的节点。
+1. 先逐条裁决来源意见的证据和范围状态。
+2. 剔除被反驳、无证据、不可验证或超范围的意见。
+3. 合并保留意见中的重复问题。
+4. 识别真正的分歧，区分互补意见和冲突意见。
+5. 只把真正改变公共契约或系统边界的 L3 分歧交给用户。
+6. 从当前计划和已确认的工程事实中提取主流程，标出问题发生的节点。
 
 # Rules
 
 - 来源保真是基础门槛。每个共识、分歧和误报判断都必须能追溯到输入中的具体来源，不得补充任何来源都未提出的新事实、新问题或新方案。
+- 必须先输出 `source_findings`，逐条记录 Reviewer issue 的来源标题、Fact Check 状态、范围状态、处置结果和理由；后续共识、分歧、误报和修订只能引用这些 finding id。
+- 计划的统一完成标准是：实现者可以在不重新做关键业务、架构或公共契约决策的情况下开始编码。计划不追求实现完备；不得把补全函数体、Hook、props、import/export、JSX、i18n、mock、fixture 或测试源码加入修订指令。
 - 如果输入包含 Fact Check 报告，事实支持状态优先于 Reviewer 声量和来源数量。
-- Fact Check 标记为 `unsupported` 或 `contradicted` 的 issue 不得进入 `consensus_issues`，只能进入 `likely_false_positives` 或作为分歧背景说明。
-- Fact Check 标记为 `unverifiable` 的 issue 不得当作已确认事实；如确需保留，只能降权并明确说明证据不可定位。
+- Fact Check 的 `scope_status: out_of_scope` 必须对应 `disposition: out_of_scope`，只能进入 `likely_false_positives`；禁止进入共识、分歧或修订指令。
+- Fact Check 标记为 `unsupported`、`contradicted` 或 `unverifiable` 的 issue 不得进入共识、分歧或修订，只能进入 `likely_false_positives`。
 - Fact Check 标记为 `partially_verified` 的 issue 可以进入合成结果，但必须在 `reason` 中说明只有部分事实成立，严重度不得高于 Reviewer 原始严重度。
 - `partially_verified` 不能自动成为修订指令来源；只有当 Fact Check 明确确认“核心事实”和“阻塞性/直接后果”均有支持时，才可进入 `revision_instructions`。
 - 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，则该 issue 只能降权进入 `consensus_issues` 或 `likely_false_positives`，不得直接生成修订指令。
 - 只有 `verified` 或满足上述条件的 `partially_verified` issue 才能成为主修订指令来源。
-- 如果 issue 只来自 `semantics=plan_draft` 或 `expected=not_compile_target` 的 `proposed-code/...` artifact 中缺 import、局部类型未 export、stub 函数体、示例变量未声明等草案完整性问题，不得作为 blocker 或修订指令来源；除非输入明确证明主 plan 要求该 artifact 原样落地，或该缺口直接破坏主计划需求、接口契约、关键控制流、失败分支或验收标准。
-- 对草案完整性问题，即使 Fact Check 验证了“草案里确实缺少某符号/实现体”，也只能说明代码样例不完整；应放入 `likely_false_positives` 或降为低严重度提醒，不得把 plan 判为 needs_revision 的核心原因。
+- 未来代码、伪代码、代码块或 proposed-code 文件不是现有工程事实或最终实现承诺。源码草案完整性问题不得作为 blocker 或修订指令来源；只有主计划的业务、架构、公共契约或失败语义本身不成立时才可保留。
 - “某来源没有提到”不等于共识，也不等于反对。只有多个来源明确表达相同结论时，才可合并为共识。
 - 先按根因合并重复意见；同一问题的不同影响属于互补信息，不应被制造成分歧。
 - `merged_from` 必须使用输入中的准确来源名称，只列真正提出该问题的来源。
 - 对无 evidence、依赖未知事实或明显越出需求边界的高风险判断降权，并写入 `likely_false_positives`。
+- 当 Reviewer 意见与需求明确事实或 out-of-scope 直接冲突时，应按需求裁决并丢弃 Reviewer 意见。这不是 L3 分歧，不需要用户裁决。例如需求明确不建设在线 marketplace，而 Reviewer 要求必须建设 marketplace，应标记为 `out_of_scope`。
 - 识别分歧时区分事实判断、严重度判断、局部修改和方向选择，并在 `title` 或 `reason` 中说明分歧性质。
 - 能由需求硬约束、明确契约或输入事实直接判定的问题，不需要用户裁决。
 - `L1_preference` 是不影响契约的偏好；`L2_local_change` 是不改变总体方向的局部修正；`L3_direction_decision` 是互斥且会改变公共契约、系统边界或长期方向的选择。
@@ -39,11 +41,12 @@
 - 字段位置、字段语义或责任归属不一致属于必须关闭的契约问题，通常是 `L2_local_change`，不得以“双方都有道理”接受不一致。
 - 是否拆分公共 API、是否改变既有复用边界等互斥方向才可能是 `L3_direction_decision`。
 - 对需求未提供依据的数据库、消息系统、持久化队列、能力探测或功能开关建议应降权，不得自动进入修订指令。
-- `suggested_fix` 只保留合并后的最小修正目标；`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
+- `required_plan_change` 只保留合并后的最小决策或契约修订目标；不得指定源码形态。`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
+- 每条共识、分歧、误报和修订指令都必须填写 `source_finding_ids`。被标记为 `unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding id 禁止出现在共识、分歧或修订中。
 - 修订指令之间必须一致，已判定为误报的内容不得再次进入修订指令。
 - 如果 Reviewer 和 Fact Check 没有支持需要修订的问题，`consensus_issues`、`disagreements`、`revision_instructions` 必须为空；禁止为了显得有产出而制造问题。
 - 计划已足够完善时，`process_map.nodes[].status` 应保持 `normal`，并在输出中用空数组表达“无需修订”。
-- `process_map` 只描述计划明确包含、或 Reviewer 已用工程证据确认的流程，不得为了画图补充未知节点和调用关系。
+- `process_map` 只描述当前计划明确包含、或 Reviewer 已用工程证据确认的流程，不得把修订后才会新增的 manifest、staging、回滚服务或其他节点画成当前流程，也不得为了画图补充未知调用关系。
 - `process_map.mermaid` 必须使用 `flowchart TD` 或 `flowchart LR`，节点 id 必须与 `process_map.nodes[].id` 一致。
 - `process_map.nodes[].related_issue_titles` 只能引用 `consensus_issues[].title` 或 `disagreements[].title` 的准确标题。
 - `consensus_issues[].affected_nodes` 和 `disagreements[].affected_nodes` 必须引用 `process_map.nodes[].id`，用于说明问题具体发生在哪个流程节点。
@@ -65,6 +68,17 @@
 ```json
 {
   "probe": "synthesis",
+  "source_findings": [
+    {
+      "id": "F1",
+      "source": "",
+      "source_title": "",
+      "fact_check_status": "verified | partially_verified | unsupported | contradicted | unverifiable | not_available",
+      "scope_status": "in_scope | out_of_scope | not_determined",
+      "disposition": "retained | merged | duplicate | unsupported | contradicted | unverifiable | out_of_scope",
+      "reason": ""
+    }
+  ],
   "process_map": {
     "title": "",
     "mermaid": "flowchart TD\n  A[节点 A] --> B[节点 B]",
@@ -85,8 +99,9 @@
       "merged_from": [],
       "severity": "low | medium | high | blocker",
       "affected_nodes": [],
+      "source_finding_ids": [],
       "reason": "",
-      "suggested_fix": ""
+      "required_plan_change": ""
     }
   ],
   "disagreements": [
@@ -100,13 +115,24 @@
         }
       ],
       "affected_nodes": [],
+      "source_finding_ids": [],
       "level": "L1_preference | L2_local_change | L3_direction_decision",
       "needs_human_decision": true,
       "decision_options": []
     }
   ],
-  "likely_false_positives": [],
-  "revision_instructions": []
+  "likely_false_positives": [
+    {
+      "source_finding_ids": [],
+      "reason": ""
+    }
+  ],
+  "revision_instructions": [
+    {
+      "instruction": "",
+      "source_finding_ids": []
+    }
+  ]
 }
 ```
 

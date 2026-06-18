@@ -181,6 +181,7 @@ function main() {
           source: "risk",
           issue_title: "示例",
           status: "verified",
+          scope_status: "in_scope",
           evidence_status: "quote_matches",
           claim_support: "direct",
           reason: "测试",

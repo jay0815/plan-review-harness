@@ -74,6 +74,7 @@ cd plan-review-harness-claude-code
 4. 直接安装 Plan Review Skill。
 5. 注册用户级 plan-review-harness MCP。
 6. 全程不调用模型。
+7. 重复安装或升级时保留 `mcp/workspace-runs` 中的历史运行产物。
 
 默认安装位置：
 
@@ -218,6 +219,20 @@ Skill 会自动：
 4. 等待 MCP progress notification。
 5. 启动 Fact Check，只校验 Reviewer 已给出的 evidence。
 6. 启动 Synthesizer。Synthesizer 不读取工程目录，只基于计划、Reviewer JSON 和 Fact Check 报告合成。
+
+Reviewer、Fact Check 和 Synthesizer 都必须按各自 schema 输出 JSON。每个阶段会调用
+`mcp__json_validator__validate_json_output` 自检，并写入
+`roles/<role>/validator.log`；runner 接收后仍会执行最终 schema 校验。
+
+评审失败，或以 `completed + infra_errors` 返回但存在失败 Reviewer 时，可以使用
+`retry_plan_review_stage` 断点续跑：
+
+- `stage: "reviewers"`：只重跑失败或缺失的 Reviewer，随后继续 Fact Check 和 Synthesis。
+- `stage: "fact_check"`：复用全部 Reviewer，重跑 Fact Check 和 Synthesis。
+- `stage: "synthesis"`：复用 Reviewer 与 Fact Check，只重跑 Synthesis。
+
+每个 Reviewer、Fact Check、Synthesis executor 最多重试 3 次。重试次数记录在
+`state.json` 的 `retry_counts` 中，达到上限后会在调用模型前拒绝继续执行。
 7. 输出流程图、节点问题、人工决策、可能误报和修订清单。
 
 不需要再粘贴固定的 MCP 调用 prompt。
@@ -382,7 +397,8 @@ cd plan-review-harness-claude-code
 ./install.sh /Users/{real-path-to}/claude-settings
 ```
 
-安装器会更新 MCP runtime 和 Skill，并重新注册 MCP。
+安装器会更新 MCP runtime 和 Skill、重新注册 MCP，并保留已有
+`~/.claude/plan-review-harness/mcp/workspace-runs`。
 
 更新后重启 Claude Code。
 

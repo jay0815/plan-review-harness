@@ -84,8 +84,26 @@ function validateSchema(value, schema, path = "$", errors = []) {
       errors.push({ path, message: `expected array, got ${typeOf(value)}` });
       return errors;
     }
+    if (schema.minItems !== undefined && value.length < schema.minItems) {
+      errors.push({ path, message: `expected at least ${schema.minItems} item(s), got ${value.length}` });
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+      errors.push({ path, message: `expected at most ${schema.maxItems} item(s), got ${value.length}` });
+    }
     if (schema.items) {
       value.forEach((item, index) => validateSchema(item, schema.items, `${path}[${index}]`, errors));
+    }
+  }
+
+  if (schema.type === "string" && typeof value === "string") {
+    if (schema.minLength !== undefined && value.length < schema.minLength) {
+      errors.push({ path, message: `expected length >= ${schema.minLength}, got ${value.length}` });
+    }
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
+      errors.push({ path, message: `expected length <= ${schema.maxLength}, got ${value.length}` });
+    }
+    if (schema.pattern !== undefined && !(new RegExp(schema.pattern).test(value))) {
+      errors.push({ path, message: `expected string to match ${schema.pattern}` });
     }
   }
 

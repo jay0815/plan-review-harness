@@ -11,6 +11,7 @@ const {
 } = require("./lib");
 const {
   REVIEW_ROLES,
+  MAX_EXECUTOR_RETRIES,
   loadWorkspaceReviewFromArgs,
   configSummary,
   validateProjectRoot,
@@ -58,6 +59,8 @@ function toolList() {
       name: "start_plan_review",
       description: [
         "启动一次后台 Plan Review；同一计划只调用一次本工具。",
+        "启动后会先执行本地确定性 Plan 结构检查，并将结果保存为 plan-authoring-lint.json；该步骤不调用模型。",
+        "结构检查 error 会使最终 outcome 至少为 needs_revision，warning 只展示不自动阻塞。",
         "评审模型只能使用 Read、Glob、Grep 读取 project_root，不能修改文件或执行 Bash。",
         "Reviewer 完成后会先执行 Fact Check 校验 evidence，Synthesizer 不读取工程目录，只基于计划、Reviewer JSON 和 Fact Check 报告合成。",
         "返回后必须立即使用 next_action 指定的参数调用 get_plan_review。",
@@ -124,8 +127,11 @@ function toolList() {
     {
       name: "retry_plan_review_stage",
       description: [
-        "对已失败但已有中间产物的 Plan Review 执行断点重试。",
-        "当前只支持 stage=synthesis：复用已完成的 Reviewer 与 Fact Check 输出，只重跑 Synthesizer。",
+        "对失败或包含 Reviewer 基础设施错误、但已有中间产物的 Plan Review 执行断点重试。",
+        "stage=reviewers 只重跑失败或缺失的 Reviewer，成功后继续 Fact Check 和 Synthesis。",
+        "stage=fact_check 复用全部 Reviewer，重跑 Fact Check 和 Synthesis。",
+        "stage=synthesis 复用 Reviewer 与 Fact Check，只重跑 Synthesis。",
+        `每个 executor 最多重试 ${MAX_EXECUTOR_RETRIES} 次，超过上限会在调用模型前拒绝。`,
         "返回后必须立即使用 next_action 指定的参数调用 get_plan_review。"
       ].join(" "),
       annotations: {
@@ -145,12 +151,12 @@ function toolList() {
           },
           stage: {
             type: "string",
-            enum: ["synthesis"],
-            description: "当前仅支持 synthesis。"
+            enum: ["reviewers", "fact_check", "synthesis"],
+            description: "按失败阶段选择 reviewers、fact_check 或 synthesis。"
           },
           force: {
             type: "boolean",
-            description: "仅当确认旧进程已死亡但 state 仍为 running 时使用；默认 false。"
+            description: "仅当确认旧进程已死亡但 state 仍为 queued 或 running 时使用；默认 false。"
           }
         },
         additionalProperties: false
@@ -354,7 +360,7 @@ function retryPlanReviewStage(config, input) {
   if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
     throw new Error(`Invalid run_id: ${runId}`);
   }
-  if (input.stage !== "synthesis") {
+  if (!["reviewers", "fact_check", "synthesis"].includes(input.stage)) {
     throw new Error(`Unsupported retry stage: ${input.stage}`);
   }
   const runDir = runDirectory(config, runId);
@@ -363,28 +369,72 @@ function retryPlanReviewStage(config, input) {
     throw new Error(`Unknown plan review run: ${runId}`);
   }
   const state = parseJsonFile(stateFile);
-  if (state.status === "running" && !input.force) {
-    throw new Error("Run is still marked running. Retry only after it fails, or pass force when the old process is known to be dead.");
+  if (["queued", "running"].includes(state.status) && !input.force) {
+    throw new Error("Run is still queued or running. Retry only after it fails, or pass force when the old process is known to be dead.");
   }
   const roles = Array.isArray(state.roles) && state.roles.length ? state.roles : REVIEW_ROLES;
-  const requiredFiles = [
-    ...roles.map((role) => `roles/${role}/output.json`),
-    "roles/fact_check/output.json",
-    "roles/fact_check/fact-check-summary.json"
-  ];
-  const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(runDir, file)));
-  if (missing.length) {
-    throw new Error(`Cannot retry synthesis; missing prerequisite artifact(s): ${missing.join(", ")}`);
+  const reviewerCompleted = (role) => {
+    const outputFile = path.join(runDir, "roles", role, "output.json");
+    const metadataFile = path.join(runDir, "roles", role, "metadata.json");
+    if (!fs.existsSync(outputFile) || !fs.existsSync(metadataFile)) {
+      return false;
+    }
+    return parseJsonFile(metadataFile).status === "completed";
+  };
+  const incompleteReviewers = roles.filter((role) => !reviewerCompleted(role));
+  if (input.stage === "reviewers" && !incompleteReviewers.length) {
+    throw new Error("Cannot retry reviewers: all requested reviewers are already completed");
+  }
+  if (input.stage !== "reviewers" && incompleteReviewers.length) {
+    throw new Error(
+      `Cannot retry ${input.stage}; incomplete reviewer(s): ${incompleteReviewers.join(", ")}`
+    );
+  }
+  if (input.stage === "synthesis") {
+    const requiredFiles = [
+      "roles/fact_check/output.json",
+      "roles/fact_check/fact-check-summary.json",
+      "roles/fact_check/metadata.json"
+    ];
+    const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(runDir, file)));
+    if (missing.length) {
+      throw new Error(`Cannot retry synthesis; missing prerequisite artifact(s): ${missing.join(", ")}`);
+    }
+    const factCheckMetadata = parseJsonFile(path.join(
+      runDir,
+      "roles",
+      "fact_check",
+      "metadata.json"
+    ));
+    if (factCheckMetadata.status !== "completed") {
+      throw new Error(`Cannot retry synthesis; fact_check status is ${factCheckMetadata.status || "unknown"}`);
+    }
+  }
+  const retryCounts = state.retry_counts || {};
+  const plannedExecutors = input.stage === "reviewers"
+    ? [...incompleteReviewers, "fact_check", "synthesis"]
+    : input.stage === "fact_check"
+      ? ["fact_check", "synthesis"]
+      : ["synthesis"];
+  const exhausted = [...new Set(plannedExecutors)].filter(
+    (executor) => Number(retryCounts[executor] || 0) >= MAX_EXECUTOR_RETRIES
+  );
+  if (exhausted.length) {
+    throw new Error(
+      `Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(", ")}`
+    );
   }
 
   updateState(runDir, {
     status: "queued",
     retry_stage: input.stage,
     retry_queued_at: new Date().toISOString(),
-    error: null
+    error: null,
+    retry_limit: MAX_EXECUTOR_RETRIES
   });
   appendExecutionLog(runDir, "stage_retry_queued", {
-    stage: input.stage
+    stage: input.stage,
+    retry_roles: input.stage === "reviewers" ? incompleteReviewers : []
   });
 
   const stdoutFd = fs.openSync(path.join(runDir, "runner.stdout.log"), "a");
@@ -485,6 +535,26 @@ function progressSnapshot(config, runDir, state) {
       .map(parseExecutionLogLine)
       .filter(Boolean);
     for (const event of events) {
+      if (
+        event.event === "stage_retry_queued" ||
+        event.event === "stage_retry_started"
+      ) {
+        if (event.stage === "reviewers") {
+          const retryRoles = Array.isArray(event.retry_roles) ? event.retry_roles : [];
+          for (const role of retryRoles) {
+            if (reviewers[role]) {
+              reviewers[role].status = "pending";
+            }
+          }
+          factCheck.status = "pending";
+          synthesis.status = "pending";
+        } else if (event.stage === "fact_check") {
+          factCheck.status = "pending";
+          synthesis.status = "pending";
+        } else if (event.stage === "synthesis") {
+          synthesis.status = "pending";
+        }
+      }
       if (event.role && reviewers[event.role]) {
         if (event.event === "agent_started") {
           reviewers[event.role].status = "running";
@@ -548,13 +618,16 @@ function progressSnapshot(config, runDir, state) {
   if (factCheck.status === "running") {
     active.push(`fact_check/${factCheck.model}`);
   }
+  if (synthesis.status === "running") {
+    active.push(`synthesis/${synthesis.model}`);
+  }
   const infraErrorCount = Array.isArray(state.infra_errors) ? state.infra_errors.length : 0;
   const message = state.status === "completed"
     ? infraErrorCount
       ? `计划评审已完成但存在 ${infraErrorCount} 个 Reviewer 基础设施错误：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成；Fact Check 已完成；Synthesis 已完成。`
       : `计划评审已完成：Reviewer ${completedReviewers}/${reviewerValues.length}，Fact Check 已完成，Synthesis 已完成。`
     : state.status === "failed"
-      ? `计划评审失败：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成。`
+      ? `计划评审失败：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成；Fact Check ${factCheck.status}；Synthesis ${synthesis.status}。`
       : [
         `计划评审执行中：Reviewer ${completedReviewers}/${reviewerValues.length} 已完成`,
         active.length ? `运行中 ${active.join(", ")}` : "等待下一阶段",
@@ -680,7 +753,7 @@ function createHandler(config) {
           "随后立即使用返回的 next_action 参数调用 get_plan_review。",
           "收到 progress notification 时保持当前 get_plan_review 调用等待。",
           "只有 get_plan_review 返回 status=running 和 next_action 时才再次调用。",
-          "若 get_plan_review 返回 synthesis 阶段失败，可调用 retry_plan_review_stage stage=synthesis 做断点重试。",
+          `若 get_plan_review 返回失败，或 completed 但 Reviewer 未全部完成，可按 progress 调用 retry_plan_review_stage：reviewers 只重跑失败节点，fact_check 或 synthesis 复用已完成上游；每个 executor 最多重试 ${MAX_EXECUTOR_RETRIES} 次。`,
           "禁止使用 Bash、sleep、Monitor、execution_log 或外部命令观察评审状态。",
           "禁止暴露或请求 ANTHROPIC_API_KEY。"
         ].join(" ")

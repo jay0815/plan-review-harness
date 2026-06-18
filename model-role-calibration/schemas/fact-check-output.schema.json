@@ -16,6 +16,7 @@
           "source",
           "issue_title",
           "status",
+          "scope_status",
           "evidence_status",
           "claim_support",
           "reason",
@@ -39,6 +40,13 @@
               "unsupported",
               "contradicted",
               "unverifiable"
+            ]
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "not_determined"
             ]
           },
           "evidence_status": {

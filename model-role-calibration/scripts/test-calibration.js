@@ -6,12 +6,16 @@ const path = require("path");
 const { ROOT, loadConfig, schemaForProbe } = require("./lib");
 const { parseAssistantOutput, parseJsonEnvelope, buildCliArgs } = require("./run-model");
 const { MAX_CONCURRENCY, mergeRequestedJobs } = require("./run-agent-pool");
+const { DEFAULT_CASE } = require("./run-calibration");
 const {
-  DEFAULT_CASE,
   parseList,
   compactUtcTimestamp,
   uniqueRunId
-} = require("./run-calibration");
+} = require("./calibration/core");
+const {
+  DEFAULT_CONCURRENCY: ROLE_DEFAULT_CONCURRENCY,
+  RoleCalibrationExecutor
+} = require("./calibration/role-executor");
 const { roleRecommendation } = require("./summarize-results");
 const { validateJsonText } = require("./json-validator-mcp");
 const {
@@ -34,6 +38,7 @@ function main() {
   const [caseA, caseB, caseC] = config.primary_cases;
 
   assert.equal(MAX_CONCURRENCY, 3);
+  assert.equal(ROLE_DEFAULT_CONCURRENCY, 3);
   assert.equal(schemaForProbe("risk"), path.join(ROOT, "schemas", "risk-output.schema.json"));
   assert.equal(
     evaluationSchemaFile(),
@@ -109,8 +114,48 @@ function main() {
     "20260611T094509Z"
   );
   assert.equal(
-    uniqueRunId("synthetic/new-case", new Date("2026-06-11T09:45:09.123Z")),
+    uniqueRunId(
+      "synthetic-new-case",
+      ROOT,
+      new Date("2026-06-11T09:45:09.123Z")
+    ),
     "synthetic-new-case-20260611T094509Z"
+  );
+  const roleExecutor = new RoleCalibrationExecutor();
+  assert.equal(roleExecutor.type, "role");
+  assert.deepEqual(
+    roleExecutor.buildJobs({
+      run: "run-001",
+      caseId: "synthetic/event-reporting",
+      models: ["kimi", "qwen"],
+      probes: ["planner", "risk"]
+    }),
+    [
+      {
+        run: "run-001",
+        caseId: "synthetic/event-reporting",
+        model: "kimi",
+        probe: "planner"
+      },
+      {
+        run: "run-001",
+        caseId: "synthetic/event-reporting",
+        model: "qwen",
+        probe: "planner"
+      },
+      {
+        run: "run-001",
+        caseId: "synthetic/event-reporting",
+        model: "kimi",
+        probe: "risk"
+      },
+      {
+        run: "run-001",
+        caseId: "synthetic/event-reporting",
+        model: "qwen",
+        probe: "risk"
+      }
+    ]
   );
 
   const singleCase = roleRecommendation("planner", [
@@ -178,6 +223,99 @@ function main() {
   ].join("\n"), "planner");
   assert.equal(streamEnvelope.output.probe, "planner");
   assert.equal(streamEnvelope.envelope.length, 3);
+
+  const validatedToolCandidate = {
+    probe: "execution",
+    issues: [],
+    missing_questions: ["who owns event_id?"],
+    false_positive_risks: []
+  };
+  const validatedToolEnvelope = parseAssistantOutput([
+    JSON.stringify({ type: "system", subtype: "init" }),
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          id: "toolu_validated",
+          name: "mcp__json_validator__validate_json_output",
+          input: { candidate_text: JSON.stringify(validatedToolCandidate) }
+        }]
+      }
+    }),
+    JSON.stringify({
+      type: "user",
+      message: {
+        content: [{
+          type: "tool_result",
+          tool_use_id: "toolu_validated",
+          content: [{ type: "text", text: JSON.stringify({ valid: true, stage: "schema" }) }]
+        }]
+      }
+    }),
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "{\"probe\":\"execution\",\"issues\":[{\"title\":\"truncated"
+    })
+  ].join("\n"), "execution");
+  assert.deepEqual(validatedToolEnvelope.output, validatedToolCandidate);
+
+  assert.throws(() => parseAssistantOutput([
+    JSON.stringify({ type: "system", subtype: "init" }),
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          id: "toolu_invalid",
+          name: "mcp__json_validator__validate_json_output",
+          input: { candidate_text: JSON.stringify(validatedToolCandidate) }
+        }]
+      }
+    }),
+    JSON.stringify({
+      type: "user",
+      message: {
+        content: [{
+          type: "tool_result",
+          tool_use_id: "toolu_invalid",
+          content: [{ type: "text", text: JSON.stringify({ valid: false, stage: "schema" }) }]
+        }]
+      }
+    }),
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "{\"probe\":\"execution\",\"issues\":[{\"title\":\"truncated"
+    })
+  ].join("\n"), "execution"), /valid JSON object|Unterminated string/);
+
+  const wrappedFactCheckEnvelope = parseAssistantOutput([
+    JSON.stringify({ type: "system", subtype: "init" }),
+    JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: [
+        "<function_results>",
+        JSON.stringify({ name: "Read", output: "verification notes" }),
+        "</function_results>",
+        "<function_calls>",
+        JSON.stringify({
+          probe: "fact_check",
+          checked_issues: [],
+          source_summaries: [],
+          limits: []
+        }),
+        "</function_calls>"
+      ].join("")
+    })
+  ].join("\n"), "fact_check");
+  assert.equal(wrappedFactCheckEnvelope.output.probe, "fact_check");
+  assert.deepEqual(wrappedFactCheckEnvelope.output.checked_issues, []);
 
   const largeStream = [
     ...Array.from({ length: 140 }, (_, index) => JSON.stringify({
@@ -297,6 +435,25 @@ function main() {
   assert.equal(validateJsonText("```json\n{}\n```", plannerSchema).stage, "json_parse");
   assert.equal(validateJsonText("{\"probe\":\"planner\",\"summary\":\"符合\"不新增平行 API\"的约束\"}", plannerSchema).valid, false);
   assert.equal(validateJsonText(JSON.stringify({ probe: "planner", extra: true }), plannerSchema).stage, "schema");
+  assert.equal(validateJsonText(JSON.stringify({
+    name: "",
+    nodes: []
+  }), {
+    type: "object",
+    required: ["name", "nodes"],
+    properties: {
+      name: {
+        type: "string",
+        minLength: 1,
+        pattern: "^[A-Za-z]+$"
+      },
+      nodes: {
+        type: "array",
+        minItems: 1
+      }
+    },
+    additionalProperties: false
+  }).valid, false);
 
   const mergedJobs = mergeRequestedJobs([
     { caseId: caseA, model: "kimi", probe: "planner" }

@@ -64,7 +64,9 @@ async function runCalibration(executor, options) {
   }
 
   const promptInfo = executor.generatePrompts({ run, caseId, models, probes });
-  console.log(`Prompts: ${promptInfo.prompts.length} generated`);
+  const generated = promptInfo.generated ?? promptInfo.prompts.length;
+  const reused = promptInfo.reused ?? 0;
+  console.log(`Prompts: ${generated} generated${reused ? `, ${reused} reused` : ""}`);
 
   const jobs = executor.buildJobs({ run, caseId, models, probes });
   console.log(`Jobs: ${jobs.length} scheduled, concurrency=${concurrency}`);
@@ -82,6 +84,8 @@ async function runCalibration(executor, options) {
     case_id: caseId,
     models,
     probes: probes.length ? probes : undefined,
+    requested: jobs.length,
+    skipped: results.filter((item) => item.status === "skipped").length,
     completed,
     failed,
     results,

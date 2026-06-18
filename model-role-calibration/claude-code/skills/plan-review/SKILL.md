@@ -85,17 +85,30 @@ planner:    deepseek
 5. 立即按返回的 `next_action` 调用 `get_plan_review`。
 6. `get_plan_review` 运行期间保持等待 progress notification。禁止使用 Bash、`sleep`、Monitor、`execution_log`、`claude mcp call` 或其他外部方式查询状态。
 7. 只有当 `get_plan_review` 返回 `status: running` 和新的 `next_action` 时，才按其参数再次调用。
-8. `status: failed` 时：
-   - 如果失败发生在 synthesis 阶段，且 progress 显示 Reviewer 与 Fact Check 均已完成，则调用一次 `retry_plan_review_stage`，参数为 `{ run_id, stage: "synthesis" }`，然后继续按 `next_action` 调用 `get_plan_review`。
-   - 只允许自动重试一次 synthesis；再次失败时输出失败阶段和 MCP 返回的错误，不再重试。
-   - 其他阶段失败时输出失败阶段和 MCP 返回的错误，不自行重跑。
-9. `status: completed` 时按下述格式展示，不修改工程文件。
+8. `status: completed` 但任一 Reviewer 不是 `completed`，或返回了对应 Reviewer 的 `infra_errors` 时，先调用 `retry_plan_review_stage`，参数为 `{ run_id, stage: "reviewers" }`，不要直接展示不完整报告。
+9. `status: failed` 时：
+   - 如果任一 Reviewer 为 `failed` 或缺少结果，调用 `retry_plan_review_stage`，参数为 `{ run_id, stage: "reviewers" }`。该阶段只重跑失败或缺失的 Reviewer；成功后继续 Fact Check 和 Synthesis。
+   - 如果全部 Reviewer 已完成但 Fact Check 为 `failed`，调用 `retry_plan_review_stage`，参数为 `{ run_id, stage: "fact_check" }`。该阶段复用 Reviewer，并继续 Synthesis。
+   - 如果 Reviewer 与 Fact Check 均已完成但 Synthesis 为 `failed`，调用 `retry_plan_review_stage`，参数为 `{ run_id, stage: "synthesis" }`。
+   - 每次重试后继续按 `next_action` 调用 `get_plan_review`。MCP 会维护 `retry_counts`；每个 Reviewer、Fact Check、Synthesis executor 最多重试 3 次。
+   - MCP 返回 `Retry limit reached` 或不满足阶段前置条件时，输出失败阶段和错误，不再重试。
+10. 全部 Reviewer、Fact Check 和 Synthesis 均完成后，按下述格式展示，不修改工程文件。
 
 ### 输出格式
 
 #### 结论
 
 输出 `run_id`、参与角色、完成状态，以及阻塞项数量和需要人工裁决的分歧数量。
+
+#### Plan 结构检查
+
+展示 `report.authoring_lint`：
+
+- 复杂度和行数预算。
+- `errors`：必须修订的结构、实现代码膨胀或 Existing Code Refs 错误。
+- `warnings`：行数超限、待确认措辞位置或无法可靠分类的长代码块。
+
+没有 error/warning 时写“通过”。warning 不自动阻塞；error 必须反映在 `outcome.status: needs_revision`。
 
 #### 流程图
 
@@ -127,11 +140,11 @@ planner:    deepseek
 
 #### 可能误报
 
-展示 `likely_false_positives`，不要混入修订清单。
+展示 `likely_false_positives[].reason`，可附带对应 `source_finding_ids`；不要混入修订清单。
 
 #### 修订清单
 
-按 `revision_instructions` 顺序输出可执行清单。
+按 `revision_instructions` 顺序输出每项 `instruction`。修订只补充关键决策和契约，不要求完整源码、Hook、props、JSX、mock 或测试实现。
 
 #### Reviewer 附录
 

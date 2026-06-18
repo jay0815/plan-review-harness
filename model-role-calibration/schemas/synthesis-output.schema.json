@@ -2,10 +2,79 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Synthesis Probe Model Output",
   "type": "object",
-  "required": ["probe", "process_map", "consensus_issues", "disagreements", "likely_false_positives", "revision_instructions"],
+  "required": [
+    "probe",
+    "source_findings",
+    "process_map",
+    "consensus_issues",
+    "disagreements",
+    "likely_false_positives",
+    "revision_instructions"
+  ],
   "properties": {
     "probe": {
       "const": "synthesis"
+    },
+    "source_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "source_title",
+          "fact_check_status",
+          "scope_status",
+          "disposition",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F[1-9][0-9]*$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fact_check_status": {
+            "enum": [
+              "verified",
+              "partially_verified",
+              "unsupported",
+              "contradicted",
+              "unverifiable",
+              "not_available"
+            ]
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "not_determined"
+            ]
+          },
+          "disposition": {
+            "enum": [
+              "retained",
+              "merged",
+              "duplicate",
+              "unsupported",
+              "contradicted",
+              "unverifiable",
+              "out_of_scope"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
     },
     "process_map": {
       "type": "object",
@@ -58,7 +127,15 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "merged_from", "severity", "affected_nodes", "reason", "suggested_fix"],
+        "required": [
+          "title",
+          "merged_from",
+          "severity",
+          "affected_nodes",
+          "source_finding_ids",
+          "reason",
+          "required_plan_change"
+        ],
         "properties": {
           "title": {
             "type": "string"
@@ -79,10 +156,13 @@
               "type": "string"
             }
           },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
           "reason": {
             "type": "string"
           },
-          "suggested_fix": {
+          "required_plan_change": {
             "type": "string"
           }
         },
@@ -93,13 +173,22 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "positions", "affected_nodes", "level", "needs_human_decision", "decision_options"],
+        "required": [
+          "title",
+          "positions",
+          "affected_nodes",
+          "source_finding_ids",
+          "level",
+          "needs_human_decision",
+          "decision_options"
+        ],
         "properties": {
           "title": {
             "type": "string"
           },
           "positions": {
             "type": "array",
+            "minItems": 2,
             "items": {
               "type": "object",
               "required": ["source", "position", "reason"],
@@ -124,6 +213,9 @@
               "type": "string"
             }
           },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
           "level": {
             "enum": ["L1_preference", "L2_local_change", "L3_direction_decision"]
           },
@@ -143,13 +235,44 @@
     "likely_false_positives": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "object",
+        "required": ["source_finding_ids", "reason"],
+        "properties": {
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "revision_instructions": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "object",
+        "required": ["instruction", "source_finding_ids"],
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "findingIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^F[1-9][0-9]*$"
       }
     }
   },

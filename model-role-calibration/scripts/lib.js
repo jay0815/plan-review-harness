@@ -95,6 +95,18 @@ function slug(value) {
   return String(value).trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function optionalSlugArg(args, name) {
+  const value = args[name];
+  if (!value || value === true) {
+    return null;
+  }
+  const normalized = slug(value).toLowerCase();
+  if (!normalized) {
+    throw new Error(`Invalid --${name}: must contain at least one alphanumeric, underscore, or hyphen`);
+  }
+  return normalized;
+}
+
 function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
@@ -150,6 +162,15 @@ function schemaForProbe(probe) {
   }
   if (probe === "risk") {
     return path.join(ROOT, "schemas", "risk-output.schema.json");
+  }
+  if (probe === "architecture") {
+    return path.join(ROOT, "schemas", "architecture-output.schema.json");
+  }
+  if (probe === "execution") {
+    return path.join(ROOT, "schemas", "execution-output.schema.json");
+  }
+  if (probe === "rebuttal") {
+    return path.join(ROOT, "schemas", "rebuttal-output.schema.json");
   }
   if (probe === "synthesis") {
     return path.join(ROOT, "schemas", "synthesis-output.schema.json");
@@ -210,6 +231,7 @@ module.exports = {
   assertSafeCaseId,
   assertProbe,
   slug,
+  optionalSlugArg,
   timestamp,
   loadCaseInput,
   parseJsonFile,

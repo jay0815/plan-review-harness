@@ -62,7 +62,20 @@ function main() {
       path.join(result.packageDir, "mcp", "scripts", "retry-workspace-review-stage.js")
     ));
     assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "json-validator-mcp.js")
+    ));
+    assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "claude-plan-authoring.md")
+    ));
+    const packagedAuthoringContract = fs.readFileSync(
+      path.join(result.packageDir, "mcp", "claude-plan-authoring.md"),
+      "utf8"
+    );
+    assert(packagedAuthoringContract.includes("决策完备"));
+    assert(packagedAuthoringContract.includes("Repo-aware 生成顺序"));
+    assert(packagedAuthoringContract.includes("禁止强制创建 Proposed Code Artifacts"));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "plan-authoring-lint.js")
     ));
     assert(fs.statSync(
       path.join(result.packageDir, "skill", "plan-review", "SKILL.md")
@@ -167,6 +180,9 @@ exit 0
     assert(fs.existsSync(path.join(installedSkill, ".plan-review-harness-owned")));
     assert(fs.existsSync(path.join(installedSkill, "SKILL.md")));
     assert(fs.existsSync(path.join(installedMcp, "scripts", "plan-review-mcp.js")));
+    const preservedRun = path.join(installedMcp, "workspace-runs", "workspace-review-preserved");
+    fs.mkdirSync(preservedRun, { recursive: true });
+    fs.writeFileSync(path.join(preservedRun, "state.json"), "{}\n", "utf8");
 
     const reinstall = spawnSync(
       path.join(result.packageDir, "install.sh"),
@@ -184,6 +200,7 @@ exit 0
       }
     );
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
+    assert(fs.existsSync(path.join(preservedRun, "state.json")));
 
     const claudeLog = fs.readFileSync(fakeLog, "utf8");
     const canonicalSettingsDir = fs.realpathSync(settingsDir);

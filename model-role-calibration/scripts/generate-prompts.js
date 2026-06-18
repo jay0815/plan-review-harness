@@ -25,15 +25,11 @@ function uniqueRunId(base) {
   return run;
 }
 
-function main() {
-  const args = parseArgs(process.argv);
-  const caseId = requireArg(args, "case");
+function generatePrompts({ run, caseId, probes }) {
   assertSafeCaseId(caseId);
-  const probes = requireArg(args, "probes").split(",").map((item) => item.trim()).filter(Boolean);
   probes.forEach(assertProbe);
 
-  const runId = args.run && args.run !== true ? String(args.run) : uniqueRunId(timestamp());
-  const promptDir = path.join(ROOT, "runs", runId, caseId, "prompts");
+  const promptDir = path.join(ROOT, "runs", run, caseId, "prompts");
   ensureDir(promptDir);
 
   for (const probe of probes) {
@@ -47,8 +43,31 @@ function main() {
     writeFileNew(path.join(promptDir, `${probe}.md`), output);
   }
 
-  console.log(`Run ID: ${runId}`);
-  console.log(`Generated prompts: ${path.join("model-role-calibration", "runs", runId, caseId, "prompts")}`);
+  return {
+    promptDir,
+    prompts: probes.map((probe) => ({
+      probe,
+      file: path.join(promptDir, `${probe}.md`)
+    }))
+  };
 }
 
-main();
+function main() {
+  const args = parseArgs(process.argv);
+  const caseId = requireArg(args, "case");
+  const probes = requireArg(args, "probes").split(",").map((item) => item.trim()).filter(Boolean);
+  const run = args.run && args.run !== true ? String(args.run) : uniqueRunId(timestamp());
+  const generated = generatePrompts({ run, caseId, probes });
+
+  console.log(`Run ID: ${run}`);
+  console.log(`Generated prompts: ${path.relative(path.resolve(ROOT, ".."), generated.promptDir)}`);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  generatePrompts,
+  uniqueRunId
+};

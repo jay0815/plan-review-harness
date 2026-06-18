@@ -8,7 +8,8 @@ const { spawnSync } = require("child_process");
 const {
   ROOT,
   parseJsonFile,
-  writeGenerated
+  writeGenerated,
+  ensureDir
 } = require("./lib");
 const {
   buildEvaluationPrompt,
@@ -83,6 +84,7 @@ function main() {
   const invocationFile = path.join(tempDir, "invocation.json");
   const runEvaluation = path.join(ROOT, "scripts", "run-evaluation.js");
   const promoteEvaluation = path.join(ROOT, "scripts", "promote-evaluation.js");
+  const scoreOutput = path.join(ROOT, "scripts", "score-output.js");
   const summarizeResults = path.join(ROOT, "scripts", "summarize-results.js");
   const generatedOutputs = [
     path.join(ROOT, "outputs", "calibration-results.json"),
@@ -224,6 +226,39 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
     requireSuccess(result, "summarize promoted score");
     assert(result.stdout.includes("Scores read: 1"));
 
+    const versionedRun = `${run}-versioned`;
+    const versionedCaseDir = path.join(ROOT, "runs", versionedRun, caseId);
+    ensureDir(versionedCaseDir);
+    result = runNode(scoreOutput, [
+      "--run", versionedRun,
+      "--case", caseId,
+      "--model", "GLM",
+      "--probe", "planner",
+      "--score-version", "Manual V1"
+    ]);
+    requireSuccess(result, "create versioned score");
+    const versionedScoreFile = path.join(
+      versionedCaseDir,
+      "scores",
+      "versions",
+      "manual-v1",
+      "GLM-planner.score.json"
+    );
+    assert(fs.existsSync(versionedScoreFile));
+
+    result = runNode(summarizeResults, ["--run", versionedRun]);
+    assert.notEqual(result.status, 0);
+    assert(result.stderr.includes("Pass --score-version"));
+
+    result = runNode(summarizeResults, [
+      "--run", versionedRun,
+      "--score-version", "Manual V1"
+    ]);
+    requireSuccess(result, "summarize versioned score");
+    assert(result.stdout.includes("Scores read: 1"));
+    assert(result.stdout.includes("Score version: manual-v1"));
+    assert.equal(parseJsonFile(path.join(ROOT, "outputs", "calibration-results.json")).score_version, "manual-v1");
+
     console.log("Evaluation workflow tests passed");
   } finally {
     for (const [file, content] of outputBackups) {
@@ -234,6 +269,7 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
       }
     }
     fs.rmSync(runDir, { recursive: true, force: true });
+    fs.rmSync(path.join(ROOT, "runs", `${run}-versioned`), { recursive: true, force: true });
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

@@ -8,7 +8,8 @@ const {
   assertSafeCaseId,
   assertProbe,
   writeFileNew,
-  slug
+  slug,
+  optionalSlugArg
 } = require("./lib");
 
 function main() {
@@ -17,6 +18,7 @@ function main() {
   const caseId = requireArg(args, "case");
   const model = requireArg(args, "model");
   const probe = requireArg(args, "probe");
+  const scoreVersion = optionalSlugArg(args, "score-version");
   assertSafeCaseId(caseId);
   assertProbe(probe);
 
@@ -24,6 +26,7 @@ function main() {
     case_id: caseId,
     model,
     probe,
+    ...(scoreVersion ? { score_version: scoreVersion } : {}),
     score: {
       hit_rate: 0,
       contract_closure: 0,
@@ -42,7 +45,15 @@ function main() {
     unsuitable_roles: []
   };
 
-  const target = path.join(ROOT, "runs", run, caseId, "scores", `${slug(model)}-${probe}.score.json`);
+  const target = path.join(
+    ROOT,
+    "runs",
+    run,
+    caseId,
+    "scores",
+    ...(scoreVersion ? ["versions", scoreVersion] : []),
+    `${slug(model)}-${probe}.score.json`
+  );
   writeFileNew(target, JSON.stringify(score, null, 2) + "\n");
   console.log(`Created score file: ${target}`);
 }

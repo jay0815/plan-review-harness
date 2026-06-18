@@ -54,6 +54,7 @@ function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "calibration-runtime-test-"));
   const fakeShell = path.join(tempDir, "fake-shell");
   const fakeModel = path.join(tempDir, "fake-model.js");
+  const noOutputRunner = path.join(tempDir, "no-output-runner.js");
   const runModel = path.join(ROOT, "scripts", "run-model.js");
   const runPool = path.join(ROOT, "scripts", "run-agent-pool.js");
   const runCalibration = path.join(ROOT, "scripts", "run-calibration.js");
@@ -62,7 +63,9 @@ function main() {
     `runtime-pool-${process.pid}-${Date.now()}`,
     `runtime-partial-retry-${process.pid}-${Date.now()}`,
     `runtime-workflow-${process.pid}-${Date.now()}`,
-    `runtime-pool-failure-${process.pid}-${Date.now()}`
+    `runtime-pool-failure-${process.pid}-${Date.now()}`,
+    `runtime-workflow-failure-${process.pid}-${Date.now()}`,
+    `runtime-workflow-missing-output-${process.pid}-${Date.now()}`
   ];
 
   fs.writeFileSync(fakeShell, `#!/bin/sh
@@ -107,6 +110,7 @@ const finish = () => {
 if (mode === "hang") setTimeout(finish, 60000);
 else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
 `);
+  fs.writeFileSync(noOutputRunner, "#!/usr/bin/env node\nprocess.exit(0);\n");
   fs.chmodSync(fakeShell, 0o755);
   fs.chmodSync(fakeModel, 0o755);
 
@@ -269,13 +273,19 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.equal(partialRetryBatch.skipped.length, 2);
 
     const workflowRun = runIds[3];
+    const workflowLog = path.join(tempDir, "workflow.log");
     result = runNode(runCalibration, [
       "--run", workflowRun,
       "--case", "synthetic/event-reporting",
       "--models", "kimi,deepseek",
       "--probes", "planner,risk"
-    ], baseEnv);
+    ], {
+      ...baseEnv,
+      FAKE_POOL_LOG: workflowLog,
+      FAKE_MODEL_DELAY_MS: "100"
+    });
     requireSuccess(result, "full workflow");
+    assert.equal(maxConcurrency(workflowLog), 3);
     assert(fs.existsSync(path.join(
       ROOT,
       "runs",
@@ -288,10 +298,12 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       workflowRun,
       "synthetic/event-reporting/prompts/risk.md"
     )));
-    let workflowIndex = parseJsonFile(path.join(ROOT, "runs", workflowRun, "agent-pool.json"));
-    assert.equal(workflowIndex.requested_jobs.length, 4);
-    assert.equal(workflowIndex.unresolved_jobs.length, 0);
-    assert.equal(workflowIndex.ready_for_evaluation, true);
+    let workflowBatch = parseJsonFile(path.join(ROOT, "runs", workflowRun, "batch.json"));
+    assert.equal(workflowBatch.type, "role");
+    assert.equal(workflowBatch.requested, 4);
+    assert.equal(workflowBatch.completed, 4);
+    assert.equal(workflowBatch.failed, 0);
+    assert.equal(workflowBatch.skipped, 0);
 
     result = runNode(runCalibration, [
       "--run", workflowRun,
@@ -300,15 +312,13 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       "--probes", "planner,risk"
     ], baseEnv);
     requireSuccess(result, "resumable full workflow");
-    assert(result.stdout.includes("All requested prompts already exist; skipping generation."));
-    workflowIndex = parseJsonFile(path.join(ROOT, "runs", workflowRun, "agent-pool.json"));
-    assert.equal(workflowIndex.batches.length, 2);
-    const workflowRetryBatch = parseJsonFile(path.join(
-      path.resolve(ROOT),
-      workflowIndex.batches[1].file
-    ));
-    assert.equal(workflowRetryBatch.scheduled, 0);
-    assert.equal(workflowRetryBatch.skipped.length, 4);
+    assert(result.stdout.includes("Prompts: 0 generated, 2 reused"));
+    workflowBatch = parseJsonFile(path.join(ROOT, "runs", workflowRun, "batch.json"));
+    assert.equal(workflowBatch.requested, 4);
+    assert.equal(workflowBatch.completed, 4);
+    assert.equal(workflowBatch.failed, 0);
+    assert.equal(workflowBatch.skipped, 4);
+    assert(workflowBatch.results.every((item) => item.status === "skipped"));
 
     const failureRun = runIds[4];
     generatePrompts(failureRun, ["planner"]);
@@ -343,6 +353,51 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       failureMetadata.command_args[failureMetadata.command_args.indexOf("--max-turns") + 1],
       "4"
     );
+
+    const workflowFailureRun = runIds[5];
+    result = runNode(runCalibration, [
+      "--run", workflowFailureRun,
+      "--case", "synthetic/event-reporting",
+      "--models", "deepseek",
+      "--probes", "planner"
+    ], {
+      ...baseEnv,
+      FAKE_MODEL_MODE: "invalid-json"
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /\[fail\] deepseek\/synthetic\/event-reporting\/planner/);
+    assert.match(result.stderr, /Invalid model output: JSON parse error at position \d+/);
+    const workflowFailureBatch = parseJsonFile(path.join(
+      ROOT,
+      "runs",
+      workflowFailureRun,
+      "batch.json"
+    ));
+    assert.equal(workflowFailureBatch.requested, 1);
+    assert.equal(workflowFailureBatch.completed, 0);
+    assert.equal(workflowFailureBatch.failed, 1);
+    assert.equal(workflowFailureBatch.results[0].status, "failed");
+
+    const missingOutputRun = runIds[6];
+    result = runNode(runCalibration, [
+      "--run", missingOutputRun,
+      "--case", "synthetic/event-reporting",
+      "--models", "deepseek",
+      "--probes", "planner"
+    ], {
+      ...baseEnv,
+      MODEL_ROLE_CALIBRATION_RUNNER: noOutputRunner
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Model runner exited successfully without output/);
+    const missingOutputBatch = parseJsonFile(path.join(
+      ROOT,
+      "runs",
+      missingOutputRun,
+      "batch.json"
+    ));
+    assert.equal(missingOutputBatch.failed, 1);
+    assert.equal(missingOutputBatch.results[0].status, "failed");
 
     console.log("Calibration integration tests passed");
   } finally {

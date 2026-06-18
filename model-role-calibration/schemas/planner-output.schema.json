@@ -5,13 +5,18 @@
   "required": [
     "probe",
     "summary",
+    "plan_complexity",
+    "engineering_context",
     "scope",
     "decisions",
     "implementation_steps",
     "failure_handling",
     "test_plan",
     "acceptance_criteria",
-    "open_decisions"
+    "blocking_decisions",
+    "implementation_discretion",
+    "open_decisions",
+    "risks"
   ],
   "properties": {
     "probe": {
@@ -19,6 +24,38 @@
     },
     "summary": {
       "type": "string"
+    },
+    "plan_complexity": {
+      "type": "object",
+      "required": ["level", "reason"],
+      "properties": {
+        "level": {
+          "enum": ["single_file", "feature", "cross_feature", "architecture"]
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "engineering_context": {
+      "type": "object",
+      "required": ["project_type", "reason", "focus_areas"],
+      "properties": {
+        "project_type": {
+          "enum": ["frontend", "backend", "fullstack", "unknown"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "focus_areas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "scope": {
       "type": "object",
@@ -43,7 +80,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["title", "decision", "reason"],
+        "required": ["title", "decision", "reason", "basis", "evidence_refs"],
         "properties": {
           "title": {
             "type": "string"
@@ -53,6 +90,19 @@
           },
           "reason": {
             "type": "string"
+          },
+          "basis": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "enum": ["requirement", "existing_code", "engineering_constraint"]
+            }
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -111,7 +161,25 @@
         "type": "string"
       }
     },
+    "blocking_decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "implementation_discretion": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "open_decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
       "type": "array",
       "items": {
         "type": "string"

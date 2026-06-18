@@ -7,6 +7,7 @@ const { parseArgs } = require("./lib");
 const { inspect } = require("./inspect-workspace-run");
 
 const REVIEWER_ROLES = ["risk", "architecture", "execution", "rebuttal"];
+const JSON_VALIDATOR_TOOL = "mcp__json_validator__validate_json_output";
 const INCOMPLETE_STATUSES = new Set(["queued", "running"]);
 const DEFAULT_WORKSPACE_RUNS_DIR = path.join(
   os.homedir(),
@@ -287,9 +288,13 @@ function verifyRun(runDir) {
         status: factCheck.status
       });
     }
-    const grantedNonReadTools = (factCheck.tools || []).filter((name) => name !== "Read");
+    const grantedNonReadTools = (factCheck.tools || []).filter(
+      (name) => name !== "Read" && name !== JSON_VALIDATOR_TOOL
+    );
     const usedToolNames = Object.keys(factCheck.tool_counts || {});
-    const usedNonReadTools = usedToolNames.filter((name) => name !== "Read");
+    const usedNonReadTools = usedToolNames.filter(
+      (name) => name !== "Read" && name !== JSON_VALIDATOR_TOOL
+    );
     if (grantedNonReadTools.length === 0 && usedNonReadTools.length === 0) {
       pass(results, "fact_check.read_only", "Fact Check 只获得并使用 Read 工具", {
         tools: factCheck.tools,
@@ -349,8 +354,14 @@ function verifyRun(runDir) {
         status: synthesis.status
       });
     }
-    if ((synthesis.tools || []).length === 0 && Object.keys(synthesis.tool_counts || {}).length === 0) {
-      pass(results, "synthesis.no_tools", "Synthesis 未获得工程读取工具");
+    const synthesisProjectTools = (synthesis.tools || []).filter(
+      (name) => name !== JSON_VALIDATOR_TOOL
+    );
+    const synthesisProjectToolCalls = Object.keys(synthesis.tool_counts || {}).filter(
+      (name) => name !== JSON_VALIDATOR_TOOL
+    );
+    if (synthesisProjectTools.length === 0 && synthesisProjectToolCalls.length === 0) {
+      pass(results, "synthesis.no_tools", "Synthesis 未获得工程读取工具，仅允许 JSON validator");
     } else {
       fail(results, "synthesis.no_tools", "Synthesis 仍有可用工具或工具调用", {
         tools: synthesis.tools,
