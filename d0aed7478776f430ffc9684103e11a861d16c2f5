@@ -1,0 +1,144 @@
+model-role-calibration/scripts/plan-authoring-lint.js
+  7290c2066d6bba25 165-173,176-178,182-184,190-192,196-198,202-209,212-214,220
+model-role-calibration/prompts/probe-execution.md
+  7290c2066d6bba25 29
+model-role-calibration/claude-code/skills/plan-review/SKILL.md
+  7290c2066d6bba25 88-95,103-112,143,147
+model-role-calibration/prompts/evaluate-synthesis.md
+  7290c2066d6bba25 5-6,16,33,37,152-153
+model-role-calibration/scripts/test-workspace-review-verification.js
+  7290c2066d6bba25 184
+model-role-calibration/prompts/probe-fact_check.md
+  7290c2066d6bba25 11,15-16,19,22-24,46,51,74
+model-role-calibration/scripts/v2-calibration-plan.js
+  7290c2066d6bba25 1-273
+model-role-calibration/prompts/probe-rebuttal.md
+  7290c2066d6bba25 22
+model-role-calibration/prompts/probe-synthesis.md
+  7290c2066d6bba25 12-17,22-23,25-26,31,36,44-45,49,71-81,102,104,118,124-127,130-135
+model-role-calibration/scripts/test-plan-review-mcp.js
+  7290c2066d6bba25 985-986
+model-role-calibration/scripts/generate-prompts.js
+  2feef628debd1a3d 28,32,46-64,66-67,70-73
+model-role-calibration/prompts/evaluate-execution.md
+  7290c2066d6bba25 5-6,9,15,17,28,36,45,117,121-125,128-134,136,150,171,197,234
+model-role-calibration/schemas/fact-check-output.schema.json
+  7290c2066d6bba25 19,45-49
+model-role-calibration/scripts/test-calibration.js
+  f4e0c0f2f4f9ccfc 227-295
+  2feef628debd1a3d 9,14-18,41,117-121,124-158,296-319,438-456
+model-role-calibration/scripts/calibration/role-executor.js
+  2feef628debd1a3d 1-255
+install.md
+  7290c2066d6bba25 77,222-235,400-401
+model-role-calibration/prompts/evaluate-risk.md
+  7290c2066d6bba25 5-6,32,64-65
+package.json
+  790322725cacbb3b 28
+  2feef628debd1a3d 29
+model-role-calibration/prompts/probe-architecture.md
+  7290c2066d6bba25 29
+model-role-calibration/prompts/probe-risk.md
+  7290c2066d6bba25 22
+model-role-calibration/scripts/calibration/runner.js
+  2feef628debd1a3d 67-69,87-88
+model-role-calibration/schemas/synthesis-output.schema.json
+  7290c2066d6bba25 5-13,18-78,130-138,159-160,165,176-184,191,216-218,238-248,254-270,272,274-275
+model-role-calibration/scripts/test-plan-authoring-lint.js
+  7290c2066d6bba25 1-277
+model-role-calibration/scripts/run-calibration.js
+  2feef628debd1a3d 2-5,13-18,25,29-41,43-44,46,48,55,61
+model-role-calibration/scripts/run-workspace-review.js
+  7290c2066d6bba25 1172-1174,1181-1183
+model-role-calibration/prompts/evaluate-architecture.md
+  7290c2066d6bba25 5-6,27,44,189
+model-role-calibration/scripts/test-runtime-integration.js
+  2feef628debd1a3d 57,66-68,113,276,282-286,288,301-306,315-321,357-400
+model-role-calibration/README.md
+  2feef628debd1a3d 28-31,33-40,280-286
+  790322725cacbb3b 19-27,108-116
+  036f02bdee0e9fca 344-345,351,357,582-583,589,603
+model-role-calibration/prompts/evaluate-planner.md
+  7290c2066d6bba25 5-6,13,16,18,53-54,58,60-64,75,77,115,130-131,136,141-143,171,184-185
+model-role-calibration/prompts/evaluate-rebuttal.md
+  7290c2066d6bba25 5-6,27,33
+model-role-calibration/prompts/probe-planner.md
+  7290c2066d6bba25 3,16-17,20-26,28-31,33-36,40-42,58-66,75-77,84-86,89-105,107-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "d0aed7478776f430ffc9684103e11a861d16c2f5",
+  "prompts": {
+    "036f02bdee0e9fca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed956-e72b-7f81-8f3a-c0cb4e035f30",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 6,
+      "accepted_lines": 8,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/fa03e40e28cfb28ad55ba1c72820a647da836879261f6137ac78bb43f9d5acd0"
+    },
+    "2feef628debd1a3d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed89f-47f0-7481-a4bc-d133e9a2a4af",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 510,
+      "total_deletions": 155,
+      "accepted_lines": 503,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/7563c787229983fbd0881fbee8db895af715848720c78d0eaf94204eabefabea"
+    },
+    "7290c2066d6bba25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fa1b159-9aba-44b3-9309-16c67379c0e5",
+        "model": "mimo-v2.5-pro"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 952,
+      "total_deletions": 97,
+      "accepted_lines": 952,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/868943b15ae38c79bf048abaf081aae16469021c0e964684a0d4e68d41d3a554"
+    },
+    "790322725cacbb3b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed9df-3320-7c13-aede-e152a351d61f",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 20,
+      "total_deletions": 0,
+      "accepted_lines": 20,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/c1ba8af5a68fa7f12f97e68322baf803358a13ff5bcb70a83f157425b214b6c0"
+    },
+    "f4e0c0f2f4f9ccfc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed904-e9af-7503-95fd-37d6d5631e0e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 69,
+      "total_deletions": 0,
+      "accepted_lines": 69,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/b0a994595122f5bcb459e105de287fe409ce0300b18e64e4bd1a272c777fec47"
+    }
+  }
+}
