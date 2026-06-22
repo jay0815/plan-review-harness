@@ -1,0 +1,26 @@
+model-role-calibration/scripts/test-plan-authoring-lint.js
+  5410dd78fa146fec 385-493
+model-role-calibration/scripts/plan-authoring-lint.js
+  5410dd78fa146fec 264-349,436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "9f3f533c7436fbd96d71b202714c2cd8bf4540db",
+  "prompts": {
+    "5410dd78fa146fec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eed3b-43e2-7430-ac20-211d4203fd9f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 200,
+      "total_deletions": 20,
+      "accepted_lines": 196,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/24b0bd6429bca3e590b23a630fd061a87335b225d93f37c27db2509868217d4a"
+    }
+  }
+}
