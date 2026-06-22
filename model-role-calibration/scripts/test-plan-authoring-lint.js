@@ -347,6 +347,41 @@ function main() {
       "anonymous default export function should be flagged"
     );
 
+    // Generic arrow function
+    const genericArrowPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "const identity = <T>(value: T): T => {",
+        "  return value;",
+        "};",
+        "```"
+      ].join("\n")
+    });
+    const genericArrowResult = lintPlan({ plan: genericArrowPlan, projectRoot });
+    assert(
+      codes(genericArrowResult).errors.includes("implementation_code_block"),
+      "generic arrow function should be flagged"
+    );
+
+    // Expression-body arrow function (multi-line)
+    const exprArrowPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "const compute = (x: number) =>",
+        "  x * 2 + 1;",
+        "```"
+      ].join("\n")
+    });
+    const exprArrowResult = lintPlan({ plan: exprArrowPlan, projectRoot });
+    assert(
+      codes(exprArrowResult).errors.includes("implementation_code_block"),
+      "multi-line expression-body arrow should be flagged"
+    );
+
     console.log("plan authoring lint tests passed");
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });

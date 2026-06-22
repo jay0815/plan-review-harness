@@ -347,10 +347,22 @@ function classifyCodeBlock(block, sectionTitle) {
       reliable: true
     };
   }
-  const hasArrowFunction =
-    /(?:const|let|var)\s+\w+(?:\s*:\s*\w[^\s=]*)?\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/.test(code) &&
+  const arrowSignature = /(?:const|let|var)\s+\w+(?:\s*:\s*\w[^\s=]*)?\s*=\s*(?:async\s*)?/;
+  const arrowGeneric = /<[^>]*>\s*\([^)]*\)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/;
+  const arrowPlain = /\([^)]*\)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/;
+  const arrowSingleParam = /\w+\s*=>\s*\{/;
+  const hasArrowBlockBody =
+    arrowSignature.source &&
+    (
+      new RegExp(arrowSignature.source + arrowGeneric.source).test(code) ||
+      new RegExp(arrowSignature.source + arrowPlain.source).test(code) ||
+      new RegExp(arrowSignature.source + arrowSingleParam.source).test(code)
+    ) &&
     /^\};?\s*$/m.test(code);
-  if (hasArrowFunction) {
+  const hasArrowExpressionBody =
+    /(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:<[^>]*>)?\([^)]*\)\s*=>\s*\n/.test(code) &&
+    /;\s*$/m.test(code);
+  if (hasArrowBlockBody || hasArrowExpressionBody) {
     return {
       kind: "arrow_function_implementation",
       allowed: false,
