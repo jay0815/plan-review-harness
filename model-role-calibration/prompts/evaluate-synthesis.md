@@ -14,6 +14,7 @@ Synthesizer 负责：
 - 区分事实分歧、严重性分歧、局部实现分歧和方向决策分歧。
 - 根据需求事实裁决可以直接裁决的冲突。
 - 先通过 `source_findings` 逐条记录 Fact Check 状态、范围状态和处置，再形成共识、分歧和修订。
+- 每个 `source_finding` 必须有 `source_issue_id`，值与 Fact Check `checked_issues[].issue_id` 一一对应；一个 `issue_id` 只能对应一个 finding。
 - 只把真正的 L3 方向决策交给用户。
 - 降权或丢弃无 evidence、重复和超范围意见。
 - 输出与保留结论一致的修订指令。

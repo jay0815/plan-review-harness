@@ -896,23 +896,19 @@ async function main() {
     assert(synthesisPrompt.includes("不得读取工程目录"));
 
     // $ref resolution: source_finding_ids must be array, not string
-    const refSchema = JSON.parse(fs.readFileSync(
-      path.join(__dirname, "..", "schemas", "synthesis-output.schema.json"),
-      "utf8"
-    ));
     assert.throws(() => validateWorkspaceOutput("synthesis", {
       probe: "synthesis",
       source_findings: [{
         id: "F1", source: "Risk Reviewer", source_title: "test",
         source_issue_id: "risk-001", fact_check_status: "verified",
-        scope_status: "in_scope", disposition: "confirmed", reason: "test"
+        scope_status: "in_scope", disposition: "retained", reason: "test"
       }],
       process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
-      consensus_issues: [{ title: "c", source_finding_ids: "F1", summary: "s" }],
+      consensus_issues: [{ title: "c", source_finding_ids: "F1", affected_nodes: ["A"], summary: "s" }],
       disagreements: [],
       likely_false_positives: [],
       revision_instructions: []
-    }, { factCheckOutput: { checked_issues: [{ issue_id: "risk-001", source: "Risk Reviewer", issue_title: "test", status: "verified", scope_status: "in_scope", evidence_status: "code", claim_support: "direct", reason: "r", checked_files: [] }], source_summaries: [], limits: [] } }),
+    }, { factCheckOutput: { checked_issues: [{ issue_id: "risk-001", source: "Risk Reviewer", issue_title: "test", status: "verified", scope_status: "in_scope", evidence_status: "plan_only", claim_support: "direct", reason: "r", checked_files: [] }], source_summaries: [], limits: [] } }),
       "string source_finding_ids should fail $ref validation");
 
     // Synthesis reverse check: finding without fact_check entry
@@ -921,7 +917,7 @@ async function main() {
       source_findings: [{
         id: "F1", source: "Risk Reviewer", source_title: "unbacked finding",
         source_issue_id: "nonexistent-001", fact_check_status: "verified",
-        scope_status: "in_scope", disposition: "confirmed", reason: "test"
+        scope_status: "in_scope", disposition: "retained", reason: "test"
       }],
       process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
       consensus_issues: [],

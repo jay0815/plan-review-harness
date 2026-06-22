@@ -268,7 +268,7 @@ function main() {
     });
     assert.deepEqual(validRef.errors, []);
 
-    // 10-line arrow function should be rejected
+    // Complete arrow function (content-based, not length-based) should be rejected
     const arrowPlan = requiredPlan({
       appendix: [
         "",
@@ -276,14 +276,8 @@ function main() {
         "```ts",
         "const handleAuth = async (req: Request) => {",
         "  const token = req.headers.authorization;",
-        "  if (!token) {",
-        "    return unauthorized();",
-        "  }",
-        "  const user = await verify(token);",
-        "  if (!user) {",
-        "    return forbidden();",
-        "  }",
-        "  req.user = user;",
+        "  if (!token) return unauthorized();",
+        "  req.user = await verify(token);",
         "  return next(req);",
         "};",
         "```"
@@ -292,11 +286,29 @@ function main() {
     const arrowResult = lintPlan({ plan: arrowPlan, projectRoot });
     assert(
       codes(arrowResult).errors.includes("implementation_code_block"),
-      "10-line arrow function should be flagged as implementation_code_block"
+      "complete arrow function should be flagged regardless of line count"
     );
     assert(
       arrowResult.metrics.code_blocks.some((b) => b.kind === "arrow_function_implementation"),
       "arrow function should be classified as arrow_function_implementation"
+    );
+
+    // Short complete function (5 lines) should also be rejected
+    const shortFuncPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "function greet(name: string) {",
+        "  return `Hello ${name}`;",
+        "}",
+        "```"
+      ].join("\n")
+    });
+    const shortFuncResult = lintPlan({ plan: shortFuncPlan, projectRoot });
+    assert(
+      codes(shortFuncResult).errors.includes("implementation_code_block"),
+      "short complete function should be flagged regardless of line count"
     );
 
     console.log("plan authoring lint tests passed");

@@ -43,6 +43,7 @@
 - 对需求未提供依据的数据库、消息系统、持久化队列、能力探测或功能开关建议应降权，不得自动进入修订指令。
 - `required_plan_change` 只保留合并后的最小决策或契约修订目标；不得指定源码形态。`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
 - 每条共识、分歧、误报和修订指令都必须填写 `source_finding_ids`。被标记为 `unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding id 禁止出现在共识、分歧或修订中。
+- 每个 `source_finding` 必须填写 `source_issue_id`，值为 Fact Check `checked_issues` 中对应条目的 `issue_id`。一个 `issue_id` 只能对应一个 `source_finding`，禁止多对一。
 - 修订指令之间必须一致，已判定为误报的内容不得再次进入修订指令。
 - 如果 Reviewer 和 Fact Check 没有支持需要修订的问题，`consensus_issues`、`disagreements`、`revision_instructions` 必须为空；禁止为了显得有产出而制造问题。
 - 计划已足够完善时，`process_map.nodes[].status` 应保持 `normal`，并在输出中用空数组表达“无需修订”。
@@ -73,6 +74,7 @@
       "id": "F1",
       "source": "",
       "source_title": "",
+      "source_issue_id": "",
       "fact_check_status": "verified | partially_verified | unsupported | contradicted | unverifiable | not_available",
       "scope_status": "in_scope | out_of_scope | not_determined",
       "disposition": "retained | merged | duplicate | unsupported | contradicted | unverifiable | out_of_scope",

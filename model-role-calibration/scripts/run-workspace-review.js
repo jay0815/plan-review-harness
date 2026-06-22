@@ -57,6 +57,11 @@ function validateSynthesisSemantics(output, factCheckOutput) {
     }
     byId.set(finding.id, finding);
     if (finding.source_issue_id) {
+      if (byIssueId.has(finding.source_issue_id)) {
+        throw new Error(
+          `Synthesis semantic validation failed: duplicate source_issue_id ${finding.source_issue_id} on findings ${byIssueId.get(finding.source_issue_id).id} and ${finding.id}`
+        );
+      }
       byIssueId.set(finding.source_issue_id, finding);
     }
   }
@@ -71,6 +76,16 @@ function validateSynthesisSemantics(output, factCheckOutput) {
     if (!finding) {
       throw new Error(
         `Synthesis semantic validation failed: missing source finding for issue_id ${checked.issue_id}`
+      );
+    }
+    if (finding.source !== checked.source) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} source ${finding.source} != ${checked.source} for issue_id ${checked.issue_id}`
+      );
+    }
+    if (finding.source_title !== checked.issue_title) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} source_title ${finding.source_title} != ${checked.issue_title} for issue_id ${checked.issue_id}`
       );
     }
     if (finding.fact_check_status !== checked.status) {
