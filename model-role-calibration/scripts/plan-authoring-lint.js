@@ -335,7 +335,10 @@ function classifyCodeBlock(block, sectionTitle) {
     };
   }
   const hasCompleteFunction =
-    /\b(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{/.test(code) &&
+    (
+      /\b(?:async\s+)?function\s+\w*\s*\([^)]*\)\s*(?::\s*\w[^\s{]*)?\s*\{/.test(code) ||
+      /\bexport\s+default\s+(?:async\s+)?function\s*\([^)]*\)\s*\{/.test(code)
+    ) &&
     /^\}/m.test(code);
   if (hasCompleteFunction) {
     return {
@@ -345,7 +348,7 @@ function classifyCodeBlock(block, sectionTitle) {
     };
   }
   const hasArrowFunction =
-    /(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*\{/.test(code) &&
+    /(?:const|let|var)\s+\w+(?:\s*:\s*\w[^\s=]*)?\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/.test(code) &&
     /^\};?\s*$/m.test(code);
   if (hasArrowFunction) {
     return {

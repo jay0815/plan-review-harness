@@ -311,6 +311,42 @@ function main() {
       "short complete function should be flagged regardless of line count"
     );
 
+    // Arrow function with type annotation
+    const typedArrowPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "const add: AddFn = (a: number, b: number) => {",
+        "  return a + b;",
+        "};",
+        "```"
+      ].join("\n")
+    });
+    const typedArrowResult = lintPlan({ plan: typedArrowPlan, projectRoot });
+    assert(
+      codes(typedArrowResult).errors.includes("implementation_code_block"),
+      "arrow function with type annotation should be flagged"
+    );
+
+    // Anonymous default export function
+    const anonPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "export default function(req: Request) {",
+        "  return handle(req);",
+        "}",
+        "```"
+      ].join("\n")
+    });
+    const anonResult = lintPlan({ plan: anonPlan, projectRoot });
+    assert(
+      codes(anonResult).errors.includes("implementation_code_block"),
+      "anonymous default export function should be flagged"
+    );
+
     console.log("plan authoring lint tests passed");
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });

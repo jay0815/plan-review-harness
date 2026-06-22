@@ -71,6 +71,11 @@ function validateSynthesisSemantics(output, factCheckOutput) {
     : [];
   const checkedIds = new Set();
   for (const checked of checkedIssues) {
+    if (checkedIds.has(checked.issue_id)) {
+      throw new Error(
+        `Synthesis semantic validation failed: duplicate fact_check issue_id ${checked.issue_id}`
+      );
+    }
     checkedIds.add(checked.issue_id);
     const finding = byIssueId.get(checked.issue_id);
     if (!finding) {

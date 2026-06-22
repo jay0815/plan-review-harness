@@ -904,7 +904,7 @@ async function main() {
         scope_status: "in_scope", disposition: "retained", reason: "test"
       }],
       process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
-      consensus_issues: [{ title: "c", source_finding_ids: "F1", affected_nodes: ["A"], summary: "s" }],
+      consensus_issues: [{ title: "c", merged_from: ["Risk Reviewer"], severity: "medium", affected_nodes: ["A"], source_finding_ids: "F1", reason: "r", required_plan_change: "fix" }],
       disagreements: [],
       likely_false_positives: [],
       revision_instructions: []
@@ -926,6 +926,25 @@ async function main() {
       revision_instructions: []
     }, { factCheckOutput: { checked_issues: [], source_summaries: [], limits: [] } }),
       "finding without matching fact_check entry should be rejected");
+
+    // Fact Check duplicate issue_id should be rejected
+    assert.throws(() => validateWorkspaceOutput("synthesis", {
+      probe: "synthesis",
+      source_findings: [{
+        id: "F1", source: "Risk Reviewer", source_title: "test",
+        source_issue_id: "risk-001", fact_check_status: "verified",
+        scope_status: "in_scope", disposition: "retained", reason: "test"
+      }],
+      process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
+      consensus_issues: [],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: []
+    }, { factCheckOutput: { checked_issues: [
+      { issue_id: "risk-001", source: "Risk Reviewer", issue_title: "test", status: "verified", scope_status: "in_scope", evidence_status: "plan_only", claim_support: "direct", reason: "r", checked_files: [] },
+      { issue_id: "risk-001", source: "Risk Reviewer", issue_title: "test", status: "verified", scope_status: "in_scope", evidence_status: "plan_only", claim_support: "direct", reason: "r", checked_files: [] }
+    ], source_summaries: [], limits: [] } }),
+      "duplicate fact_check issue_id should be rejected");
 
     // Read boundary: empty Existing Code Refs exposes no files
     const emptyRefsScope = buildRoleReadScope("risk", tempDir, "## Existing Code Refs\nNone\n\n## Tasks\nDo something.", { maxFiles: 10 });
