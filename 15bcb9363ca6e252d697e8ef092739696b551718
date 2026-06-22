@@ -1,0 +1,34 @@
+model-role-calibration/prompts/probe-synthesis.md
+  7290c2066d6bba25 46,77
+model-role-calibration/prompts/evaluate-synthesis.md
+  7290c2066d6bba25 17
+model-role-calibration/scripts/plan-authoring-lint.js
+  7290c2066d6bba25 339,349
+model-role-calibration/scripts/test-plan-review-mcp.js
+  7290c2066d6bba25 904,907,911,920
+model-role-calibration/scripts/test-plan-authoring-lint.js
+  7290c2066d6bba25 271,279-280,289,296-311
+model-role-calibration/scripts/run-workspace-review.js
+  7290c2066d6bba25 60-64,81-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "15bcb9363ca6e252d697e8ef092739696b551718",
+  "prompts": {
+    "7290c2066d6bba25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fa1b159-9aba-44b3-9309-16c67379c0e5",
+        "model": "mimo-v2.5-pro"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 46,
+      "total_deletions": 20,
+      "accepted_lines": 46,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/8a9978f2dcd4b564eb167a48b0a1307dbbf530a9365a6447688995d0a669f27f"
+    }
+  }
+}
