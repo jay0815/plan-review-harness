@@ -1,0 +1,32 @@
+model-role-calibration/scripts/test-plan-authoring-lint.js
+  7290c2066d6bba25 271-301
+model-role-calibration/scripts/test-plan-review-mcp.js
+  7290c2066d6bba25 332-355,357,613,898-941
+model-role-calibration/schemas/synthesis-output.schema.json
+  7290c2066d6bba25 26,45
+model-role-calibration/scripts/plan-authoring-lint.js
+  7290c2066d6bba25 339,349
+model-role-calibration/scripts/workspace-review-lib.js
+  7290c2066d6bba25 654-658,728
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "efcad6763d73515c4358e3292ba1e58ee61d2c3e",
+  "prompts": {
+    "7290c2066d6bba25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3fa1b159-9aba-44b3-9309-16c67379c0e5",
+        "model": "mimo-v2.5-pro"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 119,
+      "total_deletions": 19,
+      "accepted_lines": 114,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/608464387c4e959ea6b5b3d5444261bd48cb64ad4554f6e3752cff00bbc1049d"
+    }
+  }
+}
