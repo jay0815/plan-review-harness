@@ -261,6 +261,92 @@ function stringLeafCount(value) {
   return 0;
 }
 
+function containsArrowOperator(text) {
+  let quote = null;
+  let lineComment = false;
+  let blockComment = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const next = text[index + 1];
+    if (lineComment) {
+      if (character === "\n") {
+        lineComment = false;
+      }
+      continue;
+    }
+    if (blockComment) {
+      if (character === "*" && next === "/") {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (character === "\\") {
+        index += 1;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "'" || character === "\"" || character === "`") {
+      quote = character;
+      continue;
+    }
+    if (character === "=" && next === ">") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasArrowFunctionAssignment(code) {
+  const declaration = /(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*/g;
+  let match;
+  while ((match = declaration.exec(code)) !== null) {
+    const remainder = code.slice(declaration.lastIndex);
+    let assignmentIndex = -1;
+    for (let index = 0; index < remainder.length; index += 1) {
+      const character = remainder[index];
+      if (character === ";") {
+        break;
+      }
+      if (
+        character === "=" &&
+        remainder[index + 1] !== ">" &&
+        !["=", "!", "<", ">"].includes(remainder[index - 1])
+      ) {
+        assignmentIndex = index;
+        break;
+      }
+    }
+    if (assignmentIndex < 0) {
+      continue;
+    }
+    const initializer = remainder.slice(assignmentIndex + 1);
+    const nextDeclaration = initializer.search(
+      /\n\s*(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*/
+    );
+    const candidate = nextDeclaration >= 0
+      ? initializer.slice(0, nextDeclaration)
+      : initializer;
+    if (containsArrowOperator(candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function classifyCodeBlock(block, sectionTitle) {
   const language = block.language;
   const code = block.code;
@@ -347,22 +433,7 @@ function classifyCodeBlock(block, sectionTitle) {
       reliable: true
     };
   }
-  const arrowSignature = /(?:const|let|var)\s+\w+(?:\s*:\s*\w[^\s=]*)?\s*=\s*(?:async\s*)?/;
-  const arrowGeneric = /<[^>]*>\s*\([^)]*\)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/;
-  const arrowPlain = /\([^)]*\)\s*(?::\s*\w[^\s{]*)?\s*=>\s*\{/;
-  const arrowSingleParam = /\w+\s*=>\s*\{/;
-  const hasArrowBlockBody =
-    arrowSignature.source &&
-    (
-      new RegExp(arrowSignature.source + arrowGeneric.source).test(code) ||
-      new RegExp(arrowSignature.source + arrowPlain.source).test(code) ||
-      new RegExp(arrowSignature.source + arrowSingleParam.source).test(code)
-    ) &&
-    /^\};?\s*$/m.test(code);
-  const hasArrowExpressionBody =
-    /(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:<[^>]*>)?\([^)]*\)\s*=>\s*\n/.test(code) &&
-    /;\s*$/m.test(code);
-  if (hasArrowBlockBody || hasArrowExpressionBody) {
+  if (hasArrowFunctionAssignment(code)) {
     return {
       kind: "arrow_function_implementation",
       allowed: false,

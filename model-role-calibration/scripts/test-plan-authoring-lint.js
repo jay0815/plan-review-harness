@@ -382,6 +382,115 @@ function main() {
       "multi-line expression-body arrow should be flagged"
     );
 
+    const arrowExpressionCases = [
+      {
+        name: "single-line async side-effect arrow",
+        code: [
+          "const load = async (id: string) => await api.get(id);"
+        ]
+      },
+      {
+        name: "single-line pure expression arrow",
+        code: [
+          "const add = (left: number, right: number) => left + right;"
+        ]
+      },
+      {
+        name: "single-line call arrow",
+        code: [
+          "const save = (value: string) => cache.set(\"key\", value);"
+        ]
+      },
+      {
+        name: "typed multi-line expression arrow",
+        code: [
+          "const compute: Compute = (x: number) =>",
+          "  x * 2;"
+        ]
+      },
+      {
+        name: "single-parameter multi-line arrow",
+        code: [
+          "const double = x =>",
+          "  x * 2;"
+        ]
+      },
+      {
+        name: "parenthesized expression arrow",
+        code: [
+          "const render = (value: string) => (",
+          "  <View>{value}</View>",
+          ");"
+        ]
+      },
+      {
+        name: "function-typed assigned arrow",
+        code: [
+          "const handle: (value: string) => void =",
+          "  (value) => log(value);"
+        ]
+      }
+    ];
+    for (const item of arrowExpressionCases) {
+      const result = lintPlan({
+        plan: requiredPlan({
+          appendix: [
+            "",
+            "## Implementation Details",
+            "```tsx",
+            ...item.code,
+            "```"
+          ].join("\n")
+        }),
+        projectRoot
+      });
+      assert(
+        codes(result).errors.includes("implementation_code_block"),
+        `${item.name} should be flagged as implementation_code_block`
+      );
+      assert(
+        result.metrics.code_blocks.some((block) => block.kind === "arrow_function_implementation"),
+        `${item.name} should be classified as arrow_function_implementation`
+      );
+    }
+
+    const declarationOnlyPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Optional Interface Contract Appendix",
+        "```ts",
+        "declare const handle: (value: string) => void;",
+        "```"
+      ].join("\n")
+    });
+    const declarationOnlyResult = lintPlan({
+      plan: declarationOnlyPlan,
+      projectRoot
+    });
+    assert(
+      !codes(declarationOnlyResult).errors.includes("implementation_code_block"),
+      "function type declaration without an initializer should remain allowed"
+    );
+
+    const arrowTextPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Optional Interface Contract Appendix",
+        "```ts",
+        "const arrowToken = \"=>\";",
+        "const explanation = \"callbacks use => syntax\";",
+        "```"
+      ].join("\n")
+    });
+    const arrowTextResult = lintPlan({
+      plan: arrowTextPlan,
+      projectRoot
+    });
+    assert(
+      !codes(arrowTextResult).errors.includes("implementation_code_block"),
+      "arrow tokens inside strings should not be classified as function implementations"
+    );
+
     console.log("plan authoring lint tests passed");
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
