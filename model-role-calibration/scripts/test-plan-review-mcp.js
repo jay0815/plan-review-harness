@@ -1030,7 +1030,7 @@ async function main() {
     assert.equal(factCheckCalls.fact_check, 1);
     assert.equal(factCheckCalls.synthesis, 1);
     assert.equal(factCheckRetryResult.retry_counts.fact_check, 2);
-    assert.equal(factCheckRetryResult.retry_counts.synthesis, 2);
+    assert.equal(factCheckRetryResult.retry_counts.synthesis, 1);
 
     const synthesisRetry = createRetryRun(
       directoryConfig,

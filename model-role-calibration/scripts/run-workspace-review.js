@@ -62,6 +62,7 @@ function validateSynthesisSemantics(output, factCheckOutput) {
   const checkedIssues = Array.isArray(factCheckOutput?.checked_issues)
     ? factCheckOutput.checked_issues
     : [];
+  const checkedKeys = new Set();
   for (const checked of checkedIssues) {
     const key = `${checked.source}\u0000${checked.issue_title}`;
     const finding = bySourceTitle.get(key);
@@ -90,6 +91,16 @@ function validateSynthesisSemantics(output, factCheckOutput) {
     if (requiredDisposition && finding.disposition !== requiredDisposition) {
       throw new Error(
         `Synthesis semantic validation failed: ${finding.id} must use disposition ${requiredDisposition}`
+      );
+    }
+  }
+
+  for (const finding of findings) {
+    const key = finding.source + "\u0000" + finding.source_title;
+    if (checkedKeys.size > 0 && !checkedKeys.has(key)) {
+      throw new Error(
+        "Synthesis semantic validation failed: source finding " + finding.id +
+        " has no matching fact_check entry for " + finding.source + "/" + finding.source_title
       );
     }
   }
@@ -1179,7 +1190,7 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
         absoluteRunDir
       );
     }
-    if (stage === "synthesis" || stage === FACT_CHECK_ROLE) {
+    if (stage === "synthesis") {
       consumeExecutorRetries(absoluteRunDir, retryCounts, ["synthesis"]);
     }
     const synthesis = await runSynthesisStage(

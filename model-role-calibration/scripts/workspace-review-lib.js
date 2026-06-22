@@ -448,6 +448,27 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
   };
 }
 
+function existingCodeRefPaths(text) {
+  const lines = String(text || "").split("\n");
+  const paths = [];
+  let inSection = false;
+  for (const line of lines) {
+    const heading = line.match(/^#{1,6}\s+(.+?)\s*$/);
+    if (heading) {
+      inSection = /existing\s+code\s+refs?|现有代码引用/i.test(heading[1].trim());
+      continue;
+    }
+    if (!inSection) {
+      continue;
+    }
+    const pathMatch = line.match(/^\s*-\s*path\s*:\s*(.+?)\s*$/i);
+    if (pathMatch) {
+      paths.push(pathMatch[1].trim().replace(/^`|`$/g, ""));
+    }
+  }
+  return paths;
+}
+
 function collectPathCandidates(text) {
   const candidates = new Set();
   const input = String(text || "");
@@ -640,7 +661,10 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
       addProposedArtifactToScope(artifact, files, proposedArtifacts);
     }
   }
-  for (const candidate of collectPathCandidates(text)) {
+  const pathCandidates = options.existingRefsOnly
+    ? existingCodeRefPaths(text)
+    : collectPathCandidates(text);
+  for (const candidate of pathCandidates) {
     const withoutLineRef = stripLineRefSuffix(candidate);
     if (artifactsByPath.has(withoutLineRef)) {
       addProposedArtifactToScope(artifactsByPath.get(withoutLineRef), files, proposedArtifacts);
@@ -696,12 +720,14 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
 }
 
 function buildRoleReadScope(role, projectRoot, plan, options = {}) {
+  const hasExistingCodeRefs = /^##\s+Existing Code Refs\b/im.test(String(plan || ""));
   const scope = buildReadScopeFromText(role, projectRoot, plan, {
     ...options,
-    includeAllProposedArtifacts: true
+    includeAllProposedArtifacts: true,
+    existingRefsOnly: hasExistingCodeRefs
   });
   scope.description = [
-    "只暴露计划中明确引用的现有工程文件、兼容保留的 proposed-code 草案和少量项目配置文件。",
+    "只暴露计划 Existing Code Refs 章节列出的现有工程文件、兼容保留的 proposed-code 草案和少量项目配置文件。",
     "proposed-code 仅用于传输兼容和定位计划作者写下的未来代码，不是推荐 Plan 结构、现有工程事实或最终实现承诺。",
     "Reviewer 若需要未暴露文件，应写入 missing_questions，不应猜测。"
   ].join("");

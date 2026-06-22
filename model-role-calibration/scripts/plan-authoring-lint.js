@@ -173,7 +173,7 @@ function inferComplexity(plan, refs) {
 
   if (
     refCount >= 16 ||
-    sectionCount >= 10 ||
+    sectionCount >= 13 ||
     totalLines >= 500 ||
     /system boundary|public contract|architecture decision|系统边界|公共契约|架构决策/i.test(text)
   ) {
@@ -340,6 +340,16 @@ function classifyCodeBlock(block, sectionTitle) {
   if (hasCompleteFunction) {
     return {
       kind: "function_implementation",
+      allowed: false,
+      reliable: true
+    };
+  }
+  const hasArrowFunction =
+    /(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*\{/.test(code) &&
+    lines > 12;
+  if (hasArrowFunction) {
+    return {
+      kind: "arrow_function_implementation",
       allowed: false,
       reliable: true
     };
