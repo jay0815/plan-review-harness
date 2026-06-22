@@ -329,14 +329,32 @@ async function main() {
         maxFiles: 10
       }
     );
-    assert(readScope.files.includes("package.json"));
-    assert(readScope.files.includes("tsconfig.json"));
-    assert(readScope.files.includes("src/cli.ts"));
-    assert(readScope.files.includes("src/cdp/extract.ts"));
-    assert(!readScope.files.includes("secret.txt"));
-    assert(readScope.blocked_refs.some((item) => item.endsWith("outside.ts")));
+    assert.equal(readScope.files.length, 0, "no Existing Code Refs section means no files exposed");
+
+    const readScopeWithRefs = buildRoleReadScope(
+      "risk",
+      projectRoot,
+      [
+        "## Existing Code Refs",
+        "- path: src/cli.ts",
+        "  lines: 1-1",
+        "  symbol: cli",
+        "  reason: test",
+        "",
+        "## Tasks",
+        "修改 `src/cli.ts` 和 `src/cdp/extract.ts`。",
+        `不要读取 ${path.join(tempDir, "outside.ts")}。`
+      ].join("\n"),
+      {
+        maxFiles: 10
+      }
+    );
+    assert(readScopeWithRefs.files.includes("src/cli.ts"));
+    assert(!readScopeWithRefs.files.includes("src/cdp/extract.ts"), "only files in Existing Code Refs are exposed");
+    assert(!readScopeWithRefs.files.includes("package.json"), "COMMON_PROJECT_FILES not unconditionally exposed");
+    assert(!readScopeWithRefs.files.includes("secret.txt"));
     const mirrorParent = fs.mkdtempSync(path.join(tempDir, "mirror-"));
-    const boundary = copyScopedWorkspace(projectRoot, readScope, mirrorParent);
+    const boundary = copyScopedWorkspace(projectRoot, readScopeWithRefs, mirrorParent);
     assert(fs.existsSync(path.join(boundary.exposed_root, "src", "cli.ts")));
     assert(!fs.existsSync(path.join(boundary.exposed_root, "secret.txt")));
     fs.rmSync(mirrorParent, { recursive: true, force: true });
@@ -592,6 +610,7 @@ async function main() {
         id: "F1",
         source: "Architecture Reviewer",
         source_title: "必须建设在线 marketplace",
+        source_issue_id: "Architecture-Reviewer-001",
         fact_check_status: "verified",
         scope_status: "out_of_scope",
         disposition: "out_of_scope",
@@ -875,6 +894,50 @@ async function main() {
     assert(synthesisPrompt.includes("\"source_findings\""));
     assert(synthesisPrompt.includes("Fact Check 报告"));
     assert(synthesisPrompt.includes("不得读取工程目录"));
+
+    // $ref resolution: source_finding_ids must be array, not string
+    const refSchema = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "..", "schemas", "synthesis-output.schema.json"),
+      "utf8"
+    ));
+    assert.throws(() => validateWorkspaceOutput("synthesis", {
+      probe: "synthesis",
+      source_findings: [{
+        id: "F1", source: "Risk Reviewer", source_title: "test",
+        source_issue_id: "risk-001", fact_check_status: "verified",
+        scope_status: "in_scope", disposition: "confirmed", reason: "test"
+      }],
+      process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
+      consensus_issues: [{ title: "c", source_finding_ids: "F1", summary: "s" }],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: []
+    }, { factCheckOutput: { checked_issues: [{ issue_id: "risk-001", source: "Risk Reviewer", issue_title: "test", status: "verified", scope_status: "in_scope", evidence_status: "code", claim_support: "direct", reason: "r", checked_files: [] }], source_summaries: [], limits: [] } }),
+      "string source_finding_ids should fail $ref validation");
+
+    // Synthesis reverse check: finding without fact_check entry
+    assert.throws(() => validateWorkspaceOutput("synthesis", {
+      probe: "synthesis",
+      source_findings: [{
+        id: "F1", source: "Risk Reviewer", source_title: "unbacked finding",
+        source_issue_id: "nonexistent-001", fact_check_status: "verified",
+        scope_status: "in_scope", disposition: "confirmed", reason: "test"
+      }],
+      process_map: { title: "t", mermaid: "flowchart TD\n  A[B]", nodes: [{ id: "A", label: "B", stage: "s", status: "normal", related_issue_titles: [], evidence: "e" }] },
+      consensus_issues: [],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: []
+    }, { factCheckOutput: { checked_issues: [], source_summaries: [], limits: [] } }),
+      "finding without matching fact_check entry should be rejected");
+
+    // Read boundary: empty Existing Code Refs exposes no files
+    const emptyRefsScope = buildRoleReadScope("risk", tempDir, "## Existing Code Refs\nNone\n\n## Tasks\nDo something.", { maxFiles: 10 });
+    assert.equal(emptyRefsScope.files.length, 0, "empty Existing Code Refs should expose no files");
+
+    // Read boundary: missing section exposes no files
+    const noRefsScope = buildRoleReadScope("risk", tempDir, "## Tasks\nDo something.", { maxFiles: 10 });
+    assert.equal(noRefsScope.files.length, 0, "missing Existing Code Refs section should expose no files");
 
     const waitConfig = {
       ...directoryConfig,

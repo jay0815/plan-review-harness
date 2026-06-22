@@ -50,26 +50,27 @@ function writeJson(file, value) {
 function validateSynthesisSemantics(output, factCheckOutput) {
   const findings = Array.isArray(output?.source_findings) ? output.source_findings : [];
   const byId = new Map();
-  const bySourceTitle = new Map();
+  const byIssueId = new Map();
   for (const finding of findings) {
     if (byId.has(finding.id)) {
       throw new Error(`Synthesis semantic validation failed: duplicate source finding id ${finding.id}`);
     }
     byId.set(finding.id, finding);
-    bySourceTitle.set(`${finding.source}\u0000${finding.source_title}`, finding);
+    if (finding.source_issue_id) {
+      byIssueId.set(finding.source_issue_id, finding);
+    }
   }
 
   const checkedIssues = Array.isArray(factCheckOutput?.checked_issues)
     ? factCheckOutput.checked_issues
     : [];
-  const checkedKeys = new Set();
+  const checkedIds = new Set();
   for (const checked of checkedIssues) {
-    const key = `${checked.source}\u0000${checked.issue_title}`;
-    checkedKeys.add(key);
-    const finding = bySourceTitle.get(key);
+    checkedIds.add(checked.issue_id);
+    const finding = byIssueId.get(checked.issue_id);
     if (!finding) {
       throw new Error(
-        `Synthesis semantic validation failed: missing source finding for ${checked.source}/${checked.issue_title}`
+        `Synthesis semantic validation failed: missing source finding for issue_id ${checked.issue_id}`
       );
     }
     if (finding.fact_check_status !== checked.status) {
@@ -97,11 +98,9 @@ function validateSynthesisSemantics(output, factCheckOutput) {
   }
 
   for (const finding of findings) {
-    const key = finding.source + "\u0000" + finding.source_title;
-    if (!checkedKeys.has(key)) {
+    if (finding.source_issue_id && !checkedIds.has(finding.source_issue_id)) {
       throw new Error(
-        "Synthesis semantic validation failed: source finding " + finding.id +
-        " has no matching fact_check entry for " + finding.source + "/" + finding.source_title
+        `Synthesis semantic validation failed: source finding ${finding.id} has no matching fact_check entry for issue_id ${finding.source_issue_id}`
       );
     }
   }

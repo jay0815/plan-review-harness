@@ -268,6 +268,37 @@ function main() {
     });
     assert.deepEqual(validRef.errors, []);
 
+    // 10-line arrow function should be rejected
+    const arrowPlan = requiredPlan({
+      appendix: [
+        "",
+        "## Implementation Details",
+        "```ts",
+        "const handleAuth = async (req: Request) => {",
+        "  const token = req.headers.authorization;",
+        "  if (!token) {",
+        "    return unauthorized();",
+        "  }",
+        "  const user = await verify(token);",
+        "  if (!user) {",
+        "    return forbidden();",
+        "  }",
+        "  req.user = user;",
+        "  return next(req);",
+        "};",
+        "```"
+      ].join("\n")
+    });
+    const arrowResult = lintPlan({ plan: arrowPlan, projectRoot });
+    assert(
+      codes(arrowResult).errors.includes("implementation_code_block"),
+      "10-line arrow function should be flagged as implementation_code_block"
+    );
+    assert(
+      arrowResult.metrics.code_blocks.some((b) => b.kind === "arrow_function_implementation"),
+      "arrow function should be classified as arrow_function_implementation"
+    );
+
     console.log("plan authoring lint tests passed");
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });

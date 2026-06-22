@@ -651,9 +651,11 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
     artifact.relative_path,
     artifact
   ]));
-  for (const common of COMMON_PROJECT_FILES) {
-    if (fs.existsSync(path.join(projectRoot, common))) {
-      addFileToScope(projectRoot, common, files, skippedRefs);
+  if (!options.existingRefsOnly) {
+    for (const common of COMMON_PROJECT_FILES) {
+      if (fs.existsSync(path.join(projectRoot, common))) {
+        addFileToScope(projectRoot, common, files, skippedRefs);
+      }
     }
   }
   if (options.includeAllProposedArtifacts) {
@@ -720,11 +722,10 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
 }
 
 function buildRoleReadScope(role, projectRoot, plan, options = {}) {
-  const hasExistingCodeRefs = existingCodeRefPaths(plan).length > 0;
   const scope = buildReadScopeFromText(role, projectRoot, plan, {
     ...options,
     includeAllProposedArtifacts: true,
-    existingRefsOnly: hasExistingCodeRefs
+    existingRefsOnly: true
   });
   scope.description = [
     "只暴露计划 Existing Code Refs 章节列出的现有工程文件、兼容保留的 proposed-code 草案和少量项目配置文件。",

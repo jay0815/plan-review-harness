@@ -23,6 +23,7 @@
           "id",
           "source",
           "source_title",
+          "source_issue_id",
           "fact_check_status",
           "scope_status",
           "disposition",
@@ -38,6 +39,10 @@
             "minLength": 1
           },
           "source_title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_issue_id": {
             "type": "string",
             "minLength": 1
           },

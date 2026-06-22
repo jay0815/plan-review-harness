@@ -336,7 +336,7 @@ function classifyCodeBlock(block, sectionTitle) {
   }
   const hasCompleteFunction =
     /\b(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{/.test(code) &&
-    lines > 10;
+    lines >= 10;
   if (hasCompleteFunction) {
     return {
       kind: "function_implementation",
@@ -346,7 +346,7 @@ function classifyCodeBlock(block, sectionTitle) {
   }
   const hasArrowFunction =
     /(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>\s*\{/.test(code) &&
-    lines > 10;
+    lines >= 10;
   if (hasArrowFunction) {
     return {
       kind: "arrow_function_implementation",
