@@ -32,9 +32,31 @@ function typeMatches(value, expected) {
   return actual === expected;
 }
 
-function validateSchema(value, schema, path = "$", errors = []) {
+function resolveRef(ref, rootSchema) {
+  if (!ref || typeof ref !== "string" || !ref.startsWith("#/")) {
+    return null;
+  }
+  const parts = ref.slice(2).split("/");
+  let current = rootSchema;
+  for (const part of parts) {
+    if (!current || typeof current !== "object") {
+      return null;
+    }
+    current = current[part];
+  }
+  return current || null;
+}
+
+function validateSchema(value, schema, path = "$", errors = [], rootSchema = null) {
   if (!schema || typeof schema !== "object") {
     return errors;
+  }
+
+  if (schema.$ref) {
+    const resolved = resolveRef(schema.$ref, rootSchema || schema);
+    if (resolved) {
+      return validateSchema(value, resolved, path, errors, rootSchema || schema);
+    }
   }
 
   if (schema.const !== undefined && value !== schema.const) {
@@ -72,7 +94,7 @@ function validateSchema(value, schema, path = "$", errors = []) {
     const properties = schema.properties || {};
     for (const [key, childValue] of Object.entries(value)) {
       if (properties[key]) {
-        validateSchema(childValue, properties[key], `${path}.${key}`, errors);
+        validateSchema(childValue, properties[key], `${path}.${key}`, errors, rootSchema);
       } else if (schema.additionalProperties === false) {
         errors.push({ path: `${path}.${key}`, message: "additional property is not allowed" });
       }
@@ -91,7 +113,7 @@ function validateSchema(value, schema, path = "$", errors = []) {
       errors.push({ path, message: `expected at most ${schema.maxItems} item(s), got ${value.length}` });
     }
     if (schema.items) {
-      value.forEach((item, index) => validateSchema(item, schema.items, `${path}[${index}]`, errors));
+      value.forEach((item, index) => validateSchema(item, schema.items, `${path}[${index}]`, errors, rootSchema));
     }
   }
 
@@ -167,7 +189,7 @@ function validateJsonText(candidateText, schema = readSchema()) {
     };
   }
 
-  const schemaErrors = validateSchema(parsed, schema);
+  const schemaErrors = validateSchema(parsed, schema, "$", [], schema);
   if (schemaErrors.length) {
     return {
       valid: false,

@@ -720,7 +720,7 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
 }
 
 function buildRoleReadScope(role, projectRoot, plan, options = {}) {
-  const hasExistingCodeRefs = /^##\s+Existing Code Refs\b/im.test(String(plan || ""));
+  const hasExistingCodeRefs = existingCodeRefPaths(plan).length > 0;
   const scope = buildReadScopeFromText(role, projectRoot, plan, {
     ...options,
     includeAllProposedArtifacts: true,

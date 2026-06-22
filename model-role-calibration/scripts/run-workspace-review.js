@@ -65,6 +65,7 @@ function validateSynthesisSemantics(output, factCheckOutput) {
   const checkedKeys = new Set();
   for (const checked of checkedIssues) {
     const key = `${checked.source}\u0000${checked.issue_title}`;
+    checkedKeys.add(key);
     const finding = bySourceTitle.get(key);
     if (!finding) {
       throw new Error(
@@ -97,7 +98,7 @@ function validateSynthesisSemantics(output, factCheckOutput) {
 
   for (const finding of findings) {
     const key = finding.source + "\u0000" + finding.source_title;
-    if (checkedKeys.size > 0 && !checkedKeys.has(key)) {
+    if (!checkedKeys.has(key)) {
       throw new Error(
         "Synthesis semantic validation failed: source finding " + finding.id +
         " has no matching fact_check entry for " + finding.source + "/" + finding.source_title
