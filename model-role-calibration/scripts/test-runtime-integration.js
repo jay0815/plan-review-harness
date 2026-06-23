@@ -320,6 +320,39 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.equal(workflowBatch.skipped, 4);
     assert(workflowBatch.results.every((item) => item.status === "skipped"));
 
+    const forceLog = path.join(tempDir, "force-workflow.log");
+    result = runNode(runCalibration, [
+      "--run", workflowRun,
+      "--case", "synthetic/event-reporting",
+      "--models", "kimi,deepseek",
+      "--probes", "planner",
+      "--concurrency", "2",
+      "--force"
+    ], {
+      ...baseEnv,
+      FAKE_POOL_LOG: forceLog,
+      FAKE_MODEL_DELAY_MS: "100"
+    });
+    requireSuccess(result, "forced workflow refresh");
+    workflowBatch = parseJsonFile(path.join(ROOT, "runs", workflowRun, "batch.json"));
+    assert.equal(workflowBatch.force, true);
+    assert.equal(workflowBatch.requested, 2);
+    assert.equal(workflowBatch.completed, 2);
+    assert.equal(workflowBatch.skipped, 0);
+    assert.equal(maxConcurrency(forceLog), 2);
+    for (const model of ["kimi", "deepseek"]) {
+      const paths = agentOutputPaths(
+        workflowRun,
+        "synthetic/event-reporting",
+        model,
+        "planner"
+      );
+      assert.equal(
+        parseJsonFile(path.join(paths.attemptsDir, "attempt-002.meta.json")).status,
+        "completed"
+      );
+    }
+
     const failureRun = runIds[4];
     generatePrompts(failureRun, ["planner"]);
     result = runNode(runPool, [

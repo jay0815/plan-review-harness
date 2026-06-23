@@ -332,10 +332,15 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
 新版本运行产物必须包含 \`report.json.outcome\`。如果报告出现 \`infra_errors\`，
 表示 Reviewer/模型输出或 harness 解析问题，不是计划本身的阻塞结论。
 
-Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离：runner 只复制计划或
-evidence 明确引用的相对文件，以及少量项目配置文件到临时工程副本，并把该副本作为
-Claude Code 的 \`--add-dir\`。每个角色会写入 \`roles/<role>/read-scope.json\`，
-inspect 输出会标记 \`out_of_boundary_read_files\`。
+Reviewer 和 Fact Check 默认使用 scoped mirror 硬隔离。Reviewer 只复制 Plan 的
+\`Existing Code Refs\` 明确列出的现有工程文件；该章节缺失或为 \`None\` 时不暴露
+任何现有工程文件，也不会默认加入 \`package.json\`、\`tsconfig.json\` 等项目配置。
+Plan 其他章节提到但未列入该章节的路径不会被复制。Fact Check 只复制 Reviewer
+evidence 明确引用的文件，不自行搜索或扩展证据范围。兼容保留的
+\`proposed-code/\` artifact 只表示未来代码草案，不属于现有工程事实。临时工程副本
+作为 Claude Code 的 \`--add-dir\`；每个角色会写入
+\`roles/<role>/read-scope.json\`，inspect 输出会标记
+\`out_of_boundary_read_files\`。
 
 Fact Check 会额外生成 \`roles/fact_check/fact-check-summary.json\`，其中包含
 \`strictness_signal\`、\`status_counts\`、\`evidence_status_counts\` 和

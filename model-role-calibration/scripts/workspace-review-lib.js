@@ -651,7 +651,7 @@ function buildReadScopeFromText(role, projectRoot, text, options = {}) {
     artifact.relative_path,
     artifact
   ]));
-  if (!options.existingRefsOnly) {
+  if (!options.existingRefsOnly && options.includeCommonFiles !== false) {
     for (const common of COMMON_PROJECT_FILES) {
       if (fs.existsSync(path.join(projectRoot, common))) {
         addFileToScope(projectRoot, common, files, skippedRefs);
@@ -728,7 +728,8 @@ function buildRoleReadScope(role, projectRoot, plan, options = {}) {
     existingRefsOnly: true
   });
   scope.description = [
-    "只暴露计划 Existing Code Refs 章节列出的现有工程文件、兼容保留的 proposed-code 草案和少量项目配置文件。",
+    "只暴露 Plan 的 Existing Code Refs 章节明确列出的现有工程文件；章节缺失或为 None 时不暴露现有工程文件，也不默认加入项目配置文件。",
+    "Plan 其他章节提到但未列入 Existing Code Refs 的路径不会被复制。",
     "proposed-code 仅用于传输兼容和定位计划作者写下的未来代码，不是推荐 Plan 结构、现有工程事实或最终实现承诺。",
     "Reviewer 若需要未暴露文件，应写入 missing_questions，不应猜测。"
   ].join("");
@@ -736,8 +737,15 @@ function buildRoleReadScope(role, projectRoot, plan, options = {}) {
 }
 
 function buildFactCheckReadScope(projectRoot, reviewerOutputs, options = {}) {
-  const text = JSON.stringify(reviewerOutputs || {});
-  const scope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, options);
+  const text = Object.values(reviewerOutputs || {}).flatMap((output) => (
+    (Array.isArray(output?.issues) ? output.issues : [])
+      .map((issue) => issue?.evidence)
+      .filter((evidence) => typeof evidence === "string" && evidence.trim())
+  )).join("\n");
+  const scope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, {
+    ...options,
+    includeCommonFiles: false
+  });
   scope.description = [
     "只暴露 Reviewer evidence 明确引用的工程文件。",
     "Fact Check 不应搜索新证据或新增问题。"

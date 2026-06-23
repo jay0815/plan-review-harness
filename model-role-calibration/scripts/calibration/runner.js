@@ -30,9 +30,9 @@ const {
  * @property {string} root
  * @property {(opts: {caseId: string, models: string[], probes: string[], config: any}) => void} validateOptions
  * @property {(caseId: string) => string} uniqueRunId
- * @property {(opts: {run: string, caseId: string, models: string[], probes: string[]}) => {promptDir: string, prompts: any[]}} generatePrompts
+ * @property {(opts: {run: string, caseId: string, models: string[], probes: string[], force?: boolean}) => {promptDir: string, prompts: any[]}} generatePrompts
  * @property {(opts: {run: string, caseId: string, models: string[], probes: string[]}) => CalibrationJob[]} buildJobs
- * @property {(job: CalibrationJob) => Promise<object>} runJob
+ * @property {(job: CalibrationJob, opts?: {force?: boolean}) => Promise<object>} runJob
  * @property {(run: string) => object | null} summarizeRun
  */
 
@@ -45,6 +45,7 @@ const {
  * @param {string[]} options.probes
  * @param {string} [options.run]
  * @param {number} [options.concurrency]
+ * @param {boolean} [options.force]
  * @param {any} options.config
  * @returns {Promise<object>}
  */
@@ -54,6 +55,7 @@ async function runCalibration(executor, options) {
 
   const run = options.run || executor.uniqueRunId(caseId);
   const concurrency = positiveInteger(options.concurrency || 2, "concurrency");
+  const force = options.force === true;
 
   console.log(`Run ID: ${run}`);
   console.log(`Type: ${executor.type}`);
@@ -62,8 +64,11 @@ async function runCalibration(executor, options) {
   if (probes.length) {
     console.log(`Probes: ${probes.join(",")}`);
   }
+  if (force) {
+    console.log("Force: enabled (matching prompts and model outputs will be refreshed)");
+  }
 
-  const promptInfo = executor.generatePrompts({ run, caseId, models, probes });
+  const promptInfo = executor.generatePrompts({ run, caseId, models, probes, force });
   const generated = promptInfo.generated ?? promptInfo.prompts.length;
   const reused = promptInfo.reused ?? 0;
   console.log(`Prompts: ${generated} generated${reused ? `, ${reused} reused` : ""}`);
@@ -71,7 +76,11 @@ async function runCalibration(executor, options) {
   const jobs = executor.buildJobs({ run, caseId, models, probes });
   console.log(`Jobs: ${jobs.length} scheduled, concurrency=${concurrency}`);
 
-  const results = await runWithConcurrency(jobs, concurrency, (job) => executor.runJob(job));
+  const results = await runWithConcurrency(
+    jobs,
+    concurrency,
+    (job) => executor.runJob(job, { force })
+  );
 
   const completed = results.filter((item) => item.status === "completed" || item.status === "skipped").length;
   const failed = results.filter((item) => item.status === "failed").length;
@@ -85,6 +94,7 @@ async function runCalibration(executor, options) {
     models,
     probes: probes.length ? probes : undefined,
     requested: jobs.length,
+    force,
     skipped: results.filter((item) => item.status === "skipped").length,
     completed,
     failed,

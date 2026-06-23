@@ -348,8 +348,12 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
 
 Reviewer 和 Fact Check 默认使用临时 scoped mirror：
 
-- runner 从计划或 Reviewer evidence 中提取相对文件路径。
-- 只复制这些文件和少量项目配置文件到临时隔离工程副本。
+- Reviewer 只复制 Plan 的 `Existing Code Refs` 章节明确列出的现有工程文件。
+- `Existing Code Refs` 缺失或内容为 `None` 时，Reviewer 不会获得任何现有工程文件；
+  `package.json`、`tsconfig.json` 等项目配置也不会被默认加入。
+- Plan 其他章节提到、但未列入 `Existing Code Refs` 的路径不会被复制。
+- Fact Check 只复制 Reviewer evidence 明确引用的文件，不自行搜索或扩展证据范围。
+- 兼容保留的 `proposed-code/` artifact 只表示 Plan 中的未来代码草案，不属于现有工程事实。
 - Claude Code 只获得该临时副本的 `--add-dir`。
 - 每个角色的边界写入 `roles/<role>/read-scope.json`。
 - `inspect-workspace-run.js` 会显示 `out_of_boundary_read_files`，用于观察是否仍发生越界读取。

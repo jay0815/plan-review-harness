@@ -370,7 +370,24 @@ async function main() {
       maxFiles: 10
     });
     assert(factScope.files.includes("src/cli.ts"));
-    assert(factScope.files.includes("package.json"));
+    assert(
+      !factScope.files.includes("package.json"),
+      "Fact Check should not receive common project files unless Reviewer evidence cites them"
+    );
+
+    const factScopeWithConfigEvidence = buildFactCheckReadScope(projectRoot, {
+      "Risk Reviewer": {
+        issues: [{
+          evidence: "`package.json:1` defines scripts"
+        }]
+      }
+    }, {
+      maxFiles: 10
+    });
+    assert(
+      factScopeWithConfigEvidence.files.includes("package.json"),
+      "Fact Check should receive a project config when Reviewer evidence explicitly cites it"
+    );
 
     const factCheckPrompt = buildWorkspacePrompt(
       "fact_check",

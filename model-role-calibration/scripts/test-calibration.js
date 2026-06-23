@@ -3,7 +3,12 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const { ROOT, loadConfig, schemaForProbe } = require("./lib");
+const {
+  ROOT,
+  loadConfig,
+  loadCaseInput,
+  schemaForProbe
+} = require("./lib");
 const { parseAssistantOutput, parseJsonEnvelope, buildCliArgs } = require("./run-model");
 const { MAX_CONCURRENCY, mergeRequestedJobs } = require("./run-agent-pool");
 const { DEFAULT_CASE } = require("./run-calibration");
@@ -29,7 +34,10 @@ function modelStats(model, plannerCases) {
     byProbeCase: {
       planner: plannerCases
     },
-    failure_modes: []
+    failure_modes: [],
+    failure_modes_by_probe: {
+      planner: []
+    }
   };
 }
 
@@ -107,6 +115,17 @@ function main() {
     probe: "risk"
   }), evaluationScore);
   assert.equal(DEFAULT_CASE, "synthetic/event-reporting");
+  const discretionCase = "synthetic/test-file-discretion";
+  const discretionPlanner = loadCaseInput(discretionCase, "planner");
+  const discretionReview = loadCaseInput(discretionCase, "execution");
+  const discretionSynthesis = loadCaseInput(discretionCase, "synthesis");
+  assert(discretionPlanner.includes("测试文件位置、命名、测试 helper"));
+  assert(discretionReview.includes("## Implementation Discretion"));
+  assert(discretionReview.includes("不要求计划预先指定唯一文件名"));
+  assert(!discretionReview.includes("# Fact Check"));
+  assert(discretionSynthesis.includes("\"issue_id\": \"Execution-Reviewer-001\""));
+  assert(discretionSynthesis.includes("\"blocks_execution\": false"));
+  assert(discretionSynthesis.includes("缺少唯一路径会阻塞执行或需要修订计划的后果没有证据支持"));
   assert.deepEqual(parseList("kimi,kimi,qwen", config.models), ["kimi", "qwen"]);
   assert.deepEqual(parseList(undefined, ["kimi", "qwen"]), ["kimi", "qwen"]);
   assert.equal(
@@ -123,6 +142,34 @@ function main() {
   );
   const roleExecutor = new RoleCalibrationExecutor();
   assert.equal(roleExecutor.type, "role");
+  const forceRun = `test-force-prompts-${process.pid}-${Date.now()}`;
+  const forcePromptFile = path.join(
+    ROOT,
+    "runs",
+    forceRun,
+    "synthetic",
+    "event-reporting",
+    "prompts",
+    "risk.md"
+  );
+  try {
+    roleExecutor.generatePrompts({
+      run: forceRun,
+      caseId: "synthetic/event-reporting",
+      probes: ["risk"]
+    });
+    fs.writeFileSync(forcePromptFile, "stale prompt", "utf8");
+    const refreshed = roleExecutor.generatePrompts({
+      run: forceRun,
+      caseId: "synthetic/event-reporting",
+      probes: ["risk"],
+      force: true
+    });
+    assert.equal(refreshed.generated, 1);
+    assert(fs.readFileSync(forcePromptFile, "utf8").includes("Risk Reviewer"));
+  } finally {
+    fs.rmSync(path.join(ROOT, "runs", forceRun), { recursive: true, force: true });
+  }
   assert.deepEqual(
     roleExecutor.buildJobs({
       run: "run-001",
@@ -161,7 +208,7 @@ function main() {
   const singleCase = roleRecommendation("planner", [
     modelStats("kimi", { [caseA]: 25 })
   ], config);
-  assert.equal(singleCase.status, "insufficient_data");
+  assert.equal(singleCase.status, "insufficient_coverage");
   assert.equal(singleCase.recommended, null);
   assert.equal(singleCase.comparable_models, 0);
 
@@ -169,7 +216,7 @@ function main() {
     modelStats("kimi", { [caseA]: 25, [caseB]: 25, [caseC]: 25 }),
     modelStats("deepseek", { [caseA]: 20, [caseB]: 20 })
   ], config);
-  assert.equal(oneCompleteModel.status, "insufficient_data");
+  assert.equal(oneCompleteModel.status, "insufficient_coverage");
   assert.equal(oneCompleteModel.comparable_models, 1);
 
   const comparableModels = roleRecommendation("planner", [
@@ -179,6 +226,17 @@ function main() {
   assert.equal(comparableModels.status, "candidate");
   assert.equal(comparableModels.recommended, "kimi");
   assert.equal(comparableModels.comparable_models, 2);
+  assert.equal(comparableModels.recommended_stability.minimum, 23);
+  assert.equal(comparableModels.recommended_stability.maximum, 24);
+  assert(comparableModels.recommended_stability.standard_deviation > 0);
+
+  const belowThreshold = roleRecommendation("planner", [
+    modelStats("kimi", { [caseA]: 19, [caseB]: 19, [caseC]: 19 }),
+    modelStats("deepseek", { [caseA]: 18, [caseB]: 18, [caseC]: 18 })
+  ], config);
+  assert.equal(belowThreshold.status, "below_quality_threshold");
+  assert.equal(belowThreshold.recommended, null);
+  assert.equal(belowThreshold.top_model, "kimi");
 
   const parsed = parseAssistantOutput(JSON.stringify({
     result: "ok",

@@ -39,7 +39,7 @@
 - `L1_preference` 是不影响契约的偏好；`L2_local_change` 是不改变总体方向的局部修正；`L3_direction_decision` 是互斥且会改变公共契约、系统边界或长期方向的选择。
 - 只有真实的 `L3_direction_decision` 才设置 `needs_human_decision: true`；禁止擅自拍板 L3，也禁止把普通缺项升级为 L3。
 - 字段位置、字段语义或责任归属不一致属于必须关闭的契约问题，通常是 `L2_local_change`，不得以“双方都有道理”接受不一致。
-- 是否拆分公共 API、是否改变既有复用边界等互斥方向才可能是 `L3_direction_decision`。
+- 只有需求尚未裁定公共 API 或复用边界时，是否拆分公共 API、是否改变既有复用边界等互斥方向才可能是 `L3_direction_decision`。如果需求已明确要求复用现有 API 或禁止新增平行 API，要求拆分的意见属于 `out_of_scope`，不得升级为 L3。
 - 对需求未提供依据的数据库、消息系统、持久化队列、能力探测或功能开关建议应降权，不得自动进入修订指令。
 - `required_plan_change` 只保留合并后的最小决策或契约修订目标；不得指定源码形态。`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
 - 每条共识、分歧、误报和修订指令都必须填写 `source_finding_ids`。被标记为 `unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding id 禁止出现在共识、分歧或修订中。

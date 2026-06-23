@@ -11,6 +11,7 @@ const {
   ensureDir,
   readText,
   writeFileNew,
+  writeGenerated,
   loadCaseInput,
   timestamp
 } = require("./lib");
@@ -25,7 +26,7 @@ function uniqueRunId(base) {
   return run;
 }
 
-function generatePrompts({ run, caseId, probes }) {
+function generatePrompts({ run, caseId, probes, force = false }) {
   assertSafeCaseId(caseId);
   probes.forEach(assertProbe);
 
@@ -40,7 +41,12 @@ function generatePrompts({ run, caseId, probes }) {
     }
     const template = readText(templateFile);
     const output = template.replace("{{INPUT}}", input);
-    writeFileNew(path.join(promptDir, `${probe}.md`), output);
+    const promptFile = path.join(promptDir, `${probe}.md`);
+    if (force) {
+      writeGenerated(promptFile, output);
+    } else {
+      writeFileNew(promptFile, output);
+    }
   }
 
   return {

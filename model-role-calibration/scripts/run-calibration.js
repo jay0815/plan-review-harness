@@ -29,14 +29,22 @@ async function main() {
   const concurrency = args.concurrency && args.concurrency !== true
     ? Number(args.concurrency)
     : DEFAULT_CONCURRENCY;
+  const force = args.force === true;
 
   const executor = new RoleCalibrationExecutor();
+  if (force) {
+    console.warn(
+      "Warning: --force refreshes matching prompts and model outputs. " +
+      "Existing score files are not updated and must be rescored before summarization."
+    );
+  }
   const batch = await runCalibration(executor, {
     run,
     caseId,
     models,
     probes,
     concurrency,
+    force,
     config
   });
 

@@ -518,6 +518,20 @@ model-role-calibration/runs/<run-id>/<case-id>/agent-outputs/attempts/<model>-<p
 
 每次失败、超时或格式错误都会保留一个递增的 attempt 记录。再次执行相同任务会创建下一个 attempt；成功结果存在时再次执行会直接跳过，避免重复调用和重复计费。
 
+如果 case 或 probe prompt 已修改，需要在同一个 run 中刷新指定任务，可以使用 `run-calibration.js --force`：
+
+```bash
+node model-role-calibration/scripts/run-calibration.js \
+  --run <run-id> \
+  --case synthetic/event-reporting \
+  --models kimi,deepseek,glm,qwen \
+  --probes synthesis \
+  --concurrency 1 \
+  --force
+```
+
+`--force` 会同时传入内层 `run-model.js`，刷新本次指定 probe 的 prompt 和模型输出，并创建新的递增 attempt；历史 attempt 仍保留。已有评分文件不会自动更新；强制重跑后必须先重新评分受影响任务，再执行汇总，禁止把旧评分当作新输出的评分。
+
 批量角色扮演使用固定容量为 3 的池：
 
 ```bash
@@ -649,7 +663,7 @@ Probe 到角色的映射：
 - `synthesis` -> S Synthesizer
 - `rebuttal` -> 通用批判能力辅助信号
 
-如果评分数据不足或不稳定，生成的 `model-role-map.md` 会写“数据不足”，不会强行推荐模型。
+如果评分覆盖不足，生成结果使用 `insufficient_coverage`；覆盖完整但最高平均分未达到门槛时使用 `below_quality_threshold`，不会把质量未达标误写为数据不足。报告同时展示同一角色跨 primary cases 的最低分、最高分和标准差，并只附带该角色自身的 failure modes。
 
 正式推荐还必须同时满足：
 

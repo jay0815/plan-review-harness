@@ -624,7 +624,7 @@ function writeCompletedArtifacts(paths, attempt, metadata, envelope, output) {
   writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + "\n");
   writeGenerated(paths.rawFile, JSON.stringify(envelope, null, 2) + "\n");
   writeGenerated(paths.metadataFile, JSON.stringify(metadata, null, 2) + "\n");
-  writeFileNew(paths.resultFile, JSON.stringify(output, null, 2) + "\n");
+  writeGenerated(paths.resultFile, JSON.stringify(output, null, 2) + "\n");
 }
 
 function reparseAttempt(paths, sourceLabel, newAttempt, metadataBase, probe) {
@@ -667,6 +667,7 @@ async function main() {
   const caseId = requireArg(args, "case");
   const model = requireArg(args, "model").toLowerCase();
   const probe = requireArg(args, "probe");
+  const force = args.force === true;
   assertSafeCaseId(caseId);
   assertProbe(probe);
 
@@ -681,9 +682,12 @@ async function main() {
   }
 
   const paths = agentOutputPaths(run, caseId, model, probe);
-  if (fs.existsSync(paths.resultFile)) {
+  if (fs.existsSync(paths.resultFile) && !force) {
     console.log(`Model output already complete, skipping: ${paths.resultFile}`);
     return;
+  }
+  if (force && fs.existsSync(paths.resultFile)) {
+    logProgress(`force enabled; refreshing completed output: ${paths.resultFile}`);
   }
   ensureDir(paths.outputDir);
 

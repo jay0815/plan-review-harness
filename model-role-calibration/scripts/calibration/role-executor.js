@@ -82,19 +82,23 @@ function failureSummary(metadata, exitCode, signal, spawnError) {
   return "Model runner failed without a recorded error";
 }
 
-function runModelJob(job) {
+function runModelJob(job, options = {}) {
   return new Promise((resolve) => {
     const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER
       || path.join(ROOT, "scripts", "run-model.js");
     const startedAt = new Date().toISOString();
-    const child = spawn(process.execPath, [
+    const childArgs = [
       runner,
       "--run", job.run,
       "--case", job.caseId,
       "--model", job.model,
       "--probe", job.probe,
       "--with-json-validator"
-    ], {
+    ];
+    if (options.force) {
+      childArgs.push("--force");
+    }
+    const child = spawn(process.execPath, childArgs, {
       cwd: ROOT,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"]
@@ -182,16 +186,23 @@ class RoleCalibrationExecutor {
     return uniqueRunId(slug(caseId), ROOT);
   }
 
-  generatePrompts({ run, caseId, probes }) {
+  generatePrompts({ run, caseId, probes, force = false }) {
     const promptDir = path.join(ROOT, "runs", run, caseId, "prompts");
-    const missing = probes.filter((probe) => !fs.existsSync(path.join(promptDir, `${probe}.md`)));
-    if (missing.length) {
-      generateRolePrompts({ run, caseId, probes: missing });
+    const generatedProbes = force
+      ? probes
+      : probes.filter((probe) => !fs.existsSync(path.join(promptDir, `${probe}.md`)));
+    if (generatedProbes.length) {
+      generateRolePrompts({
+        run,
+        caseId,
+        probes: generatedProbes,
+        force
+      });
     }
     return {
       promptDir,
-      generated: missing.length,
-      reused: probes.length - missing.length,
+      generated: generatedProbes.length,
+      reused: probes.length - generatedProbes.length,
       prompts: probes.map((probe) => ({
         probe,
         file: path.join(promptDir, `${probe}.md`)
@@ -209,10 +220,10 @@ class RoleCalibrationExecutor {
     return jobs;
   }
 
-  async runJob(job) {
+  async runJob(job, options = {}) {
     const paths = agentOutputPaths(job.run, job.caseId, job.model, job.probe);
     const label = jobKey(job);
-    if (fs.existsSync(paths.resultFile)) {
+    if (fs.existsSync(paths.resultFile) && !options.force) {
       console.log(`[skip] ${label}: completed output exists`);
       return {
         caseId: job.caseId,
@@ -225,7 +236,7 @@ class RoleCalibrationExecutor {
     }
 
     console.log(`[start] ${label}`);
-    const result = await runModelJob(job);
+    const result = await runModelJob(job, options);
     if (result.status === "completed") {
       console.log(`[done] ${label}`);
     } else {
