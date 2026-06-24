@@ -1,0 +1,32 @@
+model-role-calibration/scripts/test-calibration.js
+  f9008e9b5f25e362 128-129,235-261,316-325
+model-role-calibration/scripts/summarize-results.js
+  f9008e9b5f25e362 111,118-130,135,144,156-158,160-162,166-174,176-181,187-188,195-201,203-204,370-376,382-383,385-387,410
+model-role-calibration/README.md
+  f9008e9b5f25e362 32-36,247-248,536,540,673,680-682
+model-role-calibration/scripts/validate-fixtures.js
+  f9008e9b5f25e362 174-205
+model-role-calibration/calibration.config.json
+  f9008e9b5f25e362 18-20,23-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "8e458fbc423f56af80d1e4d73f4bf92275ad23c7",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 159,
+      "total_deletions": 32,
+      "accepted_lines": 151,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/a409e0c6f88beb88ea493bb4589e78d30eb2922c53d79827c8b20091da253cdc"
+    }
+  }
+}
