@@ -49,10 +49,46 @@
   "coverage_declaration": {
     "reviewed_boundaries": [
       {
+        "boundary": "main_path",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了支付结果页、JS 上报、原生桥和服务端处理的主执行路径。"
+      },
+      {
+        "boundary": "step_order",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了跨端协议和发布顺序是否会导致先上线读取方或写入方不兼容。"
+      },
+      {
         "boundary": "dependencies",
         "status": "partially_covered",
         "evidence_basis": "plan_text",
         "notes": "检查了 JS、原生和服务端同窗口发布对执行依赖的影响。"
+      },
+      {
+        "boundary": "inputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 is_realtime、event_id、调用返回语义和服务端读取字段的输入权威。"
+      },
+      {
+        "boundary": "outputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了跨层 wire shape、非阻塞调用结果和批量回落输出契约。"
+      },
+      {
+        "boundary": "acceptance",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了验收是否覆盖失败路径、兼容矩阵、指标和回滚判定。"
+      },
+      {
+        "boundary": "tests",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了非阻塞、字段路径、重试回落和跨版本组合测试是否完整。"
       },
       {
         "boundary": "failure_semantics",
@@ -61,10 +97,28 @@
         "notes": "检查了支付结果页等待遥测上传与失败不得阻塞的硬约束冲突。"
       },
       {
+        "boundary": "rollback_or_recovery",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了实时链路失败、批量回落、观测和回滚边界。"
+      },
+      {
         "boundary": "compatibility_or_release",
         "status": "partially_covered",
         "evidence_basis": "plan_text",
         "notes": "检查了线上新旧客户端和两个服务端版本共存下的发布验收缺口。"
+      },
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了公开 API 拆分、具体超时参数和 endpoint 选择是否属于实现自由或超范围要求。"
+      },
+      {
+        "boundary": "plan_bloat",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有显示未来代码或实现细节淹没关键决策。"
       }
     ],
     "unverified_assumptions": [],

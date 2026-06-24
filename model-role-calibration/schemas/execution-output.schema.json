@@ -23,7 +23,118 @@
       "properties": {
         "reviewed_boundaries": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 12,
+          "maxItems": 12,
+          "allOf": [
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "main_path" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "step_order" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "dependencies" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "inputs" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "outputs" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "acceptance" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "tests" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "failure_semantics" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "rollback_or_recovery" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "compatibility_or_release" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "implementation_discretion" }
+                }
+              }
+            },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["boundary"],
+                "properties": {
+                  "boundary": { "const": "plan_bloat" }
+                }
+              }
+            }
+          ],
           "items": {
             "type": "object",
             "required": [

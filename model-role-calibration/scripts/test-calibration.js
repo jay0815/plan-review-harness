@@ -28,6 +28,30 @@ const {
   validateEvaluationScore
 } = require("./evaluation-lib");
 
+const EXECUTION_BOUNDARIES = [
+  "main_path",
+  "step_order",
+  "dependencies",
+  "inputs",
+  "outputs",
+  "acceptance",
+  "tests",
+  "failure_semantics",
+  "rollback_or_recovery",
+  "compatibility_or_release",
+  "implementation_discretion",
+  "plan_bloat"
+];
+
+function executionCoverage() {
+  return EXECUTION_BOUNDARIES.map((boundary) => ({
+    boundary,
+    status: "covered",
+    evidence_basis: "plan_text",
+    notes: `测试候选输出覆盖 ${boundary} 边界。`
+  }));
+}
+
 function modelStats(model, plannerCases) {
   return {
     model,
@@ -314,12 +338,7 @@ function main() {
   const validatedToolCandidate = {
     probe: "execution",
     coverage_declaration: {
-      reviewed_boundaries: [{
-        boundary: "main_path",
-        status: "covered",
-        evidence_basis: "plan_text",
-        notes: "测试候选输出覆盖主路径。"
-      }],
+      reviewed_boundaries: executionCoverage(),
       unverified_assumptions: [],
       not_reviewed: []
     },

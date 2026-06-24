@@ -44,10 +44,40 @@
   "coverage_declaration": {
     "reviewed_boundaries": [
       {
-        "boundary": "implementation_discretion",
+        "boundary": "main_path",
         "status": "covered",
         "evidence_basis": "plan_text",
-        "notes": "检查了测试文件路径、目录、命名和 helper 是否已被计划声明为实现自由。"
+        "notes": "检查了 normalizeName 行为修复和对应测试补充的主路径。"
+      },
+      {
+        "boundary": "step_order",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了先修复函数再补充行为测试的执行顺序，未发现阻塞倒置。"
+      },
+      {
+        "boundary": "dependencies",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有触发跨团队、服务端或外部依赖。"
+      },
+      {
+        "boundary": "inputs",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了测试文件位置是否属于必须由计划给定的输入。"
+      },
+      {
+        "boundary": "outputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了函数行为和测试结果输出，不要求计划指定局部文件组织。"
+      },
+      {
+        "boundary": "acceptance",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了验收是否能通过行为测试判断 normalizeName 修复完成。"
       },
       {
         "boundary": "tests",
@@ -56,10 +86,34 @@
         "notes": "检查了测试场景和验收结果是否足以开始实现。"
       },
       {
-        "boundary": "inputs",
-        "status": "partially_covered",
+        "boundary": "failure_semantics",
+        "status": "not_applicable",
         "evidence_basis": "plan_text",
-        "notes": "检查了测试文件位置是否属于必须由计划给定的输入。"
+        "notes": "输入是纯函数行为修复，没有触发失败、重试、回滚或降级语义。"
+      },
+      {
+        "boundary": "rollback_or_recovery",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有触发迁移、部分写入、失败重跑或恢复边界。"
+      },
+      {
+        "boundary": "compatibility_or_release",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有触发新旧版本共存、跨层协议或发布顺序风险。"
+      },
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了测试文件路径、目录、命名和 helper 是否已被计划声明为实现自由。"
+      },
+      {
+        "boundary": "plan_bloat",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有显示未来代码或实现细节淹没关键决策。"
       }
     ],
     "unverified_assumptions": [

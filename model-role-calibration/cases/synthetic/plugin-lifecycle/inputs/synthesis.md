@@ -49,6 +49,24 @@
   "coverage_declaration": {
     "reviewed_boundaries": [
       {
+        "boundary": "main_path",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了安装、更新、卸载和 dry-run 的主执行路径。"
+      },
+      {
+        "boundary": "step_order",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了写入临时目录、提交 manifest、覆盖检测和失败重跑的顺序边界。"
+      },
+      {
+        "boundary": "dependencies",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入描述的是本地 CLI bundled 资产管理，没有触发后台服务或跨团队依赖。"
+      },
+      {
         "boundary": "inputs",
         "status": "covered",
         "evidence_basis": "plan_text",
@@ -61,10 +79,46 @@
         "notes": "检查了 dry-run 是否能输出逐文件动作和原因。"
       },
       {
+        "boundary": "acceptance",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了验收是否覆盖空目录、重复执行、未知文件、用户修改和 scope 隔离。"
+      },
+      {
+        "boundary": "tests",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 dry-run、manifest/hash、部分写入恢复和卸载边界的测试覆盖。"
+      },
+      {
+        "boundary": "failure_semantics",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了覆盖用户修改、删除未知文件、部分写入和重跑幂等语义。"
+      },
+      {
         "boundary": "rollback_or_recovery",
         "status": "partially_covered",
         "evidence_basis": "plan_text",
         "notes": "检查了复制或删除中途失败后的重跑恢复边界。"
+      },
+      {
+        "boundary": "compatibility_or_release",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入是本地 CLI 资产生命周期，没有触发线上灰度、版本共存或服务端兼容发布。"
+      },
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了在线 marketplace、账号系统、灰度平台等是否属于超出本地 CLI 范围的误报。"
+      },
+      {
+        "boundary": "plan_bloat",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有显示未来代码或实现细节淹没关键决策。"
       }
     ],
     "unverified_assumptions": [],

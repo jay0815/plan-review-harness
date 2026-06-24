@@ -55,16 +55,70 @@
         "notes": "检查了本地草稿迁移、同步重试和批量结果处理的主执行路径。"
       },
       {
-        "boundary": "failure_semantics",
+        "boundary": "step_order",
         "status": "covered",
         "evidence_basis": "plan_text",
-        "notes": "检查了同步失败不得丢失本地编辑、幂等重试和部分成功恢复语义。"
+        "notes": "检查了迁移、编辑、同步、部分成功处理和恢复步骤的执行顺序。"
+      },
+      {
+        "boundary": "dependencies",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了本地存储 schema、服务端批量同步结果和多设备冲突处理的依赖边界。"
+      },
+      {
+        "boundary": "inputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 synced、基准 revision、稳定操作 id、草稿版本和用户编辑状态等输入权威。"
       },
       {
         "boundary": "outputs",
         "status": "partially_covered",
         "evidence_basis": "plan_text",
         "notes": "检查了批量同步后本地状态如何记录逐条结果。"
+      },
+      {
+        "boundary": "acceptance",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了同步、冲突、迁移和部分成功验收是否可判定。"
+      },
+      {
+        "boundary": "tests",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了多设备冲突、重复重试、v1 迁移和部分成功测试覆盖。"
+      },
+      {
+        "boundary": "failure_semantics",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了同步失败不得丢失本地编辑、幂等重试和部分成功恢复语义。"
+      },
+      {
+        "boundary": "rollback_or_recovery",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 v1 草稿迁移、失败重跑、冲突恢复和本地状态恢复边界。"
+      },
+      {
+        "boundary": "compatibility_or_release",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 v1 草稿迁移和旧本地数据兼容，但没有引入实时协同发布要求。"
+      },
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 CRDT、实时协同和字段级自动合并是否属于第一版之外的实现扩张。"
+      },
+      {
+        "boundary": "plan_bloat",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": "输入没有显示未来代码或实现细节淹没关键决策。"
       }
     ],
     "unverified_assumptions": [],

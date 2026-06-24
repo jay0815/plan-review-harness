@@ -32,8 +32,11 @@ validator 不替代最终拒收边界。
 Synthesis 还会执行 schema 之外的语义校验：`source_findings` 必须逐条匹配
 Fact Check issue，已排除 finding 不得重新进入共识/分歧/修订，误报列表只能引用已排除 finding，
 流程图节点和问题标题引用必须存在，`partially_verified` 进入修订时不得把严重度抬高到超过原 Reviewer。
-Execution 输出必须包含 `coverage_declaration`，声明已检查的执行边界、证据来源、未验证假设和未检查范围。
-runner 会额外校验 issue 类型与覆盖边界一致，避免模型一边报告依赖、验收或失败语义问题，一边没有声明检查过对应范围。
+Execution 输出必须包含 `coverage_declaration`，并且 `reviewed_boundaries` 必须完整声明
+`main_path`、`step_order`、`dependencies`、`inputs`、`outputs`、`acceptance`、`tests`、
+`failure_semantics`、`rollback_or_recovery`、`compatibility_or_release`、
+`implementation_discretion`、`plan_bloat` 12 个执行边界。边界可以标为 `not_applicable`，
+但不能省略。runner 会额外校验 issue 类型与覆盖边界一致，避免模型一边报告依赖、验收或失败语义问题，一边没有声明检查过对应范围；`preference` 类型 issue 也不能声明阻塞执行。
 
 Workspace Plan Review 支持按阶段断点重试：
 

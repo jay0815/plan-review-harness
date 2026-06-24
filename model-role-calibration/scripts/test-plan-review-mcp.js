@@ -48,6 +48,31 @@ function settings(baseUrl, model) {
   };
 }
 
+const EXECUTION_BOUNDARIES = [
+  "main_path",
+  "step_order",
+  "dependencies",
+  "inputs",
+  "outputs",
+  "acceptance",
+  "tests",
+  "failure_semantics",
+  "rollback_or_recovery",
+  "compatibility_or_release",
+  "implementation_discretion",
+  "plan_bloat"
+];
+
+function executionCoverage(overrides = {}) {
+  return EXECUTION_BOUNDARIES.map((boundary) => ({
+    boundary,
+    status: "covered",
+    evidence_basis: "plan_text",
+    notes: `测试 fixture 覆盖 ${boundary} 边界。`,
+    ...(overrides[boundary] || {})
+  }));
+}
+
 function configFixture(tempDir) {
   const settingsDir = path.join(tempDir, "settings");
   writeJson(path.join(settingsDir, "kimi.json"), settings("https://kimi.example"));
@@ -105,12 +130,7 @@ function writeReviewerAttempt(runDir, role, model, status = "completed") {
   };
   if (role === "execution") {
     output.coverage_declaration = {
-      reviewed_boundaries: [{
-        boundary: "main_path",
-        status: "covered",
-        evidence_basis: "plan_text",
-        notes: "测试 fixture 默认覆盖主路径。"
-      }],
+      reviewed_boundaries: executionCoverage(),
       unverified_assumptions: [],
       not_reviewed: []
     };
@@ -1053,15 +1073,14 @@ async function main() {
       executionSchema.properties.coverage_declaration.properties.reviewed_boundaries.items
         .properties.boundary.enum.includes("implementation_discretion")
     );
+    assert.equal(
+      executionSchema.properties.coverage_declaration.properties.reviewed_boundaries.minItems,
+      EXECUTION_BOUNDARIES.length
+    );
     assert.doesNotThrow(() => validateWorkspaceOutput("execution", {
       probe: "execution",
       coverage_declaration: {
-        reviewed_boundaries: [{
-          boundary: "main_path",
-          status: "covered",
-          evidence_basis: "plan_text",
-          notes: "主路径已检查。"
-        }],
+        reviewed_boundaries: executionCoverage(),
         unverified_assumptions: [],
         not_reviewed: []
       },
@@ -1072,33 +1091,28 @@ async function main() {
     assert.throws(() => validateWorkspaceOutput("execution", {
       probe: "execution",
       coverage_declaration: {
-        reviewed_boundaries: [{
-          boundary: "main_path",
-          status: "covered",
-          evidence_basis: "plan_text",
-          notes: "主路径已检查。"
-        }, {
-          boundary: "main_path",
-          status: "covered",
-          evidence_basis: "plan_text",
-          notes: "重复声明。"
-        }],
+        reviewed_boundaries: executionCoverage({
+          step_order: {
+            boundary: "main_path",
+            notes: "重复声明。"
+          }
+        }),
         unverified_assumptions: [],
         not_reviewed: []
       },
       issues: [],
       missing_questions: [],
       false_positive_risks: []
-    }), /duplicate coverage boundary main_path/);
+    }), /duplicate coverage boundary main_path|Schema validation failed/);
     assert.throws(() => validateWorkspaceOutput("execution", {
       probe: "execution",
       coverage_declaration: {
-        reviewed_boundaries: [{
-          boundary: "main_path",
-          status: "covered",
-          evidence_basis: "plan_text",
-          notes: "只检查主路径。"
-        }],
+        reviewed_boundaries: executionCoverage({
+          acceptance: {
+            status: "not_applicable",
+            notes: "验收边界未检查。"
+          }
+        }),
         unverified_assumptions: [],
         not_reviewed: []
       },
@@ -1115,6 +1129,26 @@ async function main() {
       missing_questions: [],
       false_positive_risks: []
     }), /type acceptance is not covered by coverage_declaration/);
+    assert.throws(() => validateWorkspaceOutput("execution", {
+      probe: "execution",
+      coverage_declaration: {
+        reviewed_boundaries: executionCoverage(),
+        unverified_assumptions: [],
+        not_reviewed: []
+      },
+      issues: [{
+        title: "目录命名偏好",
+        type: "preference",
+        severity: "medium",
+        evidence: "计划允许实现者决定测试目录。",
+        why_it_matters: "这只是偏好。",
+        required_plan_detail: "无需补充。",
+        blocks_execution: true,
+        confidence: 0.9
+      }],
+      missing_questions: [],
+      false_positive_risks: []
+    }), /preference issue "目录命名偏好" cannot block execution/);
     assert.throws(() => validateWorkspaceOutput("execution", {
       probe: "execution",
       issues: [],

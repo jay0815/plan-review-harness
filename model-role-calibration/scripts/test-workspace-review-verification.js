@@ -41,6 +41,30 @@ function roleEvents({ tools = ["Read"], reads = [] } = {}) {
   ];
 }
 
+const EXECUTION_BOUNDARIES = [
+  "main_path",
+  "step_order",
+  "dependencies",
+  "inputs",
+  "outputs",
+  "acceptance",
+  "tests",
+  "failure_semantics",
+  "rollback_or_recovery",
+  "compatibility_or_release",
+  "implementation_discretion",
+  "plan_bloat"
+];
+
+function executionCoverage() {
+  return EXECUTION_BOUNDARIES.map((boundary) => ({
+    boundary,
+    status: "covered",
+    evidence_basis: "plan_text",
+    notes: `测试 fixture 覆盖 ${boundary} 边界。`
+  }));
+}
+
 function createRole(runDir, role, options = {}) {
   const roleDir = path.join(runDir, "roles", role);
   fs.mkdirSync(roleDir, { recursive: true });
@@ -79,12 +103,7 @@ function createRole(runDir, role, options = {}) {
   };
   if (role === "execution") {
     defaultOutput.coverage_declaration = {
-      reviewed_boundaries: [{
-        boundary: "main_path",
-        status: "covered",
-        evidence_basis: "plan_text",
-        notes: "测试 fixture 默认覆盖主路径。"
-      }],
+      reviewed_boundaries: executionCoverage(),
       unverified_assumptions: [],
       not_reviewed: []
     };

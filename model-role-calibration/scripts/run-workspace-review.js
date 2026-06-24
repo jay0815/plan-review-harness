@@ -63,6 +63,21 @@ const EXECUTION_BOUNDARIES_BY_ISSUE_TYPE = {
   preference: ["implementation_discretion"]
 };
 
+const EXECUTION_REQUIRED_BOUNDARIES = Object.freeze([
+  "main_path",
+  "step_order",
+  "dependencies",
+  "inputs",
+  "outputs",
+  "acceptance",
+  "tests",
+  "failure_semantics",
+  "rollback_or_recovery",
+  "compatibility_or_release",
+  "implementation_discretion",
+  "plan_bloat"
+]);
+
 function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
 }
@@ -304,17 +319,31 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs = {
 function validateExecutionSemantics(output) {
   const reviewed = output?.coverage_declaration?.reviewed_boundaries || [];
   const coveredBoundaries = new Set();
+  const declaredBoundaries = new Set();
   for (const item of reviewed) {
-    if (coveredBoundaries.has(item.boundary)) {
+    if (declaredBoundaries.has(item.boundary)) {
       throw new Error(
         `Execution semantic validation failed: duplicate coverage boundary ${item.boundary}`
       );
     }
+    declaredBoundaries.add(item.boundary);
     if (["covered", "partially_covered"].includes(item.status)) {
       coveredBoundaries.add(item.boundary);
     }
   }
+  for (const boundary of EXECUTION_REQUIRED_BOUNDARIES) {
+    if (!declaredBoundaries.has(boundary)) {
+      throw new Error(
+        `Execution semantic validation failed: coverage_declaration missing boundary ${boundary}`
+      );
+    }
+  }
   for (const issue of output?.issues || []) {
+    if (issue.type === "preference" && issue.blocks_execution) {
+      throw new Error(
+        `Execution semantic validation failed: preference issue "${issue.title}" cannot block execution`
+      );
+    }
     const expected = EXECUTION_BOUNDARIES_BY_ISSUE_TYPE[issue.type] || [];
     if (!expected.some((boundary) => coveredBoundaries.has(boundary))) {
       throw new Error(

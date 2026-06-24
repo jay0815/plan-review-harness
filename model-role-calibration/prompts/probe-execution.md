@@ -43,6 +43,38 @@
 - `false_positive_risks` 必须是字符串数组，每项一句话；禁止输出对象数组。
 - 输出必须是 JSON。
 
+# Execution Boundary Audit
+
+`coverage_declaration.reviewed_boundaries` 必须完整包含下面 12 个边界，每个边界恰好出现一次。可以把不适用的边界标为 `not_applicable`，但不能省略。每个 `notes` 必须写清楚本次根据输入检查了什么，不能只写“已检查”。
+
+- `main_path`：主实现路径是否有明确起点、目标和交付物。
+- `step_order`：步骤顺序是否能避免先使用后定义、先发布后兼容、先删除后确认归属等执行倒置。
+- `dependencies`：跨端、跨仓库、服务端、数据迁移、用户或外部团队依赖是否被关闭或列为前置。
+- `inputs`：字段、状态、版本、标识、manifest、用户选择、配置和现有代码引用等输入权威是否明确。
+- `outputs`：wire shape、返回值、状态转移、逐条结果、dry-run 输出、manifest/hash 记录等输出契约是否明确。
+- `acceptance`：验收是否有可判定结果，而不是只描述“能看到请求”“流程可用”。
+- `tests`：测试是否覆盖输入中已经暴露的关键路径、失败路径、重复执行、兼容组合和边界条件。
+- `failure_semantics`：失败、超时、重试、部分成功、幂等、冲突、降级和不阻塞硬约束是否闭合。
+- `rollback_or_recovery`：迁移、部分写入、失败重跑、回滚、恢复和必要观测是否按输入风险闭合。
+- `compatibility_or_release`：当输入涉及新旧版本、跨层协议、同窗口发布或不可逆变更时，兼容矩阵和发布顺序是否闭合。
+- `implementation_discretion`：哪些局部文件组织、测试位置、函数拆分、命名或具体算法可以留给实现者自由决定。
+- `plan_bloat`：计划是否用大量未来代码或实现假设淹没关键决策，导致真正阻塞项难以定位。
+
+判定边界状态：
+
+- `covered`：已检查且计划在该边界上足以执行，或已输出对应 issue 说明缺口。
+- `partially_covered`：已检查，但输入缺少必要事实、计划只覆盖部分路径，或对应 issue 只关闭部分缺口。
+- `not_applicable`：输入没有触发该边界；必须在 `notes` 中说明为什么不适用。
+- `not_covered`：本次确实没有检查；只能用于输入材料不足以检查的边界，并必须在 `not_reviewed` 中说明原因。
+
+不能降级的情况：
+
+- 如果计划已经声称可以直接实施，但字段权威、状态模型、返回语义、幂等键、部分成功、迁移、manifest/hash、dry-run 输出、用户修改保护、失败恢复、发布兼容或验收场景存在直接 evidence 缺口，应输出 `issues`，不要只放入 `missing_questions`。
+- 如果输入明确给出硬约束，例如“不阻塞业务流程”“不得覆盖用户修改”“保留实现自由”，不能把硬约束重新改成参数讨论或实现偏好。
+- `missing_questions` 只用于输入外部事实未知；如果计划已经依赖该未知事实才能执行，应输出 issue，并把要补充的最小契约写入 `required_plan_detail`。
+- `false_positive_risks` 只能记录输入已经足以支持执行的合理留白；不得把已由 evidence 支持的执行缺口放入 `false_positive_risks`。
+- `preference` 类型 issue 不得设置 `blocks_execution: true`。
+
 # JSON Output Contract
 
 - 最终回答必须是一个原始 JSON object，禁止使用 markdown code fence。
@@ -62,6 +94,72 @@
       {
         "boundary": "main_path",
         "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "step_order",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "dependencies",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "inputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "outputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "acceptance",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "tests",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "failure_semantics",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "rollback_or_recovery",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "compatibility_or_release",
+        "status": "not_applicable",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      },
+      {
+        "boundary": "plan_bloat",
+        "status": "not_applicable",
         "evidence_basis": "plan_text",
         "notes": ""
       }
