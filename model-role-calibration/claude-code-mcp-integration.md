@@ -100,17 +100,17 @@ chmod 600 <settings-dir>/*.json
 
 | 角色 | 模型 |
 |---|---|
-| Risk Reviewer | Qwen |
+| Risk Reviewer | Kimi |
 | Architecture Reviewer | Kimi |
 | Execution Reviewer | Kimi |
 | Rebuttal Reviewer | GLM |
 | Fact Judge / Evidence Verifier | GLM |
-| Synthesizer | Kimi |
-| Planner 备选 | DeepSeek |
+| Synthesizer | GLM |
+| Planner 备选 | Kimi |
 
 `fact_check` 在四个 Reviewer 完成后执行，只校验 Reviewer 输出中的
 evidence 是否支持 claim，不新增问题、不合成、不提供修复建议。`planner`
-当前不参与默认 Plan Review，因为计划由当前 Claude Code 会话提供。该映射保留给后续独立 Planner 流程。
+当前不参与默认 Plan Review，因为计划由当前 Claude Code 会话提供。该映射保留给后续独立 Planner 流程。默认路由来自 `offline-drafts-full-20260622T120035Z` 的 `manual-v4` 角色映射。
 
 ## 3. 启动前校验
 

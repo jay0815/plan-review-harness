@@ -123,13 +123,13 @@ claude
 预期结果应包含：
 
 ```text
-risk: qwen
+risk: kimi
 architecture: kimi
 execution: kimi
 rebuttal: glm
 fact_check: glm
-synthesis: kimi
-planner: deepseek
+synthesis: glm
+planner: kimi
 ```
 
 同时确认：
@@ -137,6 +137,7 @@ planner: deepseek
 ```text
 valid: true
 auth_env: ANTHROPIC_AUTH_TOKEN
+role_route_source.score_version: manual-v4
 ```
 
 此步骤不会调用模型。

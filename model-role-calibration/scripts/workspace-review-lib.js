@@ -33,15 +33,13 @@ const DEFAULT_MODEL_REQUIRED_ENV = {
   glm: ["ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL"],
   qwen: ["ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL"]
 };
-const DEFAULT_ROLE_ROUTES = {
-  risk: "qwen",
-  architecture: "kimi",
-  execution: "kimi",
-  rebuttal: "glm",
-  fact_check: "glm",
-  synthesis: "kimi",
-  planner: "deepseek"
-};
+const DEFAULT_ROLE_ROUTE_FILE = path.join(ROOT, "default-role-routes.json");
+const DEFAULT_ROLE_ROUTE_CONFIG = parseJsonFile(DEFAULT_ROLE_ROUTE_FILE);
+const DEFAULT_ROLE_ROUTES = Object.freeze({ ...DEFAULT_ROLE_ROUTE_CONFIG.routes });
+const DEFAULT_ROLE_ROUTE_SOURCE = Object.freeze({
+  ...DEFAULT_ROLE_ROUTE_CONFIG.source,
+  route_file: "model-role-calibration/default-role-routes.json"
+});
 const COMPACT_CODE_BLOCK_LINE_THRESHOLD = 12;
 const COMPACT_CODE_BLOCK_CHAR_THRESHOLD = 900;
 const DEFAULT_READ_SCOPE_MAX_FILES = 80;
@@ -380,6 +378,7 @@ function configSummary(config) {
     claude_version: config.claude_version,
     workspace_runs_dir: config.workspace_runs_dir,
     roles: config.roles,
+    role_route_source: DEFAULT_ROLE_ROUTE_SOURCE,
     models: Object.fromEntries(Object.entries(config.models).map(([model, value]) => [
       model,
       {
@@ -1321,6 +1320,7 @@ module.exports = {
   WORKSPACE_ROLES,
   REQUIRED_ROLES,
   DEFAULT_MODEL_FILES,
+  DEFAULT_ROLE_ROUTE_SOURCE,
   DEFAULT_ROLE_ROUTES,
   assertWorkspaceRole,
   expandHome,

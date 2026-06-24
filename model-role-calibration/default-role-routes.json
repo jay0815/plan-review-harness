@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "source": {
+    "run_id": "offline-drafts-full-20260622T120035Z",
+    "score_version": "manual-v4",
+    "model_role_map": "model-role-calibration/outputs/model-role-map.md"
+  },
+  "routes": {
+    "risk": "kimi",
+    "architecture": "kimi",
+    "execution": "kimi",
+    "rebuttal": "glm",
+    "fact_check": "glm",
+    "synthesis": "glm",
+    "planner": "kimi"
+  },
+  "watch_items": {
+    "execution": [
+      "状态模型和迁移边界仍容易降级"
+    ],
+    "risk": [
+      "将同步状态模型不足误降为偏好"
+    ],
+    "architecture": [
+      "迁移结构风险仅作为 missing question"
+    ],
+    "planner": [
+      "关键兼容事实仍停留在 blocking_decisions，但主方案已依赖该事实",
+      "幂等键跨重试契约自相矛盾",
+      "无依据扩张服务端存储机制"
+    ]
+  }
+}

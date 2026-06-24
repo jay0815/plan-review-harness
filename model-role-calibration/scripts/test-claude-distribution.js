@@ -230,9 +230,15 @@ exit 0
     assert.equal(validate.status, 0, validate.stderr);
     const status = JSON.parse(validate.stdout);
     assert.equal(status.valid, true);
-    assert.equal(status.roles.risk, "qwen");
+    assert.equal(status.roles.risk, "kimi");
     assert.equal(status.roles.fact_check, "glm");
-    assert.equal(status.roles.synthesis, "kimi");
+    assert.equal(status.roles.synthesis, "glm");
+    assert.equal(status.roles.planner, "kimi");
+    assert.equal(status.role_route_source.score_version, "manual-v4");
+    assert.equal(
+      status.role_route_source.route_file,
+      "model-role-calibration/default-role-routes.json"
+    );
     assert.equal(status.models.kimi.auth_env, "ANTHROPIC_AUTH_TOKEN");
     assert(!validate.stdout.includes("test-auth-token"));
 

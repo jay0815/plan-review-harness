@@ -313,13 +313,15 @@ async function main() {
     assert.equal(directoryConfig.config_file, null);
     assert.equal(directoryConfig.settings_dir, settingsDir);
     assert.deepEqual(directoryConfig.loader_args, ["--settings-dir", settingsDir]);
-    assert.equal(directoryConfig.roles.risk, "qwen");
+    assert.equal(directoryConfig.roles.risk, "kimi");
     assert.equal(directoryConfig.roles.fact_check, "glm");
-    assert.equal(directoryConfig.roles.synthesis, "kimi");
+    assert.equal(directoryConfig.roles.synthesis, "glm");
+    assert.equal(directoryConfig.roles.planner, "kimi");
     assert.equal(directoryConfig.execution.max_concurrency, 4);
     assert.equal(directoryConfig.execution.isolate_reviewers, true);
     assert.equal(directoryConfig.execution.read_scope_max_files, 80);
     assert.equal(directoryConfig.models.glm.settings_file, path.join(settingsDir, "glm.json"));
+    assert.equal(configSummary(directoryConfig).role_route_source.score_version, "manual-v4");
 
     const logRunDir = path.join(tempDir, "log-run");
     fs.mkdirSync(logRunDir);
@@ -1305,7 +1307,7 @@ async function main() {
     assert.equal(waitedResult.next_action, null);
     assert(waitedResult.progress.message.includes("基础设施错误"));
     assert(progressEvents.length >= 1);
-    assert(progressEvents[0].message.includes("risk/qwen"));
+    assert(progressEvents[0].message.includes("risk/kimi"));
 
     const reviewerRetry = createRetryRun(
       directoryConfig,

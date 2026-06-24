@@ -152,13 +152,14 @@ valid: true
 auth_env: ANTHROPIC_AUTH_TOKEN
 
 角色路由：
-  risk:         qwen
+  risk:         kimi
   architecture: kimi
   execution:    kimi
   rebuttal:     glm
   fact_check:   glm
-  synthesis:    kimi
-  planner:      deepseek
+  synthesis:    glm
+  planner:      kimi
+  role_source:  manual-v4
 
 模型配置：
   kimi:       base_url=https://ai-gateway-oa.lexincloud.com/litellm  model=kimi-k2.6
@@ -387,13 +388,14 @@ valid: true
 auth_env: ANTHROPIC_AUTH_TOKEN
 
 角色路由：
-  risk:         qwen
+  risk:         kimi
   architecture: kimi
   execution:    kimi
   rebuttal:     glm
   fact_check:   glm
-  synthesis:    kimi
-  planner:      deepseek
+  synthesis:    glm
+  planner:      kimi
+  role_source:  manual-v4
 
 模型配置摘要：
   kimi:       base_url=https://ai-gateway-oa.lexincloud.com/litellm  model=kimi-k2.6

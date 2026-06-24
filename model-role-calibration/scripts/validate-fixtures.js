@@ -19,6 +19,15 @@ const SYNTHESIS_SOURCE_BY_PROBE = {
   execution: "Execution Reviewer",
   rebuttal: "Rebuttal Reviewer"
 };
+const DEFAULT_ROUTE_ROLES = [
+  "risk",
+  "architecture",
+  "execution",
+  "rebuttal",
+  "fact_check",
+  "synthesis",
+  "planner"
+];
 
 function listDirectories(dir) {
   if (!fs.existsSync(dir)) {
@@ -160,6 +169,19 @@ function main() {
   }
 
   const config = loadConfig();
+  const defaultRoutes = parseJsonFile(path.join(ROOT, "default-role-routes.json"));
+  if (defaultRoutes.version !== 1) {
+    throw new Error("default-role-routes.json must use version 1");
+  }
+  if (!defaultRoutes.source?.run_id || !defaultRoutes.source?.score_version) {
+    throw new Error("default-role-routes.json must include source.run_id and source.score_version");
+  }
+  for (const role of DEFAULT_ROUTE_ROLES) {
+    const model = defaultRoutes.routes?.[role];
+    if (!model || !config.models.includes(model)) {
+      throw new Error(`default-role-routes.json routes.${role} must reference a configured model`);
+    }
+  }
   for (const caseId of config.primary_cases) {
     if (!fs.existsSync(path.join(ROOT, "cases", caseId))) {
       throw new Error(`Missing configured primary case: ${caseId}`);

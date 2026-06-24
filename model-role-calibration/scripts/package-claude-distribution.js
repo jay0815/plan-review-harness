@@ -18,6 +18,7 @@ const RUNTIME_FILES = [
   "scripts/plan-review-mcp.js",
   "scripts/inspect-workspace-run.js",
   "scripts/verify-workspace-review-run.js",
+  "default-role-routes.json",
   "claude-plan-authoring.md",
   "prompts/probe-risk.md",
   "prompts/probe-architecture.md",
@@ -207,16 +208,16 @@ valid: true
 auth_env: ANTHROPIC_AUTH_TOKEN
 
 roles:
-  risk:       qwen
+  risk:       kimi
   architecture: kimi
   execution:  kimi
   rebuttal:   glm
   fact_check: glm
-  synthesis:  kimi
-  planner:    deepseek
+  synthesis:  glm
+  planner:    kimi
 \`\`\`
 
-此步骤不会调用模型。如果检查失败，请重新核对 settings 目录路径、四份 json 文件内容以及 Claude Code 版本。
+\`role_route_source.score_version\` 应显示 \`manual-v4\`。此步骤不会调用模型。如果检查失败，请重新核对 settings 目录路径、四份 json 文件内容以及 Claude Code 版本。
 
 ## 使用流程
 
