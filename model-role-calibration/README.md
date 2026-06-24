@@ -29,6 +29,11 @@ runs/<run-id>/plan-authoring-lint.json
 `mcp__json_validator__validate_json_output` 自检，并写入独立的
 `roles/<role>/validator.log`。runner 接收输出后还会再次执行同一 schema 校验；
 validator 不替代最终拒收边界。
+Synthesis 还会执行 schema 之外的语义校验：`source_findings` 必须逐条匹配
+Fact Check issue，已排除 finding 不得重新进入共识/分歧/修订，误报列表只能引用已排除 finding，
+流程图节点和问题标题引用必须存在，`partially_verified` 进入修订时不得把严重度抬高到超过原 Reviewer。
+Execution 输出必须包含 `coverage_declaration`，声明已检查的执行边界、证据来源、未验证假设和未检查范围。
+runner 会额外校验 issue 类型与覆盖边界一致，避免模型一边报告依赖、验收或失败语义问题，一边没有声明检查过对应范围。
 
 Workspace Plan Review 支持按阶段断点重试：
 
@@ -238,6 +243,8 @@ node model-role-calibration/scripts/run-calibration.js \
 ```
 
 不传 `--run` 时，脚本自动生成 `synthetic-event-reporting-<UTC 时间>`。传入已有 `--run` 时，脚本只补生成缺失的 prompt；模型池会跳过已有成功结果并重试未完成任务。
+
+`calibration.config.json` 可通过 `probe_concurrency_overrides` 限制单个 probe 的有效并发。当前 `synthesis` 固定为 `1`，因此全角色回归即使传入 `--concurrency 4`，也会先按用户并发执行普通 probe，再把 synthesis 拆成单独 stage 串行执行。触发覆盖时，`batch.json` 会记录 `job_stages`。
 
 ### synthetic-event-reporting v2
 
@@ -526,11 +533,11 @@ node model-role-calibration/scripts/run-calibration.js \
   --case synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
   --probes synthesis \
-  --concurrency 1 \
+  --concurrency 4 \
   --force
 ```
 
-`--force` 会同时传入内层 `run-model.js`，刷新本次指定 probe 的 prompt 和模型输出，并创建新的递增 attempt；历史 attempt 仍保留。已有评分文件不会自动更新；强制重跑后必须先重新评分受影响任务，再执行汇总，禁止把旧评分当作新输出的评分。
+`--force` 会同时传入内层 `run-model.js`，刷新本次指定 probe 的 prompt 和模型输出，并创建新的递增 attempt；历史 attempt 仍保留。已有评分文件不会自动更新；强制重跑后必须先重新评分受影响任务，再执行汇总，禁止把旧评分当作新输出的评分。即使这里传入 `--concurrency 4`，synthesis 仍会按配置覆盖为有效并发 1。
 
 批量角色扮演使用固定容量为 3 的池：
 
@@ -663,10 +670,13 @@ Probe 到角色的映射：
 - `synthesis` -> S Synthesizer
 - `rebuttal` -> 通用批判能力辅助信号
 
-如果评分覆盖不足，生成结果使用 `insufficient_coverage`；覆盖完整但最高平均分未达到门槛时使用 `below_quality_threshold`，不会把质量未达标误写为数据不足。报告同时展示同一角色跨 primary cases 的最低分、最高分和标准差，并只附带该角色自身的 failure modes。
+如果评分覆盖不足，生成结果使用 `insufficient_coverage`；覆盖完整但没有模型达到平均分门槛时使用 `below_quality_threshold`；有模型达到平均分门槛、但没有模型同时达到最低单 Case 分数和最大标准差门槛时使用 `unstable`。报告同时展示同一角色跨 primary cases 的最低分、最高分和标准差，并只附带该角色自身的 failure modes。
 
 正式推荐还必须同时满足：
 
 - 模型完成 `calibration.config.json` 中全部 `primary_cases` 的对应 probe。
 - 至少两个模型完成完全相同的 primary case 覆盖，才允许比较。
 - 推荐模型在相同 case 集上的平均分达到配置门槛。
+- 推荐模型的最低单 Case 分数达到 `minimum_case_score`。
+- 推荐模型的跨 Case 标准差不超过 `maximum_standard_deviation`。
+- 备选模型也必须满足以上质量和稳定性门槛；不达标模型不会因为平均分排名靠前而进入推荐或备选。

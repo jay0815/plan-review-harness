@@ -46,6 +46,32 @@
 ```json
 {
   "probe": "execution",
+  "coverage_declaration": {
+    "reviewed_boundaries": [
+      {
+        "boundary": "inputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 manifest、受管文件、版本和 hash 等安装输入契约。"
+      },
+      {
+        "boundary": "outputs",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 dry-run 是否能输出逐文件动作和原因。"
+      },
+      {
+        "boundary": "rollback_or_recovery",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了复制或删除中途失败后的重跑恢复边界。"
+      }
+    ],
+    "unverified_assumptions": [],
+    "not_reviewed": [
+      "未检查具体 CLI 文件或命令实现，因为输入没有 Existing Code Refs。"
+    ]
+  },
   "issues": [
     {
       "title": "缺少 manifest 与文件 hash 契约",

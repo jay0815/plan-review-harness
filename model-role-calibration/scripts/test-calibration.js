@@ -125,6 +125,8 @@ function main() {
   assert(!discretionReview.includes("# Fact Check"));
   assert(discretionSynthesis.includes("\"issue_id\": \"Execution-Reviewer-001\""));
   assert(discretionSynthesis.includes("\"blocks_execution\": false"));
+  assert(discretionSynthesis.includes("\"coverage_declaration\""));
+  assert(discretionSynthesis.includes("\"boundary\": \"implementation_discretion\""));
   assert(discretionSynthesis.includes("缺少唯一路径会阻塞执行或需要修订计划的后果没有证据支持"));
   assert.deepEqual(parseList("kimi,kimi,qwen", config.models), ["kimi", "qwen"]);
   assert.deepEqual(parseList(undefined, ["kimi", "qwen"]), ["kimi", "qwen"]);
@@ -230,6 +232,33 @@ function main() {
   assert.equal(comparableModels.recommended_stability.maximum, 24);
   assert(comparableModels.recommended_stability.standard_deviation > 0);
 
+  const stableFallback = roleRecommendation("planner", [
+    modelStats("kimi", { [caseA]: 18, [caseB]: 25, [caseC]: 25 }),
+    modelStats("deepseek", { [caseA]: 20, [caseB]: 20, [caseC]: 20 })
+  ], config);
+  assert.equal(stableFallback.status, "candidate");
+  assert.equal(stableFallback.top_model, "kimi");
+  assert.equal(stableFallback.recommended, "deepseek");
+  assert.equal(stableFallback.top_stability.minimum, 18);
+  assert.equal(stableFallback.top_stability.maximum, 25);
+  assert(
+    stableFallback.top_stability.standard_deviation >
+      config.role_recommendation.maximum_standard_deviation
+  );
+  assert.equal(stableFallback.backup, null);
+
+  const unstable = roleRecommendation("planner", [
+    modelStats("kimi", { [caseA]: 15, [caseB]: 24, [caseC]: 24 }),
+    modelStats("qwen", { [caseA]: 17, [caseB]: 22, [caseC]: 22 })
+  ], config);
+  assert.equal(unstable.status, "unstable");
+  assert.equal(unstable.recommended, null);
+  assert.equal(unstable.top_model, "kimi");
+  assert.deepEqual(unstable.stability_failures, [
+    "minimum_case_score",
+    "maximum_standard_deviation"
+  ]);
+
   const belowThreshold = roleRecommendation("planner", [
     modelStats("kimi", { [caseA]: 19, [caseB]: 19, [caseC]: 19 }),
     modelStats("deepseek", { [caseA]: 18, [caseB]: 18, [caseC]: 18 })
@@ -284,6 +313,16 @@ function main() {
 
   const validatedToolCandidate = {
     probe: "execution",
+    coverage_declaration: {
+      reviewed_boundaries: [{
+        boundary: "main_path",
+        status: "covered",
+        evidence_basis: "plan_text",
+        notes: "测试候选输出覆盖主路径。"
+      }],
+      unverified_assumptions: [],
+      not_reviewed: []
+    },
     issues: [],
     missing_questions: ["who owns event_id?"],
     false_positive_risks: []

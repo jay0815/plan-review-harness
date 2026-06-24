@@ -41,6 +41,34 @@
 ```json
 {
   "probe": "execution",
+  "coverage_declaration": {
+    "reviewed_boundaries": [
+      {
+        "boundary": "implementation_discretion",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了测试文件路径、目录、命名和 helper 是否已被计划声明为实现自由。"
+      },
+      {
+        "boundary": "tests",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了测试场景和验收结果是否足以开始实现。"
+      },
+      {
+        "boundary": "inputs",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了测试文件位置是否属于必须由计划给定的输入。"
+      }
+    ],
+    "unverified_assumptions": [
+      "未验证仓库中是否已有 normalizeName 测试文件。"
+    ],
+    "not_reviewed": [
+      "未检查现有测试目录结构，因为输入没有 Existing Code Refs 之外的可读工程证据。"
+    ]
+  },
   "issues": [
     {
       "title": "缺少测试文件位置或新增测试的约定",

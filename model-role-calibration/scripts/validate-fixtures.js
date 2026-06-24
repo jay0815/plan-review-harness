@@ -171,6 +171,38 @@ function main() {
   if (config.role_recommendation.minimum_comparable_models < 2) {
     throw new Error("minimum_comparable_models must be at least 2");
   }
+  for (const key of ["minimum_average_score", "minimum_case_score"]) {
+    const value = config.role_recommendation[key];
+    if (typeof value !== "number" || value < 0 || value > 25) {
+      throw new Error(`role_recommendation.${key} must be between 0 and 25`);
+    }
+  }
+  if (
+    typeof config.role_recommendation.maximum_standard_deviation !== "number" ||
+    config.role_recommendation.maximum_standard_deviation < 0
+  ) {
+    throw new Error(
+      "role_recommendation.maximum_standard_deviation must be a non-negative number"
+    );
+  }
+  if (
+    config.probe_concurrency_overrides !== undefined &&
+    (
+      !config.probe_concurrency_overrides ||
+      typeof config.probe_concurrency_overrides !== "object" ||
+      Array.isArray(config.probe_concurrency_overrides)
+    )
+  ) {
+    throw new Error("probe_concurrency_overrides must be an object");
+  }
+  for (const [probe, value] of Object.entries(config.probe_concurrency_overrides || {})) {
+    if (!PROBES.includes(probe)) {
+      throw new Error(`probe_concurrency_overrides.${probe} is not a known probe`);
+    }
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`probe_concurrency_overrides.${probe} must be a positive integer`);
+    }
+  }
   for (const key of ["timeout_ms", "alias_resolution_timeout_ms", "max_buffer_bytes"]) {
     if (!Number.isInteger(config.agent_execution?.[key]) || config.agent_execution[key] <= 0) {
       throw new Error(`agent_execution.${key} must be a positive integer`);

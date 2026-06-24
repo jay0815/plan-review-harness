@@ -32,6 +32,7 @@ const {
  * @property {(caseId: string) => string} uniqueRunId
  * @property {(opts: {run: string, caseId: string, models: string[], probes: string[], force?: boolean}) => {promptDir: string, prompts: any[]}} generatePrompts
  * @property {(opts: {run: string, caseId: string, models: string[], probes: string[]}) => CalibrationJob[]} buildJobs
+ * @property {(opts: {jobs: CalibrationJob[], concurrency: number, config: any}) => {label: string, concurrency: number, jobs: CalibrationJob[]}[]} [planJobStages]
  * @property {(job: CalibrationJob, opts?: {force?: boolean}) => Promise<object>} runJob
  * @property {(run: string) => object | null} summarizeRun
  */
@@ -76,11 +77,29 @@ async function runCalibration(executor, options) {
   const jobs = executor.buildJobs({ run, caseId, models, probes });
   console.log(`Jobs: ${jobs.length} scheduled, concurrency=${concurrency}`);
 
-  const results = await runWithConcurrency(
-    jobs,
-    concurrency,
-    (job) => executor.runJob(job, { force })
-  );
+  const stages = typeof executor.planJobStages === "function"
+    ? executor.planJobStages({ jobs, concurrency, config })
+    : [{ label: "default", concurrency, jobs }];
+  for (const stage of stages) {
+    if (!Array.isArray(stage.jobs)) {
+      throw new Error(`Invalid job stage "${stage.label || "unknown"}": jobs must be an array`);
+    }
+    positiveInteger(stage.concurrency, `job stage ${stage.label || "unknown"} concurrency`);
+  }
+
+  const showStages = stages.length > 1 || stages.some((stage) => stage.concurrency !== concurrency);
+  const results = [];
+  for (const stage of stages) {
+    if (showStages) {
+      console.log(`[stage] ${stage.label}: ${stage.jobs.length} job(s), concurrency=${stage.concurrency}`);
+    }
+    const stageResults = await runWithConcurrency(
+      stage.jobs,
+      stage.concurrency,
+      (job) => executor.runJob(job, { force })
+    );
+    results.push(...stageResults);
+  }
 
   const completed = results.filter((item) => item.status === "completed" || item.status === "skipped").length;
   const failed = results.filter((item) => item.status === "failed").length;
@@ -99,6 +118,13 @@ async function runCalibration(executor, options) {
     completed,
     failed,
     results,
+    job_stages: showStages
+      ? stages.map((stage) => ({
+        label: stage.label,
+        concurrency: stage.concurrency,
+        jobs: stage.jobs.length
+      }))
+      : undefined,
     summary: summary || null
   };
 

@@ -8,7 +8,8 @@ const {
   parseArgs,
   requireArg,
   parseJsonFile,
-  writeGenerated
+  writeGenerated,
+  slug
 } = require("./lib");
 const {
   parseAssistantOutput,
@@ -43,11 +44,44 @@ const SOURCE_NAME_BY_ROLE = {
   rebuttal: "Rebuttal Reviewer"
 };
 
+const SEVERITY_RANK = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  blocker: 4
+};
+
+const EXECUTION_BOUNDARIES_BY_ISSUE_TYPE = {
+  step: ["main_path", "step_order", "rollback_or_recovery"],
+  dependency: ["dependencies", "compatibility_or_release"],
+  input: ["inputs", "implementation_discretion"],
+  output: ["outputs"],
+  acceptance: ["acceptance"],
+  test: ["tests", "acceptance"],
+  ambiguity: ["inputs", "outputs", "failure_semantics"],
+  plan_bloat: ["plan_bloat"],
+  preference: ["implementation_discretion"]
+};
+
 function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
 }
 
-function validateSynthesisSemantics(output, factCheckOutput) {
+function reviewerSeverityByIssueId(reviewerOutputs = {}) {
+  const severities = new Map();
+  for (const [source, reviewerOutput] of Object.entries(reviewerOutputs || {})) {
+    const issues = Array.isArray(reviewerOutput?.issues) ? reviewerOutput.issues : [];
+    issues.forEach((issue, index) => {
+      const issueId = `${slug(source)}-${String(index + 1).padStart(3, "0")}`;
+      if (issue?.severity) {
+        severities.set(issueId, issue.severity);
+      }
+    });
+  }
+  return severities;
+}
+
+function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs = {}) {
   const findings = Array.isArray(output?.source_findings) ? output.source_findings : [];
   const byId = new Map();
   const byIssueId = new Map();
@@ -115,6 +149,15 @@ function validateSynthesisSemantics(output, factCheckOutput) {
         `Synthesis semantic validation failed: ${finding.id} must use disposition ${requiredDisposition}`
       );
     }
+    if (
+      !requiredDisposition &&
+      ["verified", "partially_verified"].includes(checked.status) &&
+      !["retained", "merged", "duplicate"].includes(finding.disposition)
+    ) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${finding.id} verified finding cannot use disposition ${finding.disposition}`
+      );
+    }
   }
 
   for (const finding of findings) {
@@ -156,12 +199,127 @@ function validateSynthesisSemantics(output, factCheckOutput) {
       );
     }
   }
+  for (const id of referencedIds(output.likely_false_positives)) {
+    const finding = byId.get(id);
+    if (!excludedDispositions.has(finding.disposition)) {
+      throw new Error(
+        `Synthesis semantic validation failed: likely_false_positives cannot reference retained finding ${id}`
+      );
+    }
+  }
+
+  const processNodes = Array.isArray(output?.process_map?.nodes) ? output.process_map.nodes : [];
+  const nodeIds = new Set();
+  for (const node of processNodes) {
+    if (nodeIds.has(node.id)) {
+      throw new Error(`Synthesis semantic validation failed: duplicate process_map node id ${node.id}`);
+    }
+    nodeIds.add(node.id);
+  }
+  if (!/^flowchart\s+(TD|LR)\b/.test(String(output?.process_map?.mermaid || "").trim())) {
+    throw new Error("Synthesis semantic validation failed: process_map.mermaid must start with flowchart TD or flowchart LR");
+  }
+  const issueTitles = new Set([
+    ...(output.consensus_issues || []).map((item) => item.title),
+    ...(output.disagreements || []).map((item) => item.title)
+  ]);
+  for (const node of processNodes) {
+    for (const title of node.related_issue_titles || []) {
+      if (!issueTitles.has(title)) {
+        throw new Error(
+          `Synthesis semantic validation failed: process_map node ${node.id} references unknown issue title ${title}`
+        );
+      }
+    }
+  }
+  for (const item of [...(output.consensus_issues || []), ...(output.disagreements || [])]) {
+    for (const nodeId of item.affected_nodes || []) {
+      if (!nodeIds.has(nodeId)) {
+        throw new Error(
+          `Synthesis semantic validation failed: ${item.title} references unknown process_map node ${nodeId}`
+        );
+      }
+    }
+  }
+
+  for (const item of output.consensus_issues || []) {
+    const sources = new Set(item.source_finding_ids.map((id) => byId.get(id)?.source).filter(Boolean));
+    const mergedFrom = new Set(item.merged_from || []);
+    for (const source of sources) {
+      if (!mergedFrom.has(source)) {
+        throw new Error(
+          `Synthesis semantic validation failed: ${item.title} merged_from missing source ${source}`
+        );
+      }
+    }
+    for (const source of mergedFrom) {
+      if (!sources.has(source)) {
+        throw new Error(
+          `Synthesis semantic validation failed: ${item.title} merged_from includes source without finding ${source}`
+        );
+      }
+    }
+  }
+
+  const reviewerSeverities = reviewerSeverityByIssueId(reviewerOutputs);
+  for (const instruction of output.revision_instructions || []) {
+    for (const id of instruction.source_finding_ids || []) {
+      const finding = byId.get(id);
+      if (!["verified", "partially_verified"].includes(finding.fact_check_status)) {
+        throw new Error(
+          `Synthesis semantic validation failed: revision instruction references non-verified finding ${id}`
+        );
+      }
+      if (finding.fact_check_status !== "partially_verified") {
+        continue;
+      }
+      const reviewerSeverity = reviewerSeverities.get(finding.source_issue_id);
+      if (!reviewerSeverity) {
+        continue;
+      }
+      const reviewerRank = SEVERITY_RANK[reviewerSeverity] || 0;
+      const linkedConsensus = (output.consensus_issues || [])
+        .filter((item) => (item.source_finding_ids || []).includes(id));
+      for (const consensus of linkedConsensus) {
+        const consensusRank = SEVERITY_RANK[consensus.severity] || 0;
+        if (consensusRank > reviewerRank) {
+          throw new Error(
+            `Synthesis semantic validation failed: partially_verified finding ${id} severity ${consensus.severity} exceeds reviewer severity ${reviewerSeverity}`
+          );
+        }
+      }
+    }
+  }
   for (const disagreement of output.disagreements || []) {
     const shouldNeedHuman = disagreement.level === "L3_direction_decision";
     if (disagreement.needs_human_decision !== shouldNeedHuman) {
       throw new Error(
         `Synthesis semantic validation failed: ${disagreement.title} needs_human_decision ` +
         `must be ${shouldNeedHuman} for ${disagreement.level}`
+      );
+    }
+  }
+}
+
+function validateExecutionSemantics(output) {
+  const reviewed = output?.coverage_declaration?.reviewed_boundaries || [];
+  const coveredBoundaries = new Set();
+  for (const item of reviewed) {
+    if (coveredBoundaries.has(item.boundary)) {
+      throw new Error(
+        `Execution semantic validation failed: duplicate coverage boundary ${item.boundary}`
+      );
+    }
+    if (["covered", "partially_covered"].includes(item.status)) {
+      coveredBoundaries.add(item.boundary);
+    }
+  }
+  for (const issue of output?.issues || []) {
+    const expected = EXECUTION_BOUNDARIES_BY_ISSUE_TYPE[issue.type] || [];
+    if (!expected.some((boundary) => coveredBoundaries.has(boundary))) {
+      throw new Error(
+        `Execution semantic validation failed: issue "${issue.title}" type ${issue.type} ` +
+        `is not covered by coverage_declaration`
       );
     }
   }
@@ -179,8 +337,11 @@ function validateWorkspaceOutput(role, output, context = {}) {
       .join("; ");
     throw new Error(`Schema validation failed for ${role}: ${details || validation.stage}`);
   }
+  if (role === "execution") {
+    validateExecutionSemantics(output);
+  }
   if (role === "synthesis") {
-    validateSynthesisSemantics(output, context.factCheckOutput);
+    validateSynthesisSemantics(output, context.factCheckOutput, context.reviewerOutputs);
   }
 }
 
@@ -1000,7 +1161,8 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
   try {
     parsed = parseAssistantOutput(child.stdout, role);
     validateWorkspaceOutput(role, parsed.output, {
-      factCheckOutput: factCheckResult.output
+      factCheckOutput: factCheckResult.output,
+      reviewerOutputs
     });
   } catch (error) {
     appendExecutionLog(runDir, "synthesis_invalid_output", {

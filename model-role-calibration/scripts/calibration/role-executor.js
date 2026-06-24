@@ -220,6 +220,30 @@ class RoleCalibrationExecutor {
     return jobs;
   }
 
+  planJobStages({ jobs, concurrency, config }) {
+    const overrides = config.probe_concurrency_overrides || {};
+    const stages = [];
+    for (const job of jobs) {
+      const configuredLimit = overrides[job.probe];
+      const effectiveConcurrency = Number.isInteger(configuredLimit)
+        ? Math.min(concurrency, configuredLimit)
+        : concurrency;
+      const label = effectiveConcurrency === concurrency ? "default" : job.probe;
+      const key = `${label}:${effectiveConcurrency}`;
+      const current = stages[stages.length - 1];
+      if (!current || current.key !== key) {
+        stages.push({
+          key,
+          label,
+          concurrency: effectiveConcurrency,
+          jobs: []
+        });
+      }
+      stages[stages.length - 1].jobs.push(job);
+    }
+    return stages.map(({ key, ...stage }) => stage);
+  }
+
   async runJob(job, options = {}) {
     const paths = agentOutputPaths(job.run, job.caseId, job.model, job.probe);
     const label = jobKey(job);

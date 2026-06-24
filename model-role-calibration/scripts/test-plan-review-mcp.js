@@ -97,12 +97,25 @@ function configFixture(tempDir) {
 
 function writeReviewerAttempt(runDir, role, model, status = "completed") {
   const roleDir = path.join(runDir, "roles", role);
-  writeJson(path.join(roleDir, "output.json"), {
+  const output = {
     probe: role,
     issues: [],
     missing_questions: [],
     false_positive_risks: []
-  });
+  };
+  if (role === "execution") {
+    output.coverage_declaration = {
+      reviewed_boundaries: [{
+        boundary: "main_path",
+        status: "covered",
+        evidence_basis: "plan_text",
+        notes: "测试 fixture 默认覆盖主路径。"
+      }],
+      unverified_assumptions: [],
+      not_reviewed: []
+    };
+  }
+  writeJson(path.join(roleDir, "output.json"), output);
   writeJson(path.join(roleDir, "metadata.json"), {
     role,
     model,
@@ -683,6 +696,151 @@ async function main() {
       { factCheckOutput: outOfScopeFactCheck }
     ), /excluded finding F1 re-entered/);
 
+    const verifiedFactCheck = {
+      probe: "fact_check",
+      checked_issues: [{
+        issue_id: "Risk-Reviewer-001",
+        source: "Risk Reviewer",
+        issue_title: "缓存清理缺少验证",
+        status: "verified",
+        scope_status: "in_scope",
+        evidence_status: "quote_matches",
+        claim_support: "direct",
+        reason: "工程证据支持该风险",
+        checked_files: ["src/cache.ts"]
+      }],
+      source_summaries: [],
+      limits: []
+    };
+    const verifiedSynthesis = {
+      probe: "synthesis",
+      source_findings: [{
+        id: "F1",
+        source: "Risk Reviewer",
+        source_title: "缓存清理缺少验证",
+        source_issue_id: "Risk-Reviewer-001",
+        fact_check_status: "verified",
+        scope_status: "in_scope",
+        disposition: "retained",
+        reason: "Fact Check 已验证"
+      }],
+      process_map: {
+        title: "cache flow",
+        mermaid: "flowchart TD\n  A[Cache clear]",
+        nodes: [{
+          id: "A",
+          label: "Cache clear",
+          stage: "execution",
+          status: "affected",
+          related_issue_titles: ["缓存清理缺少验证"],
+          evidence: "Reviewer 和 Fact Check 均引用 src/cache.ts"
+        }]
+      },
+      consensus_issues: [{
+        title: "缓存清理缺少验证",
+        merged_from: ["Risk Reviewer"],
+        severity: "high",
+        affected_nodes: ["A"],
+        source_finding_ids: ["F1"],
+        reason: "验证步骤缺失",
+        required_plan_change: "补充验证标准"
+      }],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: [{
+        instruction: "补充缓存清理后的验证标准。",
+        source_finding_ids: ["F1"]
+      }]
+    };
+    assert.doesNotThrow(() => validateWorkspaceOutput(
+      "synthesis",
+      verifiedSynthesis,
+      { factCheckOutput: verifiedFactCheck }
+    ));
+
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...verifiedSynthesis,
+        consensus_issues: [{
+          ...verifiedSynthesis.consensus_issues[0],
+          affected_nodes: ["MissingNode"]
+        }]
+      },
+      { factCheckOutput: verifiedFactCheck }
+    ), /unknown process_map node MissingNode/);
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...verifiedSynthesis,
+        process_map: {
+          ...verifiedSynthesis.process_map,
+          nodes: [{
+            ...verifiedSynthesis.process_map.nodes[0],
+            related_issue_titles: ["不存在的问题标题"]
+          }]
+        }
+      },
+      { factCheckOutput: verifiedFactCheck }
+    ), /unknown issue title 不存在的问题标题/);
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...verifiedSynthesis,
+        likely_false_positives: [{
+          source_finding_ids: ["F1"],
+          reason: "错误地把已保留 finding 当作误报"
+        }]
+      },
+      { factCheckOutput: verifiedFactCheck }
+    ), /likely_false_positives cannot reference retained finding F1/);
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...verifiedSynthesis,
+        source_findings: [{
+          ...verifiedSynthesis.source_findings[0],
+          disposition: "unsupported"
+        }]
+      },
+      { factCheckOutput: verifiedFactCheck }
+    ), /verified finding cannot use disposition unsupported/);
+
+    const partiallyVerifiedFactCheck = {
+      ...verifiedFactCheck,
+      checked_issues: [{
+        ...verifiedFactCheck.checked_issues[0],
+        status: "partially_verified",
+        claim_support: "partial",
+        reason: "只验证了核心事实，严重度缺少充分证据"
+      }]
+    };
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...verifiedSynthesis,
+        source_findings: [{
+          ...verifiedSynthesis.source_findings[0],
+          fact_check_status: "partially_verified"
+        }],
+        consensus_issues: [{
+          ...verifiedSynthesis.consensus_issues[0],
+          severity: "blocker"
+        }]
+      },
+      {
+        factCheckOutput: partiallyVerifiedFactCheck,
+        reviewerOutputs: {
+          "Risk Reviewer": {
+            issues: [{
+              title: "缓存清理缺少验证",
+              severity: "medium"
+            }]
+          }
+        }
+      }
+    ), /partially_verified finding F1 severity blocker exceeds reviewer severity medium/);
+
     const readyOutcome = summarizeReviewOutcome(
       [{
         role: "risk",
@@ -886,6 +1044,83 @@ async function main() {
     assert(
       synthesisSchema.properties.consensus_issues.items.required.includes("source_finding_ids")
     );
+    const executionSchema = JSON.parse(fs.readFileSync(
+      path.join(__dirname, "..", "schemas", "execution-output.schema.json"),
+      "utf8"
+    ));
+    assert(executionSchema.required.includes("coverage_declaration"));
+    assert(
+      executionSchema.properties.coverage_declaration.properties.reviewed_boundaries.items
+        .properties.boundary.enum.includes("implementation_discretion")
+    );
+    assert.doesNotThrow(() => validateWorkspaceOutput("execution", {
+      probe: "execution",
+      coverage_declaration: {
+        reviewed_boundaries: [{
+          boundary: "main_path",
+          status: "covered",
+          evidence_basis: "plan_text",
+          notes: "主路径已检查。"
+        }],
+        unverified_assumptions: [],
+        not_reviewed: []
+      },
+      issues: [],
+      missing_questions: [],
+      false_positive_risks: []
+    }));
+    assert.throws(() => validateWorkspaceOutput("execution", {
+      probe: "execution",
+      coverage_declaration: {
+        reviewed_boundaries: [{
+          boundary: "main_path",
+          status: "covered",
+          evidence_basis: "plan_text",
+          notes: "主路径已检查。"
+        }, {
+          boundary: "main_path",
+          status: "covered",
+          evidence_basis: "plan_text",
+          notes: "重复声明。"
+        }],
+        unverified_assumptions: [],
+        not_reviewed: []
+      },
+      issues: [],
+      missing_questions: [],
+      false_positive_risks: []
+    }), /duplicate coverage boundary main_path/);
+    assert.throws(() => validateWorkspaceOutput("execution", {
+      probe: "execution",
+      coverage_declaration: {
+        reviewed_boundaries: [{
+          boundary: "main_path",
+          status: "covered",
+          evidence_basis: "plan_text",
+          notes: "只检查主路径。"
+        }],
+        unverified_assumptions: [],
+        not_reviewed: []
+      },
+      issues: [{
+        title: "缺少验收标准",
+        type: "acceptance",
+        severity: "high",
+        evidence: "计划没有定义验收结果。",
+        why_it_matters: "无法判断完成。",
+        required_plan_detail: "补充验收标准。",
+        blocks_execution: true,
+        confidence: 0.9
+      }],
+      missing_questions: [],
+      false_positive_risks: []
+    }), /type acceptance is not covered by coverage_declaration/);
+    assert.throws(() => validateWorkspaceOutput("execution", {
+      probe: "execution",
+      issues: [],
+      missing_questions: [],
+      false_positive_risks: []
+    }), /coverage_declaration/);
     const synthesisPrompt = buildWorkspacePrompt(
       "synthesis",
       tempDir,

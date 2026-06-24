@@ -71,12 +71,25 @@ function createRole(runDir, role, options = {}) {
     exposed_root: exposedRoot,
     files: ["package.json", "src/index.ts"]
   });
-  writeJson(path.join(roleDir, "output.json"), options.output || {
+  const defaultOutput = {
     probe: role,
     issues: [],
     missing_questions: [],
     false_positive_risks: []
-  });
+  };
+  if (role === "execution") {
+    defaultOutput.coverage_declaration = {
+      reviewed_boundaries: [{
+        boundary: "main_path",
+        status: "covered",
+        evidence_basis: "plan_text",
+        notes: "测试 fixture 默认覆盖主路径。"
+      }],
+      unverified_assumptions: [],
+      not_reviewed: []
+    };
+  }
+  writeJson(path.join(roleDir, "output.json"), options.output || defaultOutput);
   writeJsonl(path.join(roleDir, "stdout.jsonl"), roleEvents({
     tools: options.tools === undefined ? ["Read"] : options.tools,
     reads

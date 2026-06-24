@@ -2,10 +2,90 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Execution Reviewer Output",
   "type": "object",
-  "required": ["probe", "issues", "missing_questions", "false_positive_risks"],
+  "required": [
+    "probe",
+    "coverage_declaration",
+    "issues",
+    "missing_questions",
+    "false_positive_risks"
+  ],
   "properties": {
     "probe": {
       "const": "execution"
+    },
+    "coverage_declaration": {
+      "type": "object",
+      "required": [
+        "reviewed_boundaries",
+        "unverified_assumptions",
+        "not_reviewed"
+      ],
+      "properties": {
+        "reviewed_boundaries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "boundary",
+              "status",
+              "evidence_basis",
+              "notes"
+            ],
+            "properties": {
+              "boundary": {
+                "enum": [
+                  "main_path",
+                  "step_order",
+                  "dependencies",
+                  "inputs",
+                  "outputs",
+                  "acceptance",
+                  "tests",
+                  "failure_semantics",
+                  "rollback_or_recovery",
+                  "compatibility_or_release",
+                  "implementation_discretion",
+                  "plan_bloat"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "covered",
+                  "partially_covered",
+                  "not_covered",
+                  "not_applicable"
+                ]
+              },
+              "evidence_basis": {
+                "enum": [
+                  "plan_text",
+                  "existing_code_refs",
+                  "plan_and_existing_code_refs",
+                  "missing_context"
+                ]
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "unverified_assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "not_reviewed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     },
     "issues": {
       "type": "array",

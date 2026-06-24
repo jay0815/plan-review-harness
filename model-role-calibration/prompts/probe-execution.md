@@ -26,6 +26,9 @@
 - 禁止重写计划。
 - 禁止提出架构重设计、公共 API 拆分、功能开关、持久化组件、具体超时或退避参数；除非输入已明确要求且当前执行步骤遗漏。
 - 每个问题必须绑定原文 evidence，并说明该缺口会让哪一步无法开始、无法完成或无法验收。
+- 必须先输出 `coverage_declaration`，显式声明本次检查覆盖了哪些执行边界、依据来自计划文本还是 Existing Code Refs、哪些事实仍未验证、哪些范围未检查。
+- `coverage_declaration` 是覆盖声明，不是问题清单；不得因为某个边界 `not_applicable` 或 `missing_context` 就自动生成 issue。
+- 如果输出 issue，`coverage_declaration.reviewed_boundaries` 必须包含与该 issue 类型对应的执行边界；不要一边报告验收、依赖或失败语义问题，一边声明这些边界未检查。
 - 已存在代码事实只能引用 plan 的 Existing Code Refs 章节列出的文件路径和行号；如果 plan 未提供 Existing Code Refs 或缺少某个文件的引用，将需要确认的工程事实放入 missing_questions，不要自行搜索 plan 未引用的工程文件路径。
 - 计划中的未来代码、伪代码、代码块或 proposed-code 文件只能说明作者设想，不能作为现有工程事实或最终实现承诺。不得审查其 import、局部类型、组件 props、stub、示例变量或测试断言是否实现完备。
 - 只有当未来代码示例暴露出主计划自身的业务、架构、公共契约或失败语义矛盾时，才可引用该矛盾；不得要求把代码草案补到可编译状态。
@@ -54,6 +57,18 @@
 ```json
 {
   "probe": "execution",
+  "coverage_declaration": {
+    "reviewed_boundaries": [
+      {
+        "boundary": "main_path",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": ""
+      }
+    ],
+    "unverified_assumptions": [],
+    "not_reviewed": []
+  },
   "issues": [
     {
       "title": "",

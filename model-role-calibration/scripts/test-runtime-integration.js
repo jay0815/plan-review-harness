@@ -35,6 +35,10 @@ function generatePrompts(run, probes) {
 }
 
 function maxConcurrency(logFile) {
+  return maxConcurrencyFor(logFile, () => true);
+}
+
+function maxConcurrencyFor(logFile, predicate) {
   const events = fs.readFileSync(logFile, "utf8").trim().split("\n")
     .filter(Boolean)
     .map(JSON.parse)
@@ -42,6 +46,9 @@ function maxConcurrency(logFile) {
   let active = 0;
   let maximum = 0;
   for (const event of events) {
+    if (!predicate(event.id)) {
+      continue;
+    }
     active += event.event === "start" ? 1 : -1;
     maximum = Math.max(maximum, active);
     assert(active >= 0);
@@ -65,7 +72,8 @@ function main() {
     `runtime-workflow-${process.pid}-${Date.now()}`,
     `runtime-pool-failure-${process.pid}-${Date.now()}`,
     `runtime-workflow-failure-${process.pid}-${Date.now()}`,
-    `runtime-workflow-missing-output-${process.pid}-${Date.now()}`
+    `runtime-workflow-missing-output-${process.pid}-${Date.now()}`,
+    `runtime-synthesis-stage-${process.pid}-${Date.now()}`
   ];
 
   fs.writeFileSync(fakeShell, `#!/bin/sh
@@ -352,6 +360,29 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
         "completed"
       );
     }
+
+    const synthesisStageRun = runIds[7];
+    const synthesisStageLog = path.join(tempDir, "synthesis-stage.log");
+    result = runNode(runCalibration, [
+      "--run", synthesisStageRun,
+      "--case", "synthetic/event-reporting",
+      "--models", "kimi,deepseek,glm,qwen",
+      "--probes", "risk,synthesis",
+      "--concurrency", "4",
+      "--force"
+    ], {
+      ...baseEnv,
+      FAKE_POOL_LOG: synthesisStageLog,
+      FAKE_MODEL_DELAY_MS: "100"
+    });
+    requireSuccess(result, "synthesis stage concurrency override");
+    const synthesisStageBatch = parseJsonFile(path.join(ROOT, "runs", synthesisStageRun, "batch.json"));
+    assert.deepEqual(synthesisStageBatch.job_stages, [
+      { label: "default", concurrency: 4, jobs: 4 },
+      { label: "synthesis", concurrency: 1, jobs: 4 }
+    ]);
+    assert.equal(maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith("/risk")), 4);
+    assert.equal(maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith("/synthesis")), 1);
 
     const failureRun = runIds[4];
     generatePrompts(failureRun, ["planner"]);

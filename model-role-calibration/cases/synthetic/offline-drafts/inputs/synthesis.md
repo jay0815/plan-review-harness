@@ -46,6 +46,32 @@
 ```json
 {
   "probe": "execution",
+  "coverage_declaration": {
+    "reviewed_boundaries": [
+      {
+        "boundary": "main_path",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了本地草稿迁移、同步重试和批量结果处理的主执行路径。"
+      },
+      {
+        "boundary": "failure_semantics",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了同步失败不得丢失本地编辑、幂等重试和部分成功恢复语义。"
+      },
+      {
+        "boundary": "outputs",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了批量同步后本地状态如何记录逐条结果。"
+      }
+    ],
+    "unverified_assumptions": [],
+    "not_reviewed": [
+      "未检查现有本地存储 schema 或同步 API 源码，因为输入没有 Existing Code Refs。"
+    ]
+  },
   "issues": [
     {
       "title": "v1 到 v2 迁移会把未上传草稿标记为已同步",

@@ -46,6 +46,32 @@
 ```json
 {
   "probe": "execution",
+  "coverage_declaration": {
+    "reviewed_boundaries": [
+      {
+        "boundary": "dependencies",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了 JS、原生和服务端同窗口发布对执行依赖的影响。"
+      },
+      {
+        "boundary": "failure_semantics",
+        "status": "covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了支付结果页等待遥测上传与失败不得阻塞的硬约束冲突。"
+      },
+      {
+        "boundary": "compatibility_or_release",
+        "status": "partially_covered",
+        "evidence_basis": "plan_text",
+        "notes": "检查了线上新旧客户端和两个服务端版本共存下的发布验收缺口。"
+      }
+    ],
+    "unverified_assumptions": [],
+    "not_reviewed": [
+      "未检查现有 reportEvent 源码路径或具体桥接实现，因为输入没有 Existing Code Refs。"
+    ]
+  },
   "issues": [
     {
       "title": "缺少跨层修改清单、发布顺序和兼容矩阵",

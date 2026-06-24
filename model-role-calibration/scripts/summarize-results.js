@@ -108,16 +108,31 @@ function roleRecommendation(probe, modelStats, config) {
     return null;
   }
   const requiredCases = config.primary_cases;
+  const recommendationConfig = config.role_recommendation;
   const candidates = modelStats
     .map((item) => {
       const scoresByCase = item.byProbeCase[probe] || {};
       const missingCases = requiredCases.filter((caseId) => scoresByCase[caseId] === undefined);
       const values = requiredCases.map((caseId) => scoresByCase[caseId]).filter((value) => value !== undefined);
       const stats = scoreStats(values);
+      const stabilityFailures = [];
+      if (
+        !missingCases.length &&
+        stats.minimum < recommendationConfig.minimum_case_score
+      ) {
+        stabilityFailures.push("minimum_case_score");
+      }
+      if (
+        !missingCases.length &&
+        stats.standard_deviation > recommendationConfig.maximum_standard_deviation
+      ) {
+        stabilityFailures.push("maximum_standard_deviation");
+      }
       return {
         model: item.model,
         avg: missingCases.length ? null : stats.average,
         stats,
+        stability_failures: stabilityFailures,
         covered_cases: requiredCases.length - missingCases.length,
         missing_cases: missingCases,
         failure_modes: item.failure_modes_by_probe?.[probe] || []
@@ -126,7 +141,7 @@ function roleRecommendation(probe, modelStats, config) {
     .filter((item) => item.avg !== null)
     .sort((a, b) => b.avg - a.avg);
 
-  const minimumComparableModels = config.role_recommendation.minimum_comparable_models;
+  const minimumComparableModels = recommendationConfig.minimum_comparable_models;
   if (candidates.length < minimumComparableModels) {
     return {
       role,
@@ -138,37 +153,55 @@ function roleRecommendation(probe, modelStats, config) {
       required_cases: requiredCases,
       comparable_models: candidates.length,
       minimum_comparable_models: minimumComparableModels,
-      minimum_average_score: config.role_recommendation.minimum_average_score,
+      minimum_average_score: recommendationConfig.minimum_average_score,
+      minimum_case_score: recommendationConfig.minimum_case_score,
+      maximum_standard_deviation: recommendationConfig.maximum_standard_deviation,
       top_score: candidates[0]?.avg ?? null,
-      top_model: candidates[0]?.model ?? null
+      top_model: candidates[0]?.model ?? null,
+      top_stability: candidates[0]?.stats ?? null,
+      stability_failures: candidates[0]?.stability_failures ?? []
     };
   }
 
-  const recommended = candidates[0];
-  const backup = candidates[1] || null;
+  const averageQualified = candidates.filter(
+    (item) => item.avg >= recommendationConfig.minimum_average_score
+  );
+  const qualified = averageQualified.filter(
+    (item) => item.stability_failures.length === 0
+  );
+  const top = candidates[0];
+  const recommended = qualified[0] || null;
+  const backup = qualified[1] || null;
   const avoid = candidates.filter((item) => item.avg < 12.5).map((item) => item.model);
-  const status = recommended.avg >= config.role_recommendation.minimum_average_score
-    ? "candidate"
-    : "below_quality_threshold";
+  const status = !averageQualified.length
+    ? "below_quality_threshold"
+    : recommended
+      ? "candidate"
+      : "unstable";
+  const stabilityReference = recommended || averageQualified[0] || top;
 
   return {
     role,
     probe,
     status,
-    recommended: status === "candidate" ? recommended.model : null,
-    recommended_score: recommended.avg,
+    recommended: recommended?.model || null,
+    recommended_score: recommended?.avg ?? null,
     backup: backup ? backup.model : null,
     backup_score: backup ? backup.avg : null,
     avoid,
     required_cases: requiredCases,
     comparable_models: candidates.length,
     minimum_comparable_models: minimumComparableModels,
-    minimum_average_score: config.role_recommendation.minimum_average_score,
-    top_score: recommended.avg,
-    top_model: recommended.model,
-    recommended_stability: recommended.stats,
+    minimum_average_score: recommendationConfig.minimum_average_score,
+    minimum_case_score: recommendationConfig.minimum_case_score,
+    maximum_standard_deviation: recommendationConfig.maximum_standard_deviation,
+    top_score: top.avg,
+    top_model: top.model,
+    top_stability: top.stats,
+    recommended_stability: recommended?.stats || null,
     backup_stability: backup ? backup.stats : null,
-    failure_modes: recommended.failure_modes || []
+    stability_failures: stabilityReference.stability_failures,
+    failure_modes: stabilityReference.failure_modes || []
   };
 }
 
@@ -334,17 +367,24 @@ function renderRoleSection(title, rec) {
   lines.push(`### ${title}`, "");
   if (!rec || rec.status !== "candidate") {
     lines.push("Recommended model:");
-    lines.push(rec?.status === "below_quality_threshold"
-      ? "- 质量未达到门槛，暂不建议固定该角色。"
-      : "- 覆盖不足，暂不建议固定该角色。", "");
+    if (rec?.status === "below_quality_threshold") {
+      lines.push("- 质量未达到门槛，暂不建议固定该角色。", "");
+    } else if (rec?.status === "unstable") {
+      lines.push("- 跨 Case 稳定性未达到门槛，暂不建议固定该角色。", "");
+    } else {
+      lines.push("- 覆盖不足，暂不建议固定该角色。", "");
+    }
     lines.push("Why:");
     if (rec) {
       lines.push(`- Comparable models with complete ${rec.required_cases.length}-case coverage: ${rec.comparable_models} / required ${rec.minimum_comparable_models}.`);
       if (rec.status === "below_quality_threshold") {
         lines.push(`- Highest comparable model is ${rec.top_model}; average ${formatScore(rec.top_score)} / 25, required ${formatScore(rec.minimum_average_score)}.`);
-        if (rec.recommended_stability) {
-          lines.push(`- Case stability: min ${formatScore(rec.recommended_stability.minimum)}, max ${formatScore(rec.recommended_stability.maximum)}, σ ${formatScore(rec.recommended_stability.standard_deviation)}.`);
+        if (rec.top_stability) {
+          lines.push(`- Case stability: min ${formatScore(rec.top_stability.minimum)}, max ${formatScore(rec.top_stability.maximum)}, σ ${formatScore(rec.top_stability.standard_deviation)}.`);
         }
+      } else if (rec.status === "unstable") {
+        lines.push(`- Highest average-qualified model is ${rec.top_model}; average ${formatScore(rec.top_score)} / 25.`);
+        lines.push(`- Case stability: min ${formatScore(rec.top_stability?.minimum)} / required ${formatScore(rec.minimum_case_score)}, σ ${formatScore(rec.top_stability?.standard_deviation)} / allowed ${formatScore(rec.maximum_standard_deviation)}.`);
       }
       lines.push("");
     } else {
@@ -367,6 +407,7 @@ function renderRoleSection(title, rec) {
   lines.push(`- Average ${rec.probe} score across the same ${rec.required_cases.length} required cases: ${formatScore(rec.recommended_score)} / 25.`);
   if (rec.recommended_stability) {
     lines.push(`- Case stability: min ${formatScore(rec.recommended_stability.minimum)}, max ${formatScore(rec.recommended_stability.maximum)}, σ ${formatScore(rec.recommended_stability.standard_deviation)}.`);
+    lines.push(`- Stability gates: min case >= ${formatScore(rec.minimum_case_score)}, σ <= ${formatScore(rec.maximum_standard_deviation)}.`);
   }
   lines.push(`- Compared against ${rec.comparable_models} models with complete matching coverage.`, "");
   lines.push("Backup:");
