@@ -1,0 +1,24 @@
+model-role-calibration/scripts/workspace-review-lib.js
+  f9008e9b5f25e362 36-42,381,1323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "f2f991beadc85064931fb5a9240bdb7fa26d9ce4",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 17,
+      "total_deletions": 17,
+      "accepted_lines": 9,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/669dae3aeb2926da4147594b851453036e4b2e2cb9c1bffc7cbd54cea1d2f914"
+    }
+  }
+}
