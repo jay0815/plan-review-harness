@@ -1,0 +1,24 @@
+model-role-calibration/claude-code/skills/plan-review/SKILL.md
+  f9008e9b5f25e362 39,44-45,48-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "faa50b71578b46b3c7ff1baf5ae87b99b9d2c2e5",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 4,
+      "accepted_lines": 5,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/29aff0f1c39a43a51e3c96f1f80acb38b58f40c38464b1ef239b64db62bc5bbf"
+    }
+  }
+}
