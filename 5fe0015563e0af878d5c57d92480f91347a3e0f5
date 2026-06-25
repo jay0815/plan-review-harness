@@ -1,0 +1,24 @@
+model-role-calibration/prompts/probe-synthesis.md
+  f9008e9b5f25e362 7,29-31,37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "5fe0015563e0af878d5c57d92480f91347a3e0f5",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 4,
+      "accepted_lines": 6,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/6a54c779b3cf32973c02b92606ab68b6669782857877a2914c52d34c64798414"
+    }
+  }
+}
