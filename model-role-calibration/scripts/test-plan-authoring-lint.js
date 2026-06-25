@@ -4,10 +4,16 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { lintPlan } = require("./plan-authoring-lint");
+const {
+  lintPlan,
+  parseExistingCodeRefs,
+  parseSections
+} = require("./plan-authoring-lint");
+const { createPlanReferenceManifest } = require("./workspace-review-lib");
 
 function requiredPlan({
   complexity = "feature",
+  existingHeading = "Existing Code Refs",
   existingRefs = "None",
   tasks = "- Implement the decided contract.",
   blocking = "None",
@@ -26,7 +32,7 @@ function requiredPlan({
     "## Requirements Mapping",
     "- Requirement maps to the task.",
     "",
-    "## Existing Code Refs",
+    `## ${existingHeading}`,
     existingRefs,
     "",
     "## Contract Decisions",
@@ -71,6 +77,9 @@ function main() {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "plan-authoring-lint-"));
   try {
     fs.mkdirSync(path.join(projectRoot, "src"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "src", "navigation"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "src", "screens", "credit", "ocr"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "src", "screens", "main", "mine"), { recursive: true });
     fs.writeFileSync(path.join(projectRoot, "src", "example.ts"), [
       "export const first = true;",
       "export function targetSymbol() {",
@@ -78,6 +87,9 @@ function main() {
       "}",
       ""
     ].join("\n"));
+    fs.writeFileSync(path.join(projectRoot, "src", "navigation", "index.tsx"), "export const Navigation = true;\n");
+    fs.writeFileSync(path.join(projectRoot, "src", "screens", "credit", "ocr", "index.tsx"), "export const Ocr = true;\n");
+    fs.writeFileSync(path.join(projectRoot, "src", "screens", "main", "mine", "index.tsx"), "export const Mine = true;\n");
 
     const feature180 = lintPlan({
       plan: padToLines(requiredPlan({ complexity: "feature" }), 180),
@@ -267,6 +279,42 @@ function main() {
       projectRoot
     });
     assert.deepEqual(validRef.errors, []);
+    assert.equal(validRef.metrics.existing_code_ref_count, 1);
+    assert.equal(validRef.metrics.structured_existing_code_ref_count, 1);
+    assert.equal(validRef.metrics.inline_existing_code_ref_count, 0);
+
+    const chineseMappingPlan = requiredPlan({
+      existingHeading: "3. 现有代码映射",
+      existingRefs: [
+        "### 3.1 Mine 页",
+        "`screens/main/mine/index.tsx:1`：Mine tab 入口。",
+        "`navigation/index.tsx:1`：路由配置。",
+        "`ocr/index.tsx:1`：短路径应按 workspace resolver 唯一 suffix 解析。",
+        "",
+        "### 3.2 其他说明",
+        "`src/missing-inline.ts`：不存在的 inline 引用不计入证据。"
+      ].join("\n")
+    });
+    const chineseMappingRefs = lintPlan({
+      plan: chineseMappingPlan,
+      projectRoot
+    });
+    const parsedChineseRefs = parseExistingCodeRefs(parseSections(chineseMappingPlan), projectRoot);
+    const chineseManifest = createPlanReferenceManifest(projectRoot, chineseMappingPlan, []);
+    const chineseManifestRefCount = chineseManifest.existing_code_refs.length +
+      chineseManifest.existing_code_ref_dirs.length;
+    assert(!codes(chineseMappingRefs).errors.includes("required_section_missing"));
+    assert(!codes(chineseMappingRefs).errors.includes("existing_ref_incomplete"));
+    assert.equal(chineseMappingRefs.metrics.existing_code_ref_count, chineseManifestRefCount);
+    assert.equal(chineseMappingRefs.metrics.existing_code_ref_count, 3);
+    assert.equal(chineseMappingRefs.metrics.inline_existing_code_ref_count, 3);
+    assert.equal(chineseMappingRefs.metrics.structured_existing_code_ref_count, 0);
+    assert(parsedChineseRefs.some((ref) => (
+      ref.path === "src/screens/main/mine/index.tsx" && ref.lines === "1"
+    )));
+    assert(parsedChineseRefs.some((ref) => (
+      ref.path === "src/screens/credit/ocr/index.tsx" && ref.lines === "1"
+    )));
 
     // Complete arrow function (content-based, not length-based) should be rejected
     const arrowPlan = requiredPlan({

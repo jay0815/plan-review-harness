@@ -581,7 +581,9 @@ async function main() {
     );
     assert.equal(refs.format_status.has_existing_code_refs_section, true);
     assert.equal(refs.format_status.has_proposed_code_artifacts_section, false);
+    assert.equal(refs.format_status.refs_scoped_to_existing_code_refs_section, true);
     assert(refs.existing_code_refs.some((item) => item.path === "src/cli.ts" && item.line_ref === "1-1"));
+    assert.deepEqual(refs.existing_code_ref_dirs, []);
     assert.deepEqual(refs.proposed_code_artifacts, []);
     assert(refs.blocked_refs.includes("/outside/project.ts"));
 
@@ -590,14 +592,26 @@ async function main() {
       [
         "## 3. 现有代码映射",
         "- `screens/main/mine/index.tsx:1`",
-        "- `navigation/index.tsx:1`"
+        "- `navigation/index.tsx:1`",
+        "- `src/cdp`",
+        "",
+        "## 4. 任务",
+        "- 其他章节提到 `src/cdp/extract.ts`，但不应计入 Existing Code Refs manifest。"
       ].join("\n"),
       []
     );
     assert.equal(chineseRefs.format_status.has_existing_code_refs_section, true);
     assert.equal(chineseRefs.format_status.has_existing_code_mapping_section, true);
-    assert(chineseRefs.existing_code_refs.some((item) => item.path === "src/screens/main/mine/index.tsx"));
-    assert(chineseRefs.existing_code_refs.some((item) => item.path === "src/navigation/index.tsx"));
+    assert.equal(chineseRefs.format_status.refs_scoped_to_existing_code_refs_section, true);
+    assert(chineseRefs.existing_code_refs.some((item) => (
+      item.path === "src/screens/main/mine/index.tsx" && item.line_ref === "1"
+    )));
+    assert(chineseRefs.existing_code_refs.some((item) => (
+      item.path === "src/navigation/index.tsx" && item.line_ref === "1"
+    )));
+    assert(chineseRefs.existing_code_ref_dirs.some((item) => item.path === "src/cdp"));
+    assert(!chineseRefs.skipped_refs.includes("src/cdp"));
+    assert(!chineseRefs.existing_code_refs.some((item) => item.path === "src/cdp/extract.ts"));
 
     const riskValidatorLog = path.join(tempDir, "risk.validator.log");
     assert.throws(

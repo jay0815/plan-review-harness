@@ -6,6 +6,11 @@ const {
   parseArgs,
   requireArg
 } = require("./lib");
+const {
+  EXISTING_CODE_REFS_HEADING_PATTERN,
+  collectPathCandidates,
+  createPlanReferenceManifest
+} = require("./workspace-review-lib");
 
 const LINE_BUDGETS = {
   single_file: 50,
@@ -17,7 +22,7 @@ const LINE_BUDGETS = {
 const REQUIRED_SECTION_GROUPS = [
   { name: "scope_non_goals", patterns: [/\bscope\b/i, /\bnon[- ]?goals?\b/i] },
   { name: "requirements_mapping", patterns: [/\brequirements?\s+mapping\b/i, /需求映射/] },
-  { name: "existing_code_refs", patterns: [/\bexisting\s+code\s+refs?\b/i, /现有代码引用/] },
+  { name: "existing_code_refs", patterns: [EXISTING_CODE_REFS_HEADING_PATTERN] },
   { name: "contract_decisions", patterns: [/\bcontract\s+decisions?\b/i, /契约决策/] },
   { name: "blocking_decisions", patterns: [/\bblocking\s+decisions?\b/i, /阻塞决策/] },
   { name: "implementation_discretion", patterns: [/\bimplementation\s+discretion\b/i, /实现自由|实现阶段决定/] },
@@ -123,41 +128,145 @@ function parseExplicitComplexity(plan, sections) {
   return null;
 }
 
-function existingCodeRefsSection(sections) {
-  return sections.find((section) => (
-    /existing\s+code\s+refs?|现有代码引用/i.test(section.title)
-  ));
+function existingCodeRefsSections(sections) {
+  const result = [];
+  const seen = new Set();
+  for (let index = 0; index < sections.length; index += 1) {
+    const section = sections[index];
+    if (!EXISTING_CODE_REFS_HEADING_PATTERN.test(section.title)) {
+      continue;
+    }
+    for (let nested = index; nested < sections.length; nested += 1) {
+      const candidate = sections[nested];
+      if (nested > index && candidate.level <= section.level) {
+        break;
+      }
+      if (!seen.has(candidate.start_line)) {
+        result.push(candidate);
+        seen.add(candidate.start_line);
+      }
+    }
+  }
+  return result.sort((a, b) => a.start_line - b.start_line);
 }
 
-function parseExistingCodeRefs(sections) {
-  const section = existingCodeRefsSection(sections);
-  if (!section) {
+function existingCodeRefsSection(sections) {
+  return existingCodeRefsSections(sections)[0] || null;
+}
+
+function sectionsToPlan(sections) {
+  return sections
+    .filter((section) => section.title !== "__root__")
+    .sort((a, b) => a.start_line - b.start_line)
+    .flatMap((section) => [
+      `${"#".repeat(section.level)} ${section.title}`,
+      ...section.lines.map((line) => line.text)
+    ])
+    .join("\n");
+}
+
+function collectCandidateLineNumbers(sections) {
+  const lineNumbers = new Map();
+  for (const section of existingCodeRefsSections(sections)) {
+    for (const entry of section.lines) {
+      const pathMatch = entry.text.match(/^\s*-\s*path\s*:\s*(.+?)\s*$/i);
+      const candidates = pathMatch
+        ? [pathMatch[1].trim().replace(/^`|`$/g, "")]
+        : collectPathCandidates(entry.text);
+      for (const candidate of candidates) {
+        if (!lineNumbers.has(candidate)) {
+          lineNumbers.set(candidate, entry.number);
+        }
+      }
+    }
+  }
+  return lineNumbers;
+}
+
+function structuredRefKey(ref) {
+  return `${String(ref.path || "").split(/[\\/]/).join("/")}:${ref.lines || ""}`;
+}
+
+function structuredRefPathKey(ref) {
+  return String(ref.path || "").split(/[\\/]/).join("/");
+}
+
+function manifestRefKey(ref) {
+  return `${String(ref.path || "").split(/[\\/]/).join("/")}:${ref.line_ref || ref.lines || ""}`;
+}
+
+function parseStructuredExistingCodeRefs(sections) {
+  const refSections = existingCodeRefsSections(sections);
+  if (!refSections.length) {
     return [];
   }
   const refs = [];
   let current = null;
-  for (const entry of section.lines) {
-    const pathMatch = entry.text.match(/^\s*-\s*path\s*:\s*(.+?)\s*$/i);
-    if (pathMatch) {
-      current = {
-        path: pathMatch[1].trim().replace(/^`|`$/g, ""),
-        path_line: entry.number,
-        lines: null,
-        symbol: null,
-        reason: null
-      };
-      refs.push(current);
-      continue;
-    }
-    if (!current) {
-      continue;
-    }
-    const field = entry.text.match(/^\s*(?:-\s*)?(lines|symbol|reason)\s*:\s*(.*?)\s*$/i);
-    if (field) {
-      current[field[1].toLowerCase()] = field[2].trim().replace(/^`|`$/g, "");
+  for (const section of refSections) {
+    current = null;
+    for (const entry of section.lines) {
+      const pathMatch = entry.text.match(/^\s*-\s*path\s*:\s*(.+?)\s*$/i);
+      if (pathMatch) {
+        const refPath = pathMatch[1].trim().replace(/^`|`$/g, "");
+        current = {
+          path: refPath,
+          path_line: entry.number,
+          lines: null,
+          symbol: null,
+          reason: null,
+          source: "structured",
+          original_ref: refPath
+        };
+        refs.push(current);
+        continue;
+      }
+      const field = entry.text.match(/^\s*(?:-\s*)?(lines|symbol|reason)\s*:\s*(.*?)\s*$/i);
+      if (current && field) {
+        current[field[1].toLowerCase()] = field[2].trim().replace(/^`|`$/g, "");
+        continue;
+      }
+      if (entry.text.match(/^\s*(?:-\s*)?(lines|symbol|reason)\s*:/i)) {
+        continue;
+      }
     }
   }
   return refs;
+}
+
+function parseExistingCodeRefs(sections, projectRoot = process.cwd()) {
+  const structuredRefs = parseStructuredExistingCodeRefs(sections);
+  const structuredKeys = new Set(structuredRefs.map(structuredRefKey));
+  const structuredPathKeys = new Set(structuredRefs.map(structuredRefPathKey));
+  const structuredOriginalRefs = new Set(structuredRefs.map((ref) => ref.original_ref || ref.path));
+  const candidateLineNumbers = collectCandidateLineNumbers(sections);
+  const manifest = createPlanReferenceManifest(projectRoot, sectionsToPlan(sections), []);
+  const inlineRefs = [
+    ...manifest.existing_code_refs.map((ref) => ({
+      path: ref.path,
+      path_line: candidateLineNumbers.get(ref.original_ref) || null,
+      lines: ref.line_ref,
+      symbol: null,
+      reason: null,
+      source: "inline",
+      target_kind: "file",
+      original_ref: ref.original_ref
+    })),
+    ...manifest.existing_code_ref_dirs.map((ref) => ({
+      path: ref.path,
+      path_line: candidateLineNumbers.get(ref.original_ref) || null,
+      lines: ref.line_ref,
+      symbol: null,
+      reason: null,
+      source: "inline",
+      target_kind: "directory",
+      original_ref: ref.original_ref
+    }))
+  ].filter((ref) => (
+    !structuredKeys.has(manifestRefKey(ref)) &&
+    !structuredPathKeys.has(structuredRefPathKey(ref)) &&
+    !structuredOriginalRefs.has(ref.original_ref)
+  ));
+  return [...structuredRefs, ...inlineRefs];
 }
 
 function inferComplexity(plan, refs) {
@@ -450,7 +559,7 @@ function classifyCodeBlock(block, sectionTitle) {
 
 function validateExistingCodeRefs(refs, projectRoot, errors) {
   const absoluteRoot = path.resolve(projectRoot);
-  for (const ref of refs) {
+  for (const ref of refs.filter((item) => item.source !== "inline")) {
     if (!ref.path || !ref.lines || !ref.symbol || !ref.reason) {
       errors.push(issue(
         "existing_ref_incomplete",
@@ -543,7 +652,7 @@ function validateExistingCodeRefs(refs, projectRoot, errors) {
 function lintPlan({ plan, projectRoot }) {
   const text = String(plan);
   const sections = parseSections(text);
-  const refs = parseExistingCodeRefs(sections);
+  const refs = parseExistingCodeRefs(sections, projectRoot);
   const complexity = parseExplicitComplexity(text, sections) || inferComplexity(text, refs);
   const totalLines = text.split("\n").length;
   const lineBudget = LINE_BUDGETS[complexity.level];
@@ -676,6 +785,8 @@ function lintPlan({ plan, projectRoot }) {
       total_chars: text.length,
       section_count: Math.max(0, sections.length - 1),
       existing_code_ref_count: refs.length,
+      structured_existing_code_ref_count: refs.filter((item) => item.source !== "inline").length,
+      inline_existing_code_ref_count: refs.filter((item) => item.source === "inline").length,
       code_block_count: codeBlocks.length,
       implementation_code_blocks: implementationCodeBlocks,
       implementation_code_lines: implementationCodeLines,

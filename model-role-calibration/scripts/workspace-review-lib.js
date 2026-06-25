@@ -76,7 +76,7 @@ const SKIP_SCOPE_DIRS = new Set([
   "runs",
   "workspace-runs"
 ]);
-const EXISTING_CODE_REFS_HEADING_PATTERN = /existing\s+code\s+refs?|现有代码(?:引用|映射)/i;
+const EXISTING_CODE_REFS_HEADING_PATTERN = /(?:\bexisting\s+code\s+refs?(?:erences?)?\b|现有代码(?:引用|映射))/i;
 
 const CODE_BLOCK_EXTENSION_BY_LANGUAGE = {
   cjs: ".cjs",
@@ -630,9 +630,10 @@ function addProposedArtifactToScope(artifact, files, proposedArtifacts) {
 
 function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) {
   const existingRefsByKey = new Map();
+  const existingRefDirsByKey = new Map();
   const blockedRefs = new Set();
   const skippedRefs = new Set();
-  for (const candidate of collectPathCandidates(plan)) {
+  for (const candidate of existingCodeRefPaths(plan)) {
     const normalized = normalizeProjectRelativePath(projectRoot, candidate);
     if (!normalized) {
       continue;
@@ -641,7 +642,20 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) 
       blockedRefs.add(normalized.blocked);
       continue;
     }
-    if (!fs.existsSync(normalized.absolute) || !fs.lstatSync(normalized.absolute).isFile()) {
+    if (!fs.existsSync(normalized.absolute)) {
+      skippedRefs.add(normalized.relative);
+      continue;
+    }
+    const stat = fs.lstatSync(normalized.absolute);
+    if (stat.isDirectory()) {
+      existingRefDirsByKey.set(normalized.relative, {
+        path: normalized.relative,
+        line_ref: null,
+        original_ref: String(candidate)
+      });
+      continue;
+    }
+    if (!stat.isFile()) {
       skippedRefs.add(normalized.relative);
       continue;
     }
@@ -668,10 +682,14 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) 
       has_existing_code_refs_section: hasExistingCodeRefsSection(plan),
       has_existing_code_mapping_section: /^#{1,6}\s+.*现有代码映射/im.test(String(plan || "")),
       has_proposed_code_artifacts_section: /^##\s+Proposed Code Artifacts\b/im.test(String(plan || "")),
+      refs_scoped_to_existing_code_refs_section: true,
       generated_review_plan: true,
       generated_ref_json: true
     },
     existing_code_refs: [...existingRefsByKey.values()].sort((a, b) => (
+      `${a.path}:${a.line_ref || ""}`.localeCompare(`${b.path}:${b.line_ref || ""}`)
+    )),
+    existing_code_ref_dirs: [...existingRefDirsByKey.values()].sort((a, b) => (
       `${a.path}:${a.line_ref || ""}`.localeCompare(`${b.path}:${b.line_ref || ""}`)
     )),
     proposed_code_artifacts: normalizedArtifacts,
@@ -1405,6 +1423,7 @@ function withoutAnthropicApiKey(env = process.env) {
 }
 
 module.exports = {
+  EXISTING_CODE_REFS_HEADING_PATTERN,
   REVIEW_ROLES,
   FACT_CHECK_ROLE,
   SYNTHESIS_ROLE,
@@ -1430,6 +1449,9 @@ module.exports = {
   copyScopedWorkspace,
   compactPlanForReview,
   createPlanReferenceManifest,
+  collectPathCandidates,
+  existingCodeRefPaths,
+  lineRefSuffix,
   workspaceReviewInput,
   buildWorkspacePrompt,
   workspaceSchemaForRole,
