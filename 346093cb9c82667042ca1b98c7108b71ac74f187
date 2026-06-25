@@ -1,0 +1,28 @@
+model-role-calibration/scripts/run-workspace-review.js
+  f9008e9b5f25e362 913-914
+model-role-calibration/scripts/test-plan-review-mcp.js
+  f9008e9b5f25e362 451-478
+model-role-calibration/scripts/workspace-review-lib.js
+  f9008e9b5f25e362 849-890,897,901-909,911-912
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "346093cb9c82667042ca1b98c7108b71ac74f187",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 84,
+      "total_deletions": 3,
+      "accepted_lines": 84,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/6736000ce94d0c84f69651952c2c2c53443d19a9a8d0a69f91aaa36ee6bc70a9"
+    }
+  }
+}
