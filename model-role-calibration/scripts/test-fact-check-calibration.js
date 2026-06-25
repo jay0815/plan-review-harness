@@ -106,7 +106,7 @@ function main() {
       path.join(generated.prompt_dir, "kimi-fact_check.md"),
       "utf8"
     );
-    assert(generatedPrompt.includes("role-calibration-v3"));
+    assert(generatedPrompt.includes("role-calibration-v4"));
     assert(generatedPrompt.includes("# Issue Identity"));
     assert(generatedPrompt.includes("\"issue_id\": \"Risk-Reviewer-001\""));
     assert(generatedPrompt.includes("`issue_id` 是匹配主键"));
@@ -114,6 +114,8 @@ function main() {
     assert(generatedPrompt.includes("# Status Decision Rules"));
     assert(generatedPrompt.includes("不要因为其中一个子 claim 被反驳就把整个 issue 判为 `contradicted`"));
     assert(generatedPrompt.includes("当前 scoped mirror 中的可读证据优先于 Reviewer 的旧行号"));
+    assert(generatedPrompt.includes("直接后果依赖未证实的现有工程事实"));
+    assert(generatedPrompt.includes("常识性、惯例性或推测性表述补足因果链"));
 
     const candidateFile = path.join(tempRoot, "candidate.json");
     writeJson(candidateFile, {

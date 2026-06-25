@@ -4,7 +4,7 @@
 
 # Prompt Version
 
-`role-calibration-v3`
+`role-calibration-v4`
 
 # Task
 
@@ -26,14 +26,16 @@
 - Fact Check 标记为 `unsupported`、`contradicted` 或 `unverifiable` 的 issue 不得进入共识、分歧或修订，只能进入 `likely_false_positives`。
 - Fact Check 标记为 `partially_verified` 的 issue 可以进入合成结果，但必须在 `reason` 中说明只有部分事实成立，严重度不得高于 Reviewer 原始严重度。
 - `partially_verified` 不能自动成为修订指令来源；只有当 Fact Check 明确确认“核心事实”和“阻塞性/直接后果”均有支持时，才可进入 `revision_instructions`。
-- 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，则该 issue 只能降权进入 `consensus_issues` 或 `likely_false_positives`，不得直接生成修订指令。
+- 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，但核心事实仍成立且范围内，应使用 `disposition: retained` 或 `merged`，可以降权进入低严重度 `consensus_issues`，也可以只保留在 `source_findings` 中不生成修订指令；不得放入 `likely_false_positives`。
+- `likely_false_positives` 只能引用 `disposition` 为 `duplicate`、`unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding。任何 `retained` 或 `merged` finding 都禁止出现在 `likely_false_positives`，即使它的阻塞性、严重度或因果链被 Fact Check 降权。
+- 如果一个 issue 的核心事实成立但“blocks_execution / blocker / 必须修订”被 Fact Check 判定为放大，正确做法是：保留该 finding、在 `reason` 中说明阻塞性被降权、不要生成 `revision_instructions`；只有当整个 issue 缺少证据、被反驳、不可验证、重复或超范围时，才进入 `likely_false_positives`。
 - 只有 `verified` 或满足上述条件的 `partially_verified` issue 才能成为主修订指令来源。
 - 未来代码、伪代码、代码块或 proposed-code 文件不是现有工程事实或最终实现承诺。源码草案完整性问题不得作为 blocker 或修订指令来源；只有主计划的业务、架构、公共契约或失败语义本身不成立时才可保留。
 - “某来源没有提到”不等于共识，也不等于反对。只有多个来源明确表达相同结论时，才可合并为共识。
 - 先按根因合并重复意见；同一问题的不同影响属于互补信息，不应被制造成分歧。
 - `merged_from` 必须使用输入中的准确来源名称，只列真正提出该问题的来源。
-- 对无 evidence、依赖未知事实或明显越出需求边界的高风险判断降权，并写入 `likely_false_positives`。
-- 当 Reviewer 意见与需求明确事实或 out-of-scope 直接冲突时，应按需求裁决并丢弃 Reviewer 意见。这不是 L3 分歧，不需要用户裁决。例如需求明确不建设在线 marketplace，而 Reviewer 要求必须建设 marketplace，应标记为 `out_of_scope`。
+- 对无 evidence、依赖未知事实或明显越出需求边界的高风险判断降权，并写入 `likely_false_positives`；写入前必须同步把对应 `source_findings[].disposition` 设为 `unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope`，不能保持为 `retained` 或 `merged`。
+- 当 Reviewer 意见与需求明确事实或 out-of-scope 直接冲突时，应按需求裁决并丢弃 Reviewer 意见。这不是 L3 分歧，不需要用户裁决。例如需求明确排除某类平台能力、外部系统或公共接口，而 Reviewer 要求新增该能力，应标记为 `out_of_scope`。
 - 识别分歧时区分事实判断、严重度判断、局部修改和方向选择，并在 `title` 或 `reason` 中说明分歧性质。
 - 能由需求硬约束、明确契约或输入事实直接判定的问题，不需要用户裁决。
 - `L1_preference` 是不影响契约的偏好；`L2_local_change` 是不改变总体方向的局部修正；`L3_direction_decision` 是互斥且会改变公共契约、系统边界或长期方向的选择。

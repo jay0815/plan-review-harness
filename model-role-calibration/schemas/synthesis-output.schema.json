@@ -64,6 +64,7 @@
             ]
           },
           "disposition": {
+            "description": "retained/merged/duplicate 表示仍属于可保留来源；unsupported/contradicted/unverifiable/out_of_scope 表示排除来源。likely_false_positives 只能引用排除来源，不能引用 retained 或 merged finding。",
             "enum": [
               "retained",
               "merged",
@@ -238,6 +239,7 @@
       }
     },
     "likely_false_positives": {
+      "description": "仅记录被排除的来源意见。source_finding_ids 必须引用 disposition 为 duplicate、unsupported、contradicted、unverifiable 或 out_of_scope 的 source_findings；不得引用 retained 或 merged finding。",
       "type": "array",
       "items": {
         "type": "object",

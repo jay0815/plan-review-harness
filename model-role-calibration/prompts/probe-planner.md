@@ -38,8 +38,8 @@
 - 输出前自检：计划中不得存在相互矛盾的字段位置、责任归属、同步语义、降级路径或验收标准。
 - 输出必须是 JSON。
 - `details`、`dependencies`、`outputs`、`failure_handling`、`test_plan`、`acceptance_criteria`、`blocking_decisions`、`implementation_discretion`、`open_decisions`、`risks` 的数组元素必须都是字符串；禁止在这些数组中输出对象、数字或嵌套数组。
-- `dependencies` 里如果要引用步骤，必须写成字符串，例如 `"步骤 1 的 manifest schema"`，禁止写数字 `1`。
-- `failure_handling` 和 `test_plan` 如需表达场景、步骤、预期，必须合并成单个字符串，例如 `"场景：manifest 写入失败；处理：保留旧 manifest 并清理临时文件；恢复：用户修复权限后重跑同一命令"`。
+- `dependencies` 里如果要引用步骤，必须写成字符串，例如 `"步骤 1 的输出契约"`，禁止写数字 `1`。
+- `failure_handling` 和 `test_plan` 如需表达场景、步骤、预期，必须合并成单个字符串，例如 `"场景：中间产物写入失败；处理：保留旧状态并清理临时产物；恢复：用户修复前置条件后重跑同一命令"`。
 
 # JSON Output Contract
 

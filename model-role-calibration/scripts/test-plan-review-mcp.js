@@ -388,6 +388,30 @@ async function main() {
     assert(!readScopeWithRefs.files.includes("src/cdp/extract.ts"), "only files in Existing Code Refs are exposed");
     assert(!readScopeWithRefs.files.includes("package.json"), "COMMON_PROJECT_FILES not unconditionally exposed");
     assert(!readScopeWithRefs.files.includes("secret.txt"));
+
+    fs.mkdirSync(path.join(projectRoot, "src", "screens", "main", "mine"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "src", "navigation"), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, "src", "screens", "main", "mine", "index.tsx"), "export const Mine = true;\n");
+    fs.writeFileSync(path.join(projectRoot, "src", "navigation", "index.tsx"), "export const Navigation = true;\n");
+    const readScopeWithChineseMapping = buildRoleReadScope(
+      "risk",
+      projectRoot,
+      [
+        "## 3. 现有代码映射",
+        "`screens/main/mine/index.tsx:1`：Mine tab 不要求登录。",
+        "`navigation/index.tsx:1`：路由配置。",
+        "",
+        "## 4. 任务",
+        "其他章节提到 `src/cdp/extract.ts`，不应暴露。"
+      ].join("\n"),
+      {
+        maxFiles: 10
+      }
+    );
+    assert(readScopeWithChineseMapping.files.includes("src/screens/main/mine/index.tsx"));
+    assert(readScopeWithChineseMapping.files.includes("src/navigation/index.tsx"));
+    assert(!readScopeWithChineseMapping.files.includes("src/cdp/extract.ts"));
+
     const mirrorParent = fs.mkdtempSync(path.join(tempDir, "mirror-"));
     const boundary = copyScopedWorkspace(projectRoot, readScopeWithRefs, mirrorParent);
     assert(fs.existsSync(path.join(boundary.exposed_root, "src", "cli.ts")));
@@ -560,6 +584,20 @@ async function main() {
     assert(refs.existing_code_refs.some((item) => item.path === "src/cli.ts" && item.line_ref === "1-1"));
     assert.deepEqual(refs.proposed_code_artifacts, []);
     assert(refs.blocked_refs.includes("/outside/project.ts"));
+
+    const chineseRefs = createPlanReferenceManifest(
+      projectRoot,
+      [
+        "## 3. 现有代码映射",
+        "- `screens/main/mine/index.tsx:1`",
+        "- `navigation/index.tsx:1`"
+      ].join("\n"),
+      []
+    );
+    assert.equal(chineseRefs.format_status.has_existing_code_refs_section, true);
+    assert.equal(chineseRefs.format_status.has_existing_code_mapping_section, true);
+    assert(chineseRefs.existing_code_refs.some((item) => item.path === "src/screens/main/mine/index.tsx"));
+    assert(chineseRefs.existing_code_refs.some((item) => item.path === "src/navigation/index.tsx"));
 
     const riskValidatorLog = path.join(tempDir, "risk.validator.log");
     assert.throws(
@@ -862,6 +900,48 @@ async function main() {
         }
       }
     ), /partially_verified finding F1 severity blocker exceeds reviewer severity medium/);
+
+    const partiallyVerifiedRetainedSynthesis = {
+      ...verifiedSynthesis,
+      source_findings: [{
+        ...verifiedSynthesis.source_findings[0],
+        fact_check_status: "partially_verified",
+        disposition: "retained",
+        reason: "核心事实成立，但阻塞性缺少充分证据；仅保留来源，不生成修订。"
+      }],
+      process_map: {
+        title: "cache flow",
+        mermaid: "flowchart TD\n  A[Cache clear]",
+        nodes: [{
+          id: "A",
+          label: "Cache clear",
+          stage: "execution",
+          status: "normal",
+          related_issue_titles: [],
+          evidence: "Fact Check 仅部分验证，当前不形成主动修订。"
+        }]
+      },
+      consensus_issues: [],
+      disagreements: [],
+      likely_false_positives: [],
+      revision_instructions: []
+    };
+    assert.doesNotThrow(() => validateWorkspaceOutput(
+      "synthesis",
+      partiallyVerifiedRetainedSynthesis,
+      { factCheckOutput: partiallyVerifiedFactCheck }
+    ));
+    assert.throws(() => validateWorkspaceOutput(
+      "synthesis",
+      {
+        ...partiallyVerifiedRetainedSynthesis,
+        likely_false_positives: [{
+          source_finding_ids: ["F1"],
+          reason: "错误地把 retained 的 partially_verified finding 放入误报。"
+        }]
+      },
+      { factCheckOutput: partiallyVerifiedFactCheck }
+    ), /likely_false_positives cannot reference retained finding F1/);
 
     const readyOutcome = summarizeReviewOutcome(
       [{
@@ -1182,6 +1262,9 @@ async function main() {
     assert(synthesisPrompt.includes("\"source_findings\""));
     assert(synthesisPrompt.includes("Fact Check 报告"));
     assert(synthesisPrompt.includes("不得读取工程目录"));
+    assert(synthesisPrompt.includes("likely_false_positives` 只能引用 `disposition` 为 `duplicate`、`unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding"));
+    assert(synthesisPrompt.includes("任何 `retained` 或 `merged` finding 都禁止出现在 `likely_false_positives`"));
+    assert(synthesisPrompt.includes("核心事实成立但“blocks_execution / blocker / 必须修订”被 Fact Check 判定为放大"));
 
     // $ref resolution: source_finding_ids must be array, not string
     assert.throws(() => validateWorkspaceOutput("synthesis", {

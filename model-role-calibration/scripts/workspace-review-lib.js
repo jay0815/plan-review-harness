@@ -76,6 +76,7 @@ const SKIP_SCOPE_DIRS = new Set([
   "runs",
   "workspace-runs"
 ]);
+const EXISTING_CODE_REFS_HEADING_PATTERN = /existing\s+code\s+refs?|现有代码(?:引用|映射)/i;
 
 const CODE_BLOCK_EXTENSION_BY_LANGUAGE = {
   cjs: ".cjs",
@@ -430,7 +431,7 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
       };
     }
   } else {
-    absolute = path.resolve(absoluteProjectRoot, value);
+    absolute = resolveProjectRelativeCandidate(absoluteProjectRoot, value);
     if (!isInsidePath(absoluteProjectRoot, absolute)) {
       return {
         blocked: value
@@ -447,14 +448,94 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
   };
 }
 
+function candidatePathVariants(value) {
+  const normalized = String(value || "").split(path.sep).join("/");
+  const variants = [];
+  const add = (candidate) => {
+    const next = String(candidate || "")
+      .split(path.sep)
+      .join("/")
+      .replace(/^\.?\//, "");
+    if (next && !variants.includes(next)) {
+      variants.push(next);
+    }
+  };
+  add(normalized);
+  if (!normalized.startsWith("src/")) {
+    add(`src/${normalized}`);
+  }
+  if (normalized.startsWith("finance/")) {
+    const withoutAlias = normalized.slice("finance/".length);
+    add(withoutAlias);
+    add(`src/${withoutAlias}`);
+  }
+  return variants;
+}
+
+function resolveProjectRelativeCandidate(projectRoot, value) {
+  for (const variant of candidatePathVariants(value)) {
+    const absolute = path.resolve(projectRoot, variant);
+    if (isInsidePath(projectRoot, absolute) && fs.existsSync(absolute)) {
+      return absolute;
+    }
+  }
+  const uniqueSuffix = findUniqueProjectFileBySuffix(projectRoot, value);
+  if (uniqueSuffix) {
+    return uniqueSuffix;
+  }
+  return path.resolve(projectRoot, value);
+}
+
+function findUniqueProjectFileBySuffix(projectRoot, value) {
+  const suffixVariants = candidatePathVariants(value)
+    .map((variant) => variant.replace(/^src\//, ""))
+    .filter((variant) => variant.includes("/") || /\.[A-Za-z0-9]+$/.test(variant));
+  if (!suffixVariants.length) {
+    return null;
+  }
+  const matches = [];
+  const stack = [projectRoot];
+  while (stack.length && matches.length <= 1) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      const relative = path.relative(projectRoot, absolute).split(path.sep).join("/");
+      if (shouldSkipScopePath(relative)) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        stack.push(absolute);
+      } else if (entry.isFile()) {
+        const withoutSrc = relative.replace(/^src\//, "");
+        if (suffixVariants.some((suffix) => relative === suffix || relative.endsWith(`/${suffix}`) || withoutSrc === suffix || withoutSrc.endsWith(`/${suffix}`))) {
+          matches.push(absolute);
+          if (matches.length > 1) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function existingCodeRefPaths(text) {
   const lines = String(text || "").split("\n");
   const paths = [];
   let inSection = false;
+  let sectionLevel = null;
   for (const line of lines) {
-    const heading = line.match(/^#{1,6}\s+(.+?)\s*$/);
+    const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/);
     if (heading) {
-      inSection = /existing\s+code\s+refs?|现有代码引用/i.test(heading[1].trim());
+      const level = heading[1].length;
+      const isExistingRefsHeading = EXISTING_CODE_REFS_HEADING_PATTERN.test(heading[2].trim());
+      if (isExistingRefsHeading) {
+        inSection = true;
+        sectionLevel = level;
+      } else if (sectionLevel == null || level <= sectionLevel) {
+        inSection = false;
+        sectionLevel = null;
+      }
       continue;
     }
     if (!inSection) {
@@ -463,9 +544,20 @@ function existingCodeRefPaths(text) {
     const pathMatch = line.match(/^\s*-\s*path\s*:\s*(.+?)\s*$/i);
     if (pathMatch) {
       paths.push(pathMatch[1].trim().replace(/^`|`$/g, ""));
+      continue;
+    }
+    for (const candidate of collectPathCandidates(line)) {
+      paths.push(candidate);
     }
   }
   return paths;
+}
+
+function hasExistingCodeRefsSection(text) {
+  return String(text || "").split("\n").some((line) => {
+    const heading = line.match(/^#{1,6}\s+(.+?)\s*$/);
+    return heading && EXISTING_CODE_REFS_HEADING_PATTERN.test(heading[1].trim());
+  });
 }
 
 function collectPathCandidates(text) {
@@ -573,7 +665,8 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts = []) 
   return {
     version: 1,
     format_status: {
-      has_existing_code_refs_section: /^##\s+Existing Code Refs\b/im.test(String(plan || "")),
+      has_existing_code_refs_section: hasExistingCodeRefsSection(plan),
+      has_existing_code_mapping_section: /^#{1,6}\s+.*现有代码映射/im.test(String(plan || "")),
       has_proposed_code_artifacts_section: /^##\s+Proposed Code Artifacts\b/im.test(String(plan || "")),
       generated_review_plan: true,
       generated_ref_json: true
