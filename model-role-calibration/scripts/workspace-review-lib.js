@@ -846,18 +846,70 @@ function buildRoleReadScope(role, projectRoot, plan, options = {}) {
   return scope;
 }
 
+function mergeReadScopes(role, scopes, options = {}) {
+  const maxFiles = options.maxFiles || DEFAULT_READ_SCOPE_MAX_FILES;
+  const files = new Set();
+  const proposedArtifacts = new Map();
+  const blockedRefs = new Set();
+  const skippedRefs = new Set();
+  for (const scope of scopes.filter(Boolean)) {
+    for (const file of scope.files || []) {
+      if (files.has(file)) {
+        continue;
+      }
+      if (files.size >= maxFiles) {
+        skippedRefs.add(file);
+        continue;
+      }
+      files.add(file);
+    }
+    for (const artifact of scope.proposed_artifacts || []) {
+      if (!proposedArtifacts.has(artifact.relative_path)) {
+        proposedArtifacts.set(artifact.relative_path, artifact);
+      }
+    }
+    for (const blocked of scope.blocked_refs || []) {
+      blockedRefs.add(blocked);
+    }
+    for (const skipped of scope.skipped_refs || []) {
+      skippedRefs.add(skipped);
+    }
+  }
+  return {
+    role,
+    mode: "scoped_mirror",
+    max_files: maxFiles,
+    files: [...files].sort(),
+    proposed_artifacts: [...proposedArtifacts.values()]
+      .filter((artifact) => files.has(artifact.relative_path))
+      .sort((a, b) => a.relative_path.localeCompare(b.relative_path)),
+    blocked_refs: [...blockedRefs].sort(),
+    skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort()
+  };
+}
+
 function buildFactCheckReadScope(projectRoot, reviewerOutputs, options = {}) {
   const text = Object.values(reviewerOutputs || {}).flatMap((output) => (
     (Array.isArray(output?.issues) ? output.issues : [])
       .map((issue) => issue?.evidence)
       .filter((evidence) => typeof evidence === "string" && evidence.trim())
   )).join("\n");
-  const scope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, {
+  const evidenceScope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, {
     ...options,
     includeCommonFiles: false
   });
+  const planScope = typeof options.plan === "string" && options.plan.trim()
+    ? buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, options.plan, {
+      ...options,
+      includeCommonFiles: false,
+      includeAllProposedArtifacts: false,
+      existingRefsOnly: true
+    })
+    : null;
+  const scope = mergeReadScopes(FACT_CHECK_ROLE, [evidenceScope, planScope], options);
   scope.description = [
-    "只暴露 Reviewer evidence 明确引用的工程文件。",
+    "优先暴露 Reviewer evidence 明确引用的工程文件，并补充 Plan 的 Existing Code Refs / 现有代码映射章节列出的现有工程文件。",
+    "Plan 其他章节提到但未列入 Existing Code Refs 的路径不会被复制。",
     "Fact Check 不应搜索新证据或新增问题。"
   ].join("");
   return scope;

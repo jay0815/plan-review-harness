@@ -448,6 +448,34 @@ async function main() {
       "Fact Check should receive a project config when Reviewer evidence explicitly cites it"
     );
 
+    const factScopeWithPlanRefs = buildFactCheckReadScope(projectRoot, {
+      "Risk Reviewer": {
+        issues: [{
+          evidence: "src/cli.ts:1 shows cli",
+          why_it_matters: "package.json scripts consume it"
+        }]
+      }
+    }, {
+      maxFiles: 10,
+      plan: [
+        "## 3. 现有代码映射",
+        "- `src/cdp`",
+        "",
+        "## 4. 任务",
+        "- 其他章节提到 `secret.txt`，不应暴露。"
+      ].join("\n")
+    });
+    assert(factScopeWithPlanRefs.files.includes("src/cli.ts"));
+    assert(
+      factScopeWithPlanRefs.files.includes("src/cdp/extract.ts"),
+      "Fact Check should receive files from Plan Existing Code Refs as supporting evidence"
+    );
+    assert(
+      !factScopeWithPlanRefs.files.includes("package.json"),
+      "Fact Check should still ignore non-evidence impact text when plan refs are provided"
+    );
+    assert(!factScopeWithPlanRefs.files.includes("secret.txt"));
+
     const factCheckPrompt = buildWorkspacePrompt(
       "fact_check",
       tempDir,

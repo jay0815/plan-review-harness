@@ -910,7 +910,8 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
     reviewerOutputs,
     {
       maxFiles: config.execution.read_scope_max_files,
-      proposedArtifacts: request.proposed_artifacts || []
+      proposedArtifacts: request.proposed_artifacts || [],
+      plan: request.review_plan || request.plan
     }
   );
   const readBoundary = prepareReadBoundary(config, request, runDir, role, readScope);
