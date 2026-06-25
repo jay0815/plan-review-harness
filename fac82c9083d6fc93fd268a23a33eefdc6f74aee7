@@ -1,0 +1,26 @@
+model-role-calibration/scripts/plan-authoring-lint.js
+  f13861c45b9a9bad 17-18,22,154-185,187-233,236-242,245-255,259,261-304,600,693,826-827
+model-role-calibration/scripts/workspace-review-lib.js
+  f13861c45b9a9bad 79,633,636,649-658,685,692
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "fac82c9083d6fc93fd268a23a33eefdc6f74aee7",
+  "prompts": {
+    "f13861c45b9a9bad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86a5b716-ddd8-4780-bd75-3dcfa273261f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 181,
+      "total_deletions": 34,
+      "accepted_lines": 174,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/c3be006046ec9ec39c64ea6904cc85afb04cdde101b1db6cd1b84e92ac856441"
+    }
+  }
+}
