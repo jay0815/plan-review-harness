@@ -1,0 +1,42 @@
+model-role-calibration/scripts/workspace-review-lib.js
+  f9008e9b5f25e362 1426,1452-1454
+  f13861c45b9a9bad 79,633,636,649-658,685,692
+model-role-calibration/scripts/plan-authoring-lint.js
+  f13861c45b9a9bad 25,155-156,166-167,179-181,188-189,196-197,199-200,205-209,211,213-216,219-230,562,655,788-789
+  f9008e9b5f25e362 9-13,157-165,168-178,183,186-187,190-195,198,210,212,217-218,236-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "55dddcbd6038f59f5646387b3eae9db8527d8e3f",
+  "prompts": {
+    "f13861c45b9a9bad": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86a5b716-ddd8-4780-bd75-3dcfa273261f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 57,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/c3be006046ec9ec39c64ea6904cc85afb04cdde101b1db6cd1b84e92ac856441"
+    },
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 81,
+      "total_deletions": 115,
+      "accepted_lines": 244,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/93f16013bf77de32fc679736ba38dfc4a7070aee474cb220baedcd29459844bf"
+    }
+  }
+}
