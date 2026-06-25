@@ -36,16 +36,17 @@ allowed-tools:
 默认应看到：
 
 ```text
-risk:       qwen
+risk:       kimi
 architecture: kimi
 execution:  kimi
 rebuttal:   glm
 fact_check: glm
-synthesis:  kimi
-planner:    deepseek
+synthesis:  glm
+planner:    kimi
 ```
 
-若实际路由与上述不同，以 MCP 返回为准，但需指出差异。
+该预期来自 `role_route_source.score_version = manual-v4` 的默认路由。若 MCP 返回了其他
+`role_route_source`，以 MCP 返回为准，并说明当前 Skill 预期与运行时来源不同。
 
 ### 输出格式
 

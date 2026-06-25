@@ -32,13 +32,13 @@
     }
   },
   "roles": {
-    "risk": "qwen",
+    "risk": "kimi",
     "architecture": "kimi",
     "execution": "kimi",
     "rebuttal": "glm",
     "fact_check": "glm",
-    "synthesis": "kimi",
-    "planner": "deepseek"
+    "synthesis": "glm",
+    "planner": "kimi"
   },
   "execution": {
     "max_concurrency": 3,

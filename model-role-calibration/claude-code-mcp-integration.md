@@ -270,12 +270,12 @@ tail -f <start_plan_review 返回的 execution_log>
 ```text
 [2026-06-15T12:00:00.000Z] run_queued run_id="workspace-review-..." roles=["risk","architecture","execution","rebuttal"]
 [2026-06-15T12:00:00.100Z] run_started run_id="workspace-review-..." pid=12345 roles=["risk","architecture","execution","rebuttal"] max_concurrency=4
-[2026-06-15T12:00:00.200Z] agent_started role="risk" model="qwen"
+[2026-06-15T12:00:00.200Z] agent_started role="risk" model="kimi"
 [2026-06-15T12:00:00.210Z] agent_started role="architecture" model="kimi"
 [2026-06-15T12:00:00.220Z] agent_started role="execution" model="kimi"
 [2026-06-15T12:00:00.230Z] agent_started role="rebuttal" model="glm"
-[2026-06-15T12:01:00.000Z] agent_completed role="risk" model="qwen" elapsed_ms=59800
-[2026-06-15T12:02:00.000Z] synthesis_started role="synthesis" model="kimi" reviewer_count=4
+[2026-06-15T12:01:00.000Z] agent_completed role="risk" model="kimi" elapsed_ms=59800
+[2026-06-15T12:02:00.000Z] synthesis_started role="synthesis" model="glm" reviewer_count=4
 [2026-06-15T12:03:00.000Z] run_completed run_id="workspace-review-..." reviewer_count=4
 ```
 

@@ -151,6 +151,28 @@ function main() {
   assert(discretionSynthesis.includes("\"blocks_execution\": false"));
   assert(discretionSynthesis.includes("\"coverage_declaration\""));
   assert(discretionSynthesis.includes("\"boundary\": \"implementation_discretion\""));
+
+  const stateMigrationCase = "synthetic/execution-state-migration";
+  const stateMigrationReview = loadCaseInput(stateMigrationCase, "execution");
+  const stateMigrationSynthesis = loadCaseInput(stateMigrationCase, "synthesis");
+  const executionProbePrompt = fs.readFileSync(
+    path.join(ROOT, "prompts", "probe-execution.md"),
+    "utf8"
+  );
+  const executionEvaluatorPrompt = fs.readFileSync(
+    path.join(ROOT, "prompts", "evaluate-execution.md"),
+    "utf8"
+  );
+  assert(!config.primary_cases.includes(stateMigrationCase));
+  assert(stateMigrationReview.includes("is_synced: boolean"));
+  assert(stateMigrationReview.includes("v1 到 v2 迁移"));
+  assert(stateMigrationSynthesis.includes("is_synced 布尔状态无法表达迁移未知态"));
+  assert(stateMigrationSynthesis.includes("\"boundary\": \"rollback_or_recovery\""));
+  assert(stateMigrationSynthesis.includes("\"issue_id\": \"Execution-Reviewer-005\""));
+  assert(executionProbePrompt.includes("计划显式写出某个选择，并不自动表示该选择已经可执行或已关闭"));
+  assert(executionProbePrompt.includes("把缺少来源证明、服务端 revision、归属记录或同步状态的旧数据默认标记"));
+  assert(executionProbePrompt.includes("同一逻辑操作的失败重试、批量回落或部分成功重新生成幂等键"));
+  assert(executionEvaluatorPrompt.includes("写清楚错误做法不等于关闭执行契约"));
   assert(discretionSynthesis.includes("缺少唯一路径会阻塞执行或需要修订计划的后果没有证据支持"));
   assert.deepEqual(parseList("kimi,kimi,qwen", config.models), ["kimi", "qwen"]);
   assert.deepEqual(parseList(undefined, ["kimi", "qwen"]), ["kimi", "qwen"]);

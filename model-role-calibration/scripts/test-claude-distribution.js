@@ -91,6 +91,12 @@ function main() {
     assert(packagedSkill.includes("--check"));
     assert(packagedSkill.includes("configuration_status"));
     assert(packagedSkill.includes("ANTHROPIC_AUTH_TOKEN"));
+    assert(packagedSkill.includes("risk:       kimi"));
+    assert(packagedSkill.includes("synthesis:  glm"));
+    assert(packagedSkill.includes("planner:    kimi"));
+    assert(packagedSkill.includes("role_route_source.score_version = manual-v4"));
+    assert(!packagedSkill.includes("risk:       qwen"));
+    assert(!packagedSkill.includes("planner:    deepseek"));
     assert(!packagedSkill.includes("\n  - Read\n"));
     const packagedReadme = fs.readFileSync(
       path.join(result.packageDir, "README.md"),

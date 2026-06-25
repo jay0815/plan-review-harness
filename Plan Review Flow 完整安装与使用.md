@@ -36,11 +36,11 @@ Plan Review Harness 由三部分组成：
 
 | 角色 | 模型 | 角色 | 模型 |
 |---|---|---|---|
-| risk | qwen | rebuttal | glm |
+| risk | kimi | rebuttal | glm |
 | architecture | kimi | fact_check | glm |
-| execution | kimi | synthesis | kimi |
+| execution | kimi | synthesis | glm |
 
-`planner` 当前不参与默认 Plan Review，路由为 `deepseek`。
+`planner` 当前不参与默认 Plan Review，路由为 `kimi`。
 
 ```mermaid
 flowchart LR
@@ -191,9 +191,9 @@ auth_env: ANTHROPIC_AUTH_TOKEN
 结论
 - run_id: pr-20260617-abc123
 - 状态: completed
-- 参与角色: risk(qwen), architecture(kimi), execution(kimi), rebuttal(glm)
+- 参与角色: risk(kimi), architecture(kimi), execution(kimi), rebuttal(glm)
 - Fact Check: glm
-- Synthesis: kimi
+- Synthesis: glm
 - 阻塞项: 2
 - 需人工裁决分歧: 1
 
@@ -236,7 +236,7 @@ Fact Check
 3. 明确记录 session 存储选型决策。
 
 Reviewer 附录
-- risk (qwen): 2 issues，侧重安全边界与异常路径
+- risk (kimi): 2 issues，侧重安全边界与异常路径
 - architecture (kimi): 1 issue，侧重模块耦合与数据流
 - execution (kimi): 2 issues，侧重实现可行性与测试覆盖
 - rebuttal (glm): 0 issues，主要对其他 Reviewer 结论提出质疑
@@ -591,7 +591,7 @@ status: completed
 outcome: present
 
 Reviewer 阶段
-- risk (qwen):        completed, issues=2
+- risk (kimi):        completed, issues=2
 - architecture (kimi): completed, issues=1
 - execution (kimi):   completed, issues=2
 - rebuttal (glm):     completed, issues=0
