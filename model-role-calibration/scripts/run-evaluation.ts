@@ -1,12 +1,34 @@
 #!/usr/bin/env node
 
-import fs = require('node:fs')
-import os = require('node:os')
-import path = require('node:path')
-import childProcess = require('node:child_process')
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import { spawn } from 'node:child_process'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import {
+  buildCodexArgs as buildCodexArgsTyped,
+  buildEvaluationPrompt as buildEvaluationPromptTyped,
+  evaluationPaths as evaluationPathsTyped,
+  evaluationSchemaFile,
+  hashText,
+  nextEvaluationAttempt as nextEvaluationAttemptTyped,
+  parseList as parseListTyped,
+  validateEvaluationScore as validateEvaluationScoreTyped,
+} from './evaluation-lib.js'
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  type ArgValue,
+  isMainScript,
+  loadConfig,
+  parseArgs,
+  parseJsonFile,
+  readText,
+  requireArg,
+  writeFileNew,
+  writeGenerated,
+} from './lib.js'
 
 interface CalibrationConfig {
   models: string[]
@@ -101,59 +123,30 @@ interface ExecuteEvaluationOptions {
   maxBuffer: number
 }
 
-const {
-  ROOT,
-  parseArgs,
-  requireArg,
-  assertSafeCaseId,
-  assertProbe,
-  loadConfig,
-  parseJsonFile,
-  readText,
-  writeFileNew,
-  writeGenerated,
-} = require('./lib') as {
-  ROOT: string
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-  assertSafeCaseId(caseId: string): void
-  assertProbe(probe: string): void
-  loadConfig(): CalibrationConfig
-  parseJsonFile<T = unknown>(file: string): T
-  readText(file: string): string
-  writeFileNew(file: string, content: string): void
-  writeGenerated(file: string, content: string): void
-}
-
-const {
-  parseList,
-  hashText,
-  buildEvaluationPrompt,
-  evaluationPaths,
-  nextEvaluationAttempt,
-  evaluationSchemaFile,
-  validateEvaluationScore,
-  buildCodexArgs,
-} = require('./evaluation-lib') as {
-  parseList(value: ArgValue, fallback: string[]): string[]
-  hashText(value: string): string
-  buildEvaluationPrompt(run: string, caseId: string, model: string, probe: string): BuiltEvaluationPrompt
-  evaluationPaths(run: string, caseId: string, model: string, probe: string): EvaluationPaths
-  nextEvaluationAttempt(paths: EvaluationPaths): EvaluationAttempt
-  evaluationSchemaFile(): string
-  validateEvaluationScore(
-    score: EvaluationScore,
-    expected: { case_id: string; model: string; probe: string },
-  ): EvaluationScore
-  buildCodexArgs(options: {
-    workDir: string
-    schemaFile: string
-    resultFile: string
-    codexModel?: string | null
-  }): string[]
-}
-
-const { spawn } = childProcess
+const parseList = parseListTyped as (value: ArgValue, fallback: string[]) => string[]
+const buildEvaluationPrompt = buildEvaluationPromptTyped as unknown as (
+  run: string,
+  caseId: string,
+  model: string,
+  probe: string,
+) => BuiltEvaluationPrompt
+const evaluationPaths = evaluationPathsTyped as unknown as (
+  run: string,
+  caseId: string,
+  model: string,
+  probe: string,
+) => EvaluationPaths
+const nextEvaluationAttempt = nextEvaluationAttemptTyped as unknown as (paths: EvaluationPaths) => EvaluationAttempt
+const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (
+  score: EvaluationScore,
+  expected: { case_id: string; model: string; probe: string },
+) => EvaluationScore
+const buildCodexArgs = buildCodexArgsTyped as (options: {
+  workDir: string
+  schemaFile: string
+  resultFile: string
+  codexModel?: string | null
+}) => string[]
 
 export function positiveInteger(value: unknown, name: string): number {
   const parsed = Number(value)
@@ -340,7 +333,7 @@ async function main(): Promise<void> {
   assertSafeCaseId(caseId)
   assertProbe(probe)
 
-  const config = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   for (const model of models) {
     if (!config.models.includes(model)) {
@@ -397,7 +390,7 @@ async function main(): Promise<void> {
   console.log('No formal score files were modified.')
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   main().catch((error: any) => {
     console.error(error.stack || error.message)
     process.exitCode = 1

@@ -1,16 +1,54 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.positiveInteger = positiveInteger;
 exports.runProcess = runProcess;
 exports.executeEvaluation = executeEvaluation;
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const childProcess = require("node:child_process");
-const { ROOT, parseArgs, requireArg, assertSafeCaseId, assertProbe, loadConfig, parseJsonFile, readText, writeFileNew, writeGenerated, } = require('./lib');
-const { parseList, hashText, buildEvaluationPrompt, evaluationPaths, nextEvaluationAttempt, evaluationSchemaFile, validateEvaluationScore, buildCodexArgs, } = require('./evaluation-lib');
-const { spawn } = childProcess;
+const fs = __importStar(require("node:fs"));
+const os = __importStar(require("node:os"));
+const path = __importStar(require("node:path"));
+const node_child_process_1 = require("node:child_process");
+const evaluation_lib_js_1 = require("./evaluation-lib.js");
+const lib_js_1 = require("./lib.js");
+const parseList = evaluation_lib_js_1.parseList;
+const buildEvaluationPrompt = evaluation_lib_js_1.buildEvaluationPrompt;
+const evaluationPaths = evaluation_lib_js_1.evaluationPaths;
+const nextEvaluationAttempt = evaluation_lib_js_1.nextEvaluationAttempt;
+const validateEvaluationScore = evaluation_lib_js_1.validateEvaluationScore;
+const buildCodexArgs = evaluation_lib_js_1.buildCodexArgs;
 function positiveInteger(value, name) {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -25,7 +63,7 @@ function runProcess(command, args, options) {
         let outputBytes = 0;
         let error = null;
         let killed = false;
-        const child = spawn(command, args, {
+        const child = (0, node_child_process_1.spawn)(command, args, {
             cwd: options.cwd,
             env: options.env,
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -74,15 +112,15 @@ function runProcess(command, args, options) {
 async function executeEvaluation(options) {
     const paths = evaluationPaths(options.run, options.caseId, options.model, options.probe);
     if (fs.existsSync(paths.draftFile)) {
-        console.log(`[skip] draft exists: ${path.relative(ROOT, paths.draftFile)}`);
+        console.log(`[skip] draft exists: ${path.relative(lib_js_1.ROOT, paths.draftFile)}`);
         return { status: 'skipped', paths };
     }
     const built = buildEvaluationPrompt(options.run, options.caseId, options.model, options.probe);
-    writeGenerated(paths.promptFile, built.prompt);
+    (0, lib_js_1.writeGenerated)(paths.promptFile, built.prompt);
     const attempt = nextEvaluationAttempt(paths);
-    writeFileNew(attempt.promptFile, built.prompt);
+    (0, lib_js_1.writeFileNew)(attempt.promptFile, built.prompt);
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-role-evaluation-'));
-    const schemaFile = evaluationSchemaFile();
+    const schemaFile = (0, evaluation_lib_js_1.evaluationSchemaFile)();
     const commandArgs = buildCodexArgs({
         workDir,
         schemaFile,
@@ -108,10 +146,10 @@ async function executeEvaluation(options) {
         fs.rmSync(workDir, { recursive: true, force: true });
     }
     if (child.stdout) {
-        writeFileNew(attempt.stdoutFile, child.stdout);
+        (0, lib_js_1.writeFileNew)(attempt.stdoutFile, child.stdout);
     }
     if (child.stderr) {
-        writeFileNew(attempt.stderrFile, child.stderr);
+        (0, lib_js_1.writeFileNew)(attempt.stderrFile, child.stderr);
     }
     const metadata = {
         run: options.run,
@@ -130,30 +168,30 @@ async function executeEvaluation(options) {
         codex_command: options.codexBin,
         codex_args: commandArgs,
         codex_model: options.codexModel || null,
-        prompt_file: path.relative(ROOT, paths.promptFile),
-        attempt_prompt_file: path.relative(ROOT, attempt.promptFile),
-        schema_file: path.relative(ROOT, schemaFile),
-        evaluator_file: path.relative(ROOT, built.files.evaluatorFile),
-        rubric_file: path.relative(ROOT, built.files.rubricFile),
-        candidate_output_file: path.relative(ROOT, built.files.outputFile),
+        prompt_file: path.relative(lib_js_1.ROOT, paths.promptFile),
+        attempt_prompt_file: path.relative(lib_js_1.ROOT, attempt.promptFile),
+        schema_file: path.relative(lib_js_1.ROOT, schemaFile),
+        evaluator_file: path.relative(lib_js_1.ROOT, built.files.evaluatorFile),
+        rubric_file: path.relative(lib_js_1.ROOT, built.files.rubricFile),
+        candidate_output_file: path.relative(lib_js_1.ROOT, built.files.outputFile),
         hashes: {
             ...built.hashes,
-            schema_sha256: hashText(readText(schemaFile)),
+            schema_sha256: (0, evaluation_lib_js_1.hashText)((0, lib_js_1.readText)(schemaFile)),
         },
     };
     if (child.error || child.status !== 0) {
-        writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
+        (0, lib_js_1.writeFileNew)(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
         const reason = child.error?.message || `exited with status ${child.status}`;
         throw new Error(`Codex evaluation failed for ${options.model}/${options.probe}: ${reason}`);
     }
     if (!fs.existsSync(attempt.resultFile)) {
         metadata.error = 'Codex did not write --output-last-message';
-        writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
+        (0, lib_js_1.writeFileNew)(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
         throw new Error(`Codex evaluation produced no result for ${options.model}/${options.probe}`);
     }
     let score;
     try {
-        score = parseJsonFile(attempt.resultFile);
+        score = (0, lib_js_1.parseJsonFile)(attempt.resultFile);
         validateEvaluationScore(score, {
             case_id: options.caseId,
             model: options.model,
@@ -162,26 +200,26 @@ async function executeEvaluation(options) {
     }
     catch (error) {
         metadata.error = error.message;
-        writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
+        (0, lib_js_1.writeFileNew)(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
         throw error;
     }
     metadata.status = 'completed';
     metadata.error = null;
-    metadata.result_sha256 = hashText(JSON.stringify(score));
-    writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
-    writeFileNew(paths.draftFile, JSON.stringify(score, null, 2) + '\n');
+    metadata.result_sha256 = (0, evaluation_lib_js_1.hashText)(JSON.stringify(score));
+    (0, lib_js_1.writeFileNew)(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n');
+    (0, lib_js_1.writeFileNew)(paths.draftFile, JSON.stringify(score, null, 2) + '\n');
     console.log(`[done] ${options.model}/${options.probe}: ${score.total}/25`);
-    console.log(`  draft: ${path.relative(ROOT, paths.draftFile)}`);
+    console.log(`  draft: ${path.relative(lib_js_1.ROOT, paths.draftFile)}`);
     return { status: 'completed', paths, score };
 }
 async function main() {
-    const args = parseArgs(process.argv);
-    const run = requireArg(args, 'run');
-    const caseId = requireArg(args, 'case');
-    const probe = requireArg(args, 'probe');
-    assertSafeCaseId(caseId);
-    assertProbe(probe);
-    const config = loadConfig();
+    const args = (0, lib_js_1.parseArgs)(process.argv);
+    const run = (0, lib_js_1.requireArg)(args, 'run');
+    const caseId = (0, lib_js_1.requireArg)(args, 'case');
+    const probe = (0, lib_js_1.requireArg)(args, 'probe');
+    (0, lib_js_1.assertSafeCaseId)(caseId);
+    (0, lib_js_1.assertProbe)(probe);
+    const config = (0, lib_js_1.loadConfig)();
     const models = parseList(args.models, config.models).map((item) => item.toLowerCase());
     for (const model of models) {
         if (!config.models.includes(model)) {
@@ -196,8 +234,8 @@ async function main() {
     for (const model of models) {
         const built = buildEvaluationPrompt(run, caseId, model, probe);
         const paths = evaluationPaths(run, caseId, model, probe);
-        writeGenerated(paths.promptFile, built.prompt);
-        console.log(`[prompt] ${model}/${probe}: ${path.relative(ROOT, paths.promptFile)}`);
+        (0, lib_js_1.writeGenerated)(paths.promptFile, built.prompt);
+        console.log(`[prompt] ${model}/${probe}: ${path.relative(lib_js_1.ROOT, paths.promptFile)}`);
     }
     if (!execute) {
         console.log('\nEvaluation prompts generated. No model was executed.');
@@ -230,7 +268,7 @@ async function main() {
     console.log('\nDraft evaluations completed. Review all four drafts before promotion.');
     console.log('No formal score files were modified.');
 }
-if (require.main === module) {
+if ((0, lib_js_1.isMainScript)(__filename)) {
     main().catch((error) => {
         console.error(error.stack || error.message);
         process.exitCode = 1;
