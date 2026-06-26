@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import os = require('node:os')
-import path = require('node:path')
+import * as os from 'node:os'
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { type ParsedArgs, isMainScript, parseArgs } from './lib.js'
+import { backfillRunManifest as backfillRunManifestUntyped } from './workspace-review-manifest.js'
 
 interface ResolveRunDirOptions {
   workspaceRunsDir?: string
@@ -16,13 +16,7 @@ interface RunManifest {
   resolved_execution?: Record<string, unknown>
 }
 
-const { parseArgs } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-}
-
-const { backfillRunManifest } = require('./workspace-review-manifest') as {
-  backfillRunManifest(runDir: string, options: { force: boolean }): RunManifest
-}
+const backfillRunManifest = backfillRunManifestUntyped as (runDir: string, options: { force: boolean }) => RunManifest
 
 const DEFAULT_WORKSPACE_RUNS_DIR = path.join(os.homedir(), '.claude', 'plan-review-harness', 'mcp', 'workspace-runs')
 
@@ -66,7 +60,7 @@ function main(): void {
   )
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   try {
     main()
   } catch (error: unknown) {
