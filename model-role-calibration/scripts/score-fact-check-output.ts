@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { scoreOutput as scoreOutputUntyped } from './fact-check-calibration-lib.js'
+import { parseArgs, requireArg } from './lib.js'
 
 interface FactCheckScore {
   model: string
@@ -12,14 +12,7 @@ interface FactCheckScore {
   }
 }
 
-const { parseArgs, requireArg } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-}
-
-const { scoreOutput } = require('./fact-check-calibration-lib') as {
-  scoreOutput(opts: { run: string; caseId: string; model: string }): FactCheckScore
-}
+const scoreOutput = scoreOutputUntyped as (opts: { run: string; caseId: string; model: string }) => FactCheckScore
 
 function main(): void {
   const args = parseArgs(process.argv)

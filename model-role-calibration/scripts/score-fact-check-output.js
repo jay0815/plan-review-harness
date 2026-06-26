@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const { parseArgs, requireArg } = require('./lib');
-const { scoreOutput } = require('./fact-check-calibration-lib');
+const fact_check_calibration_lib_js_1 = require("./fact-check-calibration-lib.js");
+const lib_js_1 = require("./lib.js");
+const scoreOutput = fact_check_calibration_lib_js_1.scoreOutput;
 function main() {
-    const args = parseArgs(process.argv);
+    const args = (0, lib_js_1.parseArgs)(process.argv);
     const score = scoreOutput({
-        run: requireArg(args, 'run'),
-        caseId: requireArg(args, 'case'),
-        model: requireArg(args, 'model'),
+        run: (0, lib_js_1.requireArg)(args, 'run'),
+        caseId: (0, lib_js_1.requireArg)(args, 'case'),
+        model: (0, lib_js_1.requireArg)(args, 'model'),
     });
     console.log(`Scored ${score.model}/${score.case_id}`);
     console.log(`Status accuracy: ${score.metrics.status_accuracy}`);
