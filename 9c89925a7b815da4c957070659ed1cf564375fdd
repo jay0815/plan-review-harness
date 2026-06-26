@@ -1,0 +1,48 @@
+docs/context.md
+  9c4bfa9ef80d8a12 1-20
+wiki/modules/workspace-review.md
+  9c4bfa9ef80d8a12 1-42
+docs/debt.md
+  9c4bfa9ef80d8a12 1-22
+wiki/modules/plan-review.md
+  9c4bfa9ef80d8a12 1-36
+wiki/modules/fact-check.md
+  9c4bfa9ef80d8a12 1-26
+docs/errors.md
+  9c4bfa9ef80d8a12 1-22
+CLAUDE.md
+  9c4bfa9ef80d8a12 1-59
+wiki/pitfalls.md
+  9c4bfa9ef80d8a12 1-33
+wiki/conventions.md
+  9c4bfa9ef80d8a12 1-31
+wiki/architecture.md
+  9c4bfa9ef80d8a12 1-41
+docs/decisions.md
+  9c4bfa9ef80d8a12 1-22
+docs/roadmap.md
+  9c4bfa9ef80d8a12 1-23
+docs/backlog.md
+  9c4bfa9ef80d8a12 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "9c89925a7b815da4c957070659ed1cf564375fdd",
+  "prompts": {
+    "9c4bfa9ef80d8a12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4eb87c77-b3d6-4561-8aea-f7800264cddc",
+        "model": "mimo-v2.5-pro"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 394,
+      "total_deletions": 0,
+      "accepted_lines": 394,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/40485f8708ecf9ea446ae19ae4badda81e4caece096b4a12de80bac3bc726674"
+    }
+  }
+}
