@@ -1,34 +1,22 @@
 #!/usr/bin/env node
 
-import path = require('node:path')
+import * as path from 'node:path'
 
-import { parseList } from './calibration/core'
-import { type CalibrationExecutor, runCalibration } from './calibration/runner'
-
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { parseList } from './calibration/core.js'
+import { type CalibrationExecutor, runCalibration } from './calibration/runner.js'
+import { DEFAULT_CONCURRENCY, RoleCalibrationExecutor } from './calibration/role-executor.js'
+import { PROBES, isMainScript, loadConfig, parseArgs } from './lib.js'
 
 interface CalibrationConfig {
   models: string[]
   [key: string]: unknown
 }
 
-const { PROBES, parseArgs, loadConfig } = require('./lib') as {
-  PROBES: string[]
-  parseArgs(argv: string[]): ParsedArgs
-  loadConfig(): CalibrationConfig
-}
-
-const { RoleCalibrationExecutor, DEFAULT_CONCURRENCY } = require('./calibration/role-executor') as {
-  RoleCalibrationExecutor: new () => CalibrationExecutor & { root: string }
-  DEFAULT_CONCURRENCY: number
-}
-
 export const DEFAULT_CASE = 'synthetic/event-reporting'
 
 export async function main(): Promise<void> {
   const args = parseArgs(process.argv)
-  const config = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const run = args.run && args.run !== true ? String(args.run) : null
   const caseId = args.case && args.case !== true ? String(args.case) : DEFAULT_CASE
   const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
@@ -36,7 +24,7 @@ export async function main(): Promise<void> {
   const concurrency = args.concurrency && args.concurrency !== true ? Number(args.concurrency) : DEFAULT_CONCURRENCY
   const force = args.force === true
 
-  const executor = new RoleCalibrationExecutor()
+  const executor = new RoleCalibrationExecutor() as unknown as CalibrationExecutor & { root: string }
   if (force) {
     console.warn(
       'Warning: --force refreshes matching prompts and model outputs. ' +
@@ -62,7 +50,7 @@ export async function main(): Promise<void> {
   console.log('Automated evaluation is not enabled yet.')
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.stack || error.message : String(error)
     console.error(message)
