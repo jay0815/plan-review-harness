@@ -1,23 +1,22 @@
 #!/usr/bin/env node
 
-import fs = require('node:fs')
-import path = require('node:path')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
 type ArgValue = string | true | undefined
 type ParsedArgs = Record<string, ArgValue>
 
-const { ROOT, parseArgs, requireArg, assertSafeCaseId, assertProbe, ensureDir, writeGenerated, slug, readText } =
-  require('./lib') as {
-    ROOT: string
-    parseArgs(argv: string[]): ParsedArgs
-    requireArg(args: ParsedArgs, name: string): string
-    assertSafeCaseId(caseId: string): void
-    assertProbe(probe: string): void
-    ensureDir(dir: string): void
-    writeGenerated(file: string, content: string): void
-    slug(value: string): string
-    readText(file: string): string
-  }
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  ensureDir,
+  parseArgs,
+  readText,
+  requireArg,
+  slug,
+  writeGenerated,
+} from './lib.js'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
