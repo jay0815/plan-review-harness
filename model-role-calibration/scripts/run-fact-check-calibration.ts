@@ -1,20 +1,8 @@
 #!/usr/bin/env node
 
-import { type CalibrationExecutor, runCalibration } from './calibration/runner'
-
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
-
-const { parseArgs, requireArg, loadConfig } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-  loadConfig(): unknown
-}
-
-const { FactCheckExecutor, DEFAULT_CONCURRENCY } = require('./calibration/fact-check-executor') as {
-  FactCheckExecutor: new () => CalibrationExecutor
-  DEFAULT_CONCURRENCY: number
-}
+import { DEFAULT_CONCURRENCY, FactCheckExecutor } from './calibration/fact-check-executor.js'
+import { type CalibrationExecutor, runCalibration } from './calibration/runner.js'
+import { isMainScript, loadConfig, parseArgs, requireArg } from './lib.js'
 
 function parseModels(value: string): string[] {
   return String(value || '')
@@ -32,7 +20,7 @@ async function main(): Promise<void> {
   const models = parseModels(requireArg(args, 'models'))
   const concurrency = args.concurrency && args.concurrency !== true ? Number(args.concurrency) : DEFAULT_CONCURRENCY
 
-  const executor = new FactCheckExecutor()
+  const executor = new FactCheckExecutor() as unknown as CalibrationExecutor
   const batch = await runCalibration(executor, {
     run,
     caseId,
@@ -45,7 +33,7 @@ async function main(): Promise<void> {
   console.log(JSON.stringify(batch, null, 2))
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.stack || error.message : String(error)
     console.error(message)
