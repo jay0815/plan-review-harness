@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { generatePrompts as generatePromptsUntyped } from './fact-check-calibration-lib.js'
+import { parseArgs, requireArg } from './lib.js'
 
 interface GeneratePromptsResult {
   prompt_dir: string
   models: string[]
 }
 
-const { parseArgs, requireArg } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-}
-
-const { generatePrompts } = require('./fact-check-calibration-lib') as {
-  generatePrompts(opts: { run: string; caseId: string; models: string[] }): GeneratePromptsResult
-}
+const generatePrompts = generatePromptsUntyped as (opts: {
+  run: string
+  caseId: string
+  models: string[]
+}) => GeneratePromptsResult
 
 function parseModels(value: string): string[] {
   return value
