@@ -1,11 +1,44 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listScoreFiles = listScoreFiles;
 exports.listVersionedScoreFiles = listVersionedScoreFiles;
 exports.roleRecommendation = roleRecommendation;
-const path = require("node:path");
-const { ROOT, parseArgs, requireArg, parseJsonFile, loadConfig, sumScore, walk, writeGenerated, optionalSlugArg } = require('./lib');
+const path = __importStar(require("node:path"));
+const lib_js_1 = require("./lib.js");
 const PROBE_COLUMNS = ['planner', 'risk', 'architecture', 'execution', 'rebuttal', 'synthesis'];
 const ROLE_BY_PROBE = {
     planner: 'A Planner',
@@ -71,13 +104,13 @@ function listScoreFiles(runDir, scoreVersion = null) {
     const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`;
     if (scoreVersion) {
         const versionSegment = `${versionsSegment}${scoreVersion}${path.sep}`;
-        return walk(runDir, (file) => file.endsWith('.score.json') && file.includes(versionSegment));
+        return (0, lib_js_1.walk)(runDir, (file) => file.endsWith('.score.json') && file.includes(versionSegment));
     }
-    return walk(runDir, (file) => file.endsWith('.score.json') && !file.includes(draftsSegment) && !file.includes(versionsSegment));
+    return (0, lib_js_1.walk)(runDir, (file) => file.endsWith('.score.json') && !file.includes(draftsSegment) && !file.includes(versionsSegment));
 }
 function listVersionedScoreFiles(runDir) {
     const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`;
-    return walk(runDir, (file) => file.endsWith('.score.json') && file.includes(versionsSegment));
+    return (0, lib_js_1.walk)(runDir, (file) => file.endsWith('.score.json') && file.includes(versionsSegment));
 }
 function roleRecommendation(probe, modelStats, config) {
     const role = ROLE_BY_PROBE[probe];
@@ -169,23 +202,23 @@ function roleRecommendation(probe, modelStats, config) {
     };
 }
 function main() {
-    const args = parseArgs(process.argv);
-    const run = requireArg(args, 'run');
-    const config = loadConfig();
-    const runDir = path.join(ROOT, 'runs', run);
-    const scoreVersion = optionalSlugArg(args, 'score-version');
+    const args = (0, lib_js_1.parseArgs)(process.argv);
+    const run = (0, lib_js_1.requireArg)(args, 'run');
+    const config = (0, lib_js_1.loadConfig)();
+    const runDir = path.join(lib_js_1.ROOT, 'runs', run);
+    const scoreVersion = (0, lib_js_1.optionalSlugArg)(args, 'score-version');
     const scoreFiles = listScoreFiles(runDir, scoreVersion);
     if (!scoreVersion && !scoreFiles.length && listVersionedScoreFiles(runDir).length) {
         throw new Error('No unversioned score files found, but versioned scores exist. ' +
             'Pass --score-version <version> to summarize them.');
     }
     const scores = scoreFiles.map((file) => {
-        const data = parseJsonFile(file);
-        const computedTotal = sumScore(data.score || {});
+        const data = (0, lib_js_1.parseJsonFile)(file);
+        const computedTotal = (0, lib_js_1.sumScore)(data.score || {});
         return {
             ...data,
             total: Number(data.total || computedTotal),
-            score_file: path.relative(ROOT, file),
+            score_file: path.relative(lib_js_1.ROOT, file),
         };
     });
     const cases = [...new Set(scores.map((item) => item.case_id))].sort();
@@ -261,9 +294,9 @@ function main() {
         })),
         role_recommendations: roleRecommendations,
     };
-    writeGenerated(path.join(ROOT, 'outputs', 'calibration-results.json'), JSON.stringify(results, null, 2) + '\n');
-    writeGenerated(path.join(ROOT, 'outputs', 'calibration-summary.md'), renderSummary(results));
-    writeGenerated(path.join(ROOT, 'outputs', 'model-role-map.md'), renderRoleMap(results));
+    (0, lib_js_1.writeGenerated)(path.join(lib_js_1.ROOT, 'outputs', 'calibration-results.json'), JSON.stringify(results, null, 2) + '\n');
+    (0, lib_js_1.writeGenerated)(path.join(lib_js_1.ROOT, 'outputs', 'calibration-summary.md'), renderSummary(results));
+    (0, lib_js_1.writeGenerated)(path.join(lib_js_1.ROOT, 'outputs', 'model-role-map.md'), renderRoleMap(results));
     console.log(`Scores read: ${scores.length}`);
     if (scoreVersion) {
         console.log(`Score version: ${scoreVersion}`);
@@ -390,6 +423,6 @@ function renderRoleMap(results) {
     lines.push('');
     return lines.join('\n');
 }
-if (require.main === module) {
+if ((0, lib_js_1.isMainScript)(__filename)) {
     main();
 }

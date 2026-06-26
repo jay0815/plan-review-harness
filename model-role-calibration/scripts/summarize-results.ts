@@ -1,9 +1,20 @@
 #!/usr/bin/env node
 
-import path = require('node:path')
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import {
+  ROOT,
+  isMainScript,
+  loadConfig,
+  optionalSlugArg,
+  parseArgs,
+  parseJsonFile,
+  requireArg,
+  sumScore,
+  walk,
+  writeGenerated,
+} from './lib.js'
+
 type Probe = 'planner' | 'risk' | 'architecture' | 'execution' | 'rebuttal' | 'synthesis'
 type RoleName = 'A Planner' | 'D Risk Reviewer' | 'B Architecture Reviewer' | 'C Execution Reviewer' | 'S Synthesizer'
 
@@ -114,19 +125,6 @@ interface SummaryResults {
   model_probe_averages: ModelProbeAverage[]
   role_recommendations: RoleRecommendation[]
 }
-
-const { ROOT, parseArgs, requireArg, parseJsonFile, loadConfig, sumScore, walk, writeGenerated, optionalSlugArg } =
-  require('./lib') as {
-    ROOT: string
-    parseArgs(argv: string[]): ParsedArgs
-    requireArg(args: ParsedArgs, name: string): string
-    parseJsonFile<T = unknown>(file: string): T
-    loadConfig(): CalibrationConfig
-    sumScore(score: Record<string, unknown>): number
-    walk(dir: string, predicate?: (file: string) => boolean, results?: string[]): string[]
-    writeGenerated(file: string, content: string): void
-    optionalSlugArg(args: ParsedArgs, name: string): string | null
-  }
 
 const PROBE_COLUMNS: Probe[] = ['planner', 'risk', 'architecture', 'execution', 'rebuttal', 'synthesis']
 const ROLE_BY_PROBE: Partial<Record<Probe, RoleName>> = {
@@ -312,7 +310,7 @@ export function roleRecommendation(
 function main(): void {
   const args = parseArgs(process.argv)
   const run = requireArg(args, 'run')
-  const config = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const runDir = path.join(ROOT, 'runs', run)
   const scoreVersion = optionalSlugArg(args, 'score-version')
   const scoreFiles = listScoreFiles(runDir, scoreVersion)
@@ -568,6 +566,6 @@ function renderRoleMap(results: SummaryResults): string {
   return lines.join('\n')
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   main()
 }
