@@ -1,8 +1,10 @@
-import fs = require('node:fs')
-import path = require('node:path')
-import childProcess = require('node:child_process')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import { spawn } from 'node:child_process'
 
-import { slug, uniqueRunId as createUniqueRunId } from './core'
+import { generatePrompts as generateRolePrompts } from '../generate-prompts.js'
+import { ROOT, agentOutputPaths, assertProbe, assertSafeCaseId, parseJsonFile } from '../lib.js'
+import { slug, uniqueRunId as createUniqueRunId } from './core.js'
 
 interface CalibrationConfig {
   models: string[]
@@ -14,11 +16,6 @@ interface RoleJob {
   caseId: string
   model: string
   probe: string
-}
-
-interface AgentOutputPaths {
-  attemptsDir: string
-  resultFile: string
 }
 
 interface AttemptMetadata {
@@ -90,27 +87,6 @@ interface JobStage {
 interface InternalJobStage extends JobStage {
   key: string
 }
-
-interface GenerateRolePromptsOptions {
-  run: string
-  caseId: string
-  probes: string[]
-  force?: boolean
-}
-
-const { ROOT, assertProbe, assertSafeCaseId, agentOutputPaths, parseJsonFile } = require('../lib') as {
-  ROOT: string
-  assertProbe(probe: string): void
-  assertSafeCaseId(caseId: string): void
-  agentOutputPaths(run: string, caseId: string, model: string, probe: string): AgentOutputPaths
-  parseJsonFile<T = unknown>(file: string): T
-}
-
-const { generatePrompts: generateRolePrompts } = require('../generate-prompts') as {
-  generatePrompts(options: GenerateRolePromptsOptions): unknown
-}
-
-const { spawn } = childProcess
 
 export const DEFAULT_CONCURRENCY = 3
 
