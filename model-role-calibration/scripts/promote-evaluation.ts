@@ -1,10 +1,27 @@
 #!/usr/bin/env node
 
-import fs = require('node:fs')
-import path = require('node:path')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import {
+  evaluationPaths as evaluationPathsTyped,
+  hashText,
+  parseList as parseListTyped,
+  validateEvaluationScore as validateEvaluationScoreTyped,
+} from './evaluation-lib.js'
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  type ArgValue,
+  isMainScript,
+  loadConfig,
+  parseArgs,
+  parseJsonFile,
+  requireArg,
+  timestamp,
+  writeFileNew,
+} from './lib.js'
 
 interface CalibrationConfig {
   models: string[]
@@ -28,34 +45,17 @@ interface PendingPromotion {
   score: EvaluationScore
 }
 
-const {
-  ROOT,
-  parseArgs,
-  requireArg,
-  assertSafeCaseId,
-  assertProbe,
-  loadConfig,
-  parseJsonFile,
-  timestamp,
-  writeFileNew,
-} = require('./lib') as {
-  ROOT: string
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-  assertSafeCaseId(caseId: string): void
-  assertProbe(probe: string): void
-  loadConfig(): CalibrationConfig
-  parseJsonFile<T = unknown>(file: string): T
-  timestamp(): string
-  writeFileNew(file: string, content: string): void
-}
-
-const { parseList, hashText, evaluationPaths, validateEvaluationScore } = require('./evaluation-lib') as {
-  parseList(value: ArgValue, fallback: string[]): string[]
-  hashText(text: string): string
-  evaluationPaths(run: string, caseId: string, model: string, probe: string): EvaluationPaths
-  validateEvaluationScore(score: EvaluationScore, expected: { case_id: string; model: string; probe: string }): void
-}
+const parseList = parseListTyped as (value: ArgValue, fallback: string[]) => string[]
+const evaluationPaths = evaluationPathsTyped as (
+  run: string,
+  caseId: string,
+  model: string,
+  probe: string,
+) => EvaluationPaths
+const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (
+  score: EvaluationScore,
+  expected: { case_id: string; model: string; probe: string },
+) => void
 
 function main(): void {
   const args = parseArgs(process.argv)
@@ -68,7 +68,7 @@ function main(): void {
     throw new Error('Refusing promotion without explicit --confirmed')
   }
 
-  const config = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   const pending: PendingPromotion[] = models.map((model) => {
     if (!config.models.includes(model)) {
@@ -111,7 +111,7 @@ function main(): void {
   console.log(`Promotion decision saved: ${path.relative(ROOT, decisionFile)}`)
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   try {
     main()
   } catch (error: unknown) {
