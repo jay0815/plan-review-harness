@@ -1,21 +1,19 @@
 #!/usr/bin/env node
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { ingestOutput as ingestOutputUntyped } from './fact-check-calibration-lib.js'
+import { parseArgs, requireArg } from './lib.js'
 
 interface IngestOutputResult {
   raw_file: string
   normalized_file: string
 }
 
-const { parseArgs, requireArg } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-}
-
-const { ingestOutput } = require('./fact-check-calibration-lib') as {
-  ingestOutput(opts: { run: string; caseId: string; model: string; file: string }): IngestOutputResult
-}
+const ingestOutput = ingestOutputUntyped as (opts: {
+  run: string
+  caseId: string
+  model: string
+  file: string
+}) => IngestOutputResult
 
 function main(): void {
   const args = parseArgs(process.argv)
