@@ -1,79 +1,51 @@
 #!/usr/bin/env node
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SKILL_SOURCE = exports.RUNTIME_FILES = exports.PACKAGE_NAME = void 0;
-exports.buildDistribution = buildDistribution;
-const node_child_process_1 = require("node:child_process");
-const fs = __importStar(require("node:fs"));
-const path = __importStar(require("node:path"));
-const lib_js_1 = require("./lib.js");
-exports.PACKAGE_NAME = 'plan-review-harness-claude-code';
-const DEFAULT_OUTPUT_DIR = path.join(lib_js_1.ROOT, 'dist');
-exports.RUNTIME_FILES = [
-    'scripts/lib.js',
-    'scripts/run-model.js',
-    'scripts/json-validator-mcp.js',
-    'scripts/plan-authoring-lint.js',
-    'scripts/workspace-review-lib.js',
-    'scripts/workspace-review-manifest.js',
-    'scripts/run-workspace-review.js',
-    'scripts/retry-workspace-review-stage.js',
-    'scripts/plan-review-mcp.js',
-    'scripts/inspect-workspace-run.js',
-    'scripts/verify-workspace-review-run.js',
-    'scripts/doctor-workspace-review-run.js',
-    'scripts/backfill-workspace-run-manifest.js',
-    'default-role-routes.json',
-    'claude-plan-authoring.md',
-    'prompts/probe-risk.md',
-    'prompts/probe-architecture.md',
-    'prompts/probe-execution.md',
-    'prompts/probe-rebuttal.md',
-    'prompts/probe-fact_check.md',
-    'prompts/probe-synthesis.md',
-    'schemas/risk-output.schema.json',
-    'schemas/architecture-output.schema.json',
-    'schemas/execution-output.schema.json',
-    'schemas/rebuttal-output.schema.json',
-    'schemas/fact-check-output.schema.json',
-    'schemas/synthesis-output.schema.json',
-];
-exports.SKILL_SOURCE = 'claude-code/skills/plan-review/SKILL.md';
+
+import { spawnSync } from 'node:child_process'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
+import { ROOT, isMainScript, parseArgs } from './lib.js'
+
+interface BuildDistributionOptions {
+  outputDir?: string
+  createArchive?: boolean
+}
+
+export const PACKAGE_NAME = 'plan-review-harness-claude-code'
+const DEFAULT_OUTPUT_DIR = path.join(ROOT, 'dist')
+export const RUNTIME_FILES = [
+  'scripts/lib.js',
+  'scripts/run-model.js',
+  'scripts/json-validator-mcp.js',
+  'scripts/plan-authoring-lint.js',
+  'scripts/workspace-review-lib.js',
+  'scripts/workspace-review-manifest.js',
+  'scripts/run-workspace-review.js',
+  'scripts/retry-workspace-review-stage.js',
+  'scripts/plan-review-mcp.js',
+  'scripts/inspect-workspace-run.js',
+  'scripts/verify-workspace-review-run.js',
+  'scripts/doctor-workspace-review-run.js',
+  'scripts/backfill-workspace-run-manifest.js',
+  'default-role-routes.json',
+  'claude-plan-authoring.md',
+  'prompts/probe-risk.md',
+  'prompts/probe-architecture.md',
+  'prompts/probe-execution.md',
+  'prompts/probe-rebuttal.md',
+  'prompts/probe-fact_check.md',
+  'prompts/probe-synthesis.md',
+  'schemas/risk-output.schema.json',
+  'schemas/architecture-output.schema.json',
+  'schemas/execution-output.schema.json',
+  'schemas/rebuttal-output.schema.json',
+  'schemas/fact-check-output.schema.json',
+  'schemas/synthesis-output.schema.json',
+]
+export const SKILL_SOURCE = 'claude-code/skills/plan-review/SKILL.md'
+
 function installScript() {
-    return `#!/bin/sh
+  return `#!/bin/sh
 set -eu
 
 PACKAGE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
@@ -161,10 +133,11 @@ printf 'MCP runtime：%s\\n' "$MCP_TARGET"
 printf 'Skill：%s\\n' "$SKILL_TARGET"
 printf 'Settings：%s\\n' "$SETTINGS_DIR"
 printf '请重启 Claude Code，然后执行：/plan-review --check 或 /plan-review [计划文件路径]\\n'
-`;
+`
 }
+
 function uninstallScript() {
-    return `#!/bin/sh
+  return `#!/bin/sh
 set -eu
 
 CLAUDE_ROOT=\${CLAUDE_CONFIG_DIR:-"$HOME/.claude"}
@@ -188,10 +161,11 @@ for target in "$MCP_TARGET" "$SKILL_TARGET"; do
     printf '已删除：%s\\n' "$target"
   fi
 done
-`;
+`
 }
+
 function packageReadme() {
-    return `# Plan Review Harness Claude Code 分发包
+  return `# Plan Review Harness Claude Code 分发包
 
 本包不使用 marketplace。
 
@@ -421,90 +395,98 @@ Reviewer、Fact Check 和 Synthesizer 使用 \`review-plan.md\`。
 \`\`\`
 
 卸载器只删除带本安装器所有权标记的目录。
-`;
+`
 }
+
 function copyFile(source, destination) {
-    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
-        throw new Error(`Distribution source file does not exist: ${source}`);
-    }
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(source, destination);
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+    throw new Error(`Distribution source file does not exist: ${source}`)
+  }
+  fs.mkdirSync(path.dirname(destination), { recursive: true })
+  fs.copyFileSync(source, destination)
 }
+
 function writeExecutable(file, content) {
-    fs.writeFileSync(file, content, 'utf8');
-    fs.chmodSync(file, 0o755);
+  fs.writeFileSync(file, content, 'utf8')
+  fs.chmodSync(file, 0o755)
 }
+
 function createArchive(outputDir, packageDir) {
-    const archiveFile = path.join(outputDir, `${exports.PACKAGE_NAME}.tar.gz`);
-    if (fs.existsSync(archiveFile)) {
-        fs.rmSync(archiveFile);
-    }
-    const result = (0, node_child_process_1.spawnSync)('tar', ['-czf', archiveFile, '-C', outputDir, path.basename(packageDir)], {
-        encoding: 'utf8',
-    });
-    if (result.error || result.status !== 0) {
-        const reason = result.error?.message || result.stderr.trim() || `exit ${result.status}`;
-        throw new Error(`Unable to create distribution archive: ${reason}`);
-    }
-    return archiveFile;
+  const archiveFile = path.join(outputDir, `${PACKAGE_NAME}.tar.gz`)
+  if (fs.existsSync(archiveFile)) {
+    fs.rmSync(archiveFile)
+  }
+  const result = spawnSync('tar', ['-czf', archiveFile, '-C', outputDir, path.basename(packageDir)], {
+    encoding: 'utf8',
+  })
+  if (result.error || result.status !== 0) {
+    const reason = result.error?.message || result.stderr.trim() || `exit ${result.status}`
+    throw new Error(`Unable to create distribution archive: ${reason}`)
+  }
+  return archiveFile
 }
-function buildDistribution(options = {}) {
-    const outputDir = path.resolve(options.outputDir || DEFAULT_OUTPUT_DIR);
-    const packageDir = path.join(outputDir, exports.PACKAGE_NAME);
-    fs.mkdirSync(outputDir, { recursive: true });
-    fs.rmSync(packageDir, { recursive: true, force: true });
-    fs.mkdirSync(packageDir, { recursive: false });
-    for (const relativeFile of exports.RUNTIME_FILES) {
-        copyFile(path.join(lib_js_1.ROOT, relativeFile), path.join(packageDir, 'mcp', relativeFile));
-    }
-    copyFile(path.join(lib_js_1.ROOT, exports.SKILL_SOURCE), path.join(packageDir, 'skill', 'plan-review', 'SKILL.md'));
-    fs.mkdirSync(path.join(packageDir, 'mcp', 'workspace-runs'), { recursive: true });
-    fs.writeFileSync(path.join(packageDir, 'mcp', 'workspace-runs', '.gitkeep'), '', 'utf8');
-    writeExecutable(path.join(packageDir, 'install.sh'), installScript());
-    writeExecutable(path.join(packageDir, 'uninstall.sh'), uninstallScript());
-    fs.writeFileSync(path.join(packageDir, 'README.md'), packageReadme(), 'utf8');
-    const manifest = {
-        name: exports.PACKAGE_NAME,
-        format_version: 1,
-        generated_at: new Date().toISOString(),
-        install_mode: {
-            mcp: 'claude mcp add --scope user',
-            skill: 'direct-copy',
-        },
-        files: [
-            ...exports.RUNTIME_FILES.map((file) => `mcp/${file}`),
-            'mcp/workspace-runs/.gitkeep',
-            'skill/plan-review/SKILL.md',
-            'install.sh',
-            'uninstall.sh',
-            'README.md',
-        ],
-    };
-    fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
-    return {
-        outputDir,
-        packageDir,
-        archiveFile: options.createArchive === false ? null : createArchive(outputDir, packageDir),
-    };
+
+export function buildDistribution(options: BuildDistributionOptions = {}) {
+  const outputDir = path.resolve(options.outputDir || DEFAULT_OUTPUT_DIR)
+  const packageDir = path.join(outputDir, PACKAGE_NAME)
+  fs.mkdirSync(outputDir, { recursive: true })
+  fs.rmSync(packageDir, { recursive: true, force: true })
+  fs.mkdirSync(packageDir, { recursive: false })
+
+  for (const relativeFile of RUNTIME_FILES) {
+    copyFile(path.join(ROOT, relativeFile), path.join(packageDir, 'mcp', relativeFile))
+  }
+  copyFile(path.join(ROOT, SKILL_SOURCE), path.join(packageDir, 'skill', 'plan-review', 'SKILL.md'))
+  fs.mkdirSync(path.join(packageDir, 'mcp', 'workspace-runs'), { recursive: true })
+  fs.writeFileSync(path.join(packageDir, 'mcp', 'workspace-runs', '.gitkeep'), '', 'utf8')
+  writeExecutable(path.join(packageDir, 'install.sh'), installScript())
+  writeExecutable(path.join(packageDir, 'uninstall.sh'), uninstallScript())
+  fs.writeFileSync(path.join(packageDir, 'README.md'), packageReadme(), 'utf8')
+
+  const manifest = {
+    name: PACKAGE_NAME,
+    format_version: 1,
+    generated_at: new Date().toISOString(),
+    install_mode: {
+      mcp: 'claude mcp add --scope user',
+      skill: 'direct-copy',
+    },
+    files: [
+      ...RUNTIME_FILES.map((file) => `mcp/${file}`),
+      'mcp/workspace-runs/.gitkeep',
+      'skill/plan-review/SKILL.md',
+      'install.sh',
+      'uninstall.sh',
+      'README.md',
+    ],
+  }
+  fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+
+  return {
+    outputDir,
+    packageDir,
+    archiveFile: options.createArchive === false ? null : createArchive(outputDir, packageDir),
+  }
 }
+
 function main() {
-    const args = (0, lib_js_1.parseArgs)(process.argv);
-    const result = buildDistribution({
-        outputDir: args['output-dir'] && args['output-dir'] !== true ? String(args['output-dir']) : undefined,
-        createArchive: args['no-archive'] !== true,
-    });
-    console.log(`Distribution directory: ${result.packageDir}`);
-    if (result.archiveFile) {
-        console.log(`Distribution archive: ${result.archiveFile}`);
-    }
+  const args = parseArgs(process.argv)
+  const result = buildDistribution({
+    outputDir: args['output-dir'] && args['output-dir'] !== true ? String(args['output-dir']) : undefined,
+    createArchive: args['no-archive'] !== true,
+  })
+  console.log(`Distribution directory: ${result.packageDir}`)
+  if (result.archiveFile) {
+    console.log(`Distribution archive: ${result.archiveFile}`)
+  }
 }
-if ((0, lib_js_1.isMainScript)(__filename)) {
-    try {
-        main();
-    }
-    catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(message);
-        process.exitCode = 1;
-    }
+
+if (isMainScript(__filename)) {
+  try {
+    main()
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(message)
+    process.exitCode = 1
+  }
 }
