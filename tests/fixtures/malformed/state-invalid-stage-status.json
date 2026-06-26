@@ -1,0 +1,16 @@
+{
+  "runId": "run-1",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "stage": "reviewing",
+  "status": "paused",
+  "round": 1,
+  "maxRounds": 2,
+  "artifacts": {
+    "plans": [],
+    "reviews": {}
+  },
+  "decisions": [],
+  "confirmedIssues": [],
+  "errors": []
+}

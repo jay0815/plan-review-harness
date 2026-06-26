@@ -1,0 +1,17 @@
+{
+  "runId": "run-placeholder",
+  "round": 1,
+  "checkedIssueIds": ["MERGED-ISSUE-ARCH-1"],
+  "results": [
+    {
+      "issueId": "MERGED-ISSUE-ARCH-1",
+      "status": "resolved",
+      "severity": "high",
+      "summary": "Rollback ownership and trigger conditions are now present."
+    }
+  ],
+  "blockerCount": 0,
+  "highCount": 0,
+  "newIssueCount": 0,
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}

@@ -1,0 +1,16 @@
+{
+  "planMarkdown": "# Revised Sample Plan\n\nDeploy the TypeScript service after tests pass. Assign a rollback owner, define rollback trigger conditions, and monitor deployment health.",
+  "revisionLog": {
+    "runId": "run-placeholder",
+    "round": 1,
+    "adopted": [
+      {
+        "issueId": "MERGED-ISSUE-ARCH-1",
+        "changeDescription": "Added rollback owner and trigger expectations."
+      }
+    ],
+    "rejected": [],
+    "pendingDecision": [],
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  }
+}

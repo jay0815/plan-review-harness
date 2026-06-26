@@ -1,0 +1,21 @@
+{
+  "reviewerId": "architecture-reviewer",
+  "dimension": "architecture",
+  "issues": [
+    {
+      "id": "ISSUE-ARCH-1",
+      "title": "Rollback owner is missing",
+      "dimension": "architecture",
+      "type": "risk",
+      "severity": "high",
+      "confidence": 0.86,
+      "planRef": "section:deployment",
+      "claim": "The plan does not identify a rollback owner.",
+      "evidence": ["The sample plan only says to deploy after tests pass."],
+      "impact": "Recovery may be delayed during a failed deployment.",
+      "suggestion": "Add rollback owner and rollback trigger.",
+      "sourceWorkerId": "architecture-reviewer",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

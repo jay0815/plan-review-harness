@@ -1,0 +1,20 @@
+{
+  "reviewerId": "architecture-reviewer",
+  "dimension": "architecture",
+  "issues": [
+    {
+      "id": "ISSUE-BAD-SEVERITY",
+      "title": "Invalid severity",
+      "dimension": "architecture",
+      "type": "risk",
+      "severity": "critical",
+      "confidence": 0.7,
+      "planRef": "section:deployment",
+      "claim": "Claim",
+      "evidence": ["Evidence"],
+      "impact": "Impact",
+      "suggestion": "Suggestion",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

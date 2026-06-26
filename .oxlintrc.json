@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": ["node_modules/**", "dist/**", "coverage/**", "runs/**", "tests/fixtures/malformed/**"],
+  "rules": {},
+  "env": {
+    "builtin": true,
+    "node": true
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.ts"],
+      "plugins": ["typescript", "unicorn", "oxc", "vitest"],
+      "env": {
+        "vitest": true
+      }
+    }
+  ]
+}
