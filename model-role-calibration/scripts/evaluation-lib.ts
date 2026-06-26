@@ -1,10 +1,22 @@
 #!/usr/bin/env node
 
-import crypto = require('node:crypto')
-import fs = require('node:fs')
-import path = require('node:path')
+import * as crypto from 'node:crypto'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  type ArgValue,
+  loadCaseInput,
+  parseJsonFile,
+  readText,
+  slug,
+  sumScore,
+} from './lib.js'
+import { validateJsonText as validateJsonTextUntyped } from './json-validator-mcp.js'
+
 type Probe = 'planner' | 'risk' | 'architecture' | 'execution' | 'rebuttal' | 'synthesis'
 type ScoreDimension = 'hit_rate' | 'contract_closure' | 'actionability' | 'evidence_discipline' | 'false_positive_cost'
 
@@ -82,21 +94,7 @@ interface CodexArgsOptions {
   codexModel?: string | null
 }
 
-const { ROOT, assertSafeCaseId, assertProbe, loadCaseInput, parseJsonFile, readText, slug, sumScore } =
-  require('./lib') as {
-    ROOT: string
-    assertSafeCaseId(caseId: string): void
-    assertProbe(probe: string): void
-    loadCaseInput(caseId: string, probe: string): string
-    parseJsonFile<T = unknown>(file: string): T
-    readText(file: string): string
-    slug(value: string): string
-    sumScore(score: Record<string, unknown>): number
-  }
-
-const { validateJsonText } = require('./json-validator-mcp') as {
-  validateJsonText(candidateText: string, schema?: unknown): JsonValidationResult
-}
+const validateJsonText = validateJsonTextUntyped as (candidateText: string, schema?: unknown) => JsonValidationResult
 
 export const SCORE_DIMENSIONS: ScoreDimension[] = [
   'hit_rate',

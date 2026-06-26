@@ -1,5 +1,38 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SCORE_DIMENSIONS = void 0;
 exports.parseList = parseList;
@@ -10,11 +43,12 @@ exports.nextEvaluationAttempt = nextEvaluationAttempt;
 exports.evaluationSchemaFile = evaluationSchemaFile;
 exports.validateEvaluationScore = validateEvaluationScore;
 exports.buildCodexArgs = buildCodexArgs;
-const crypto = require("node:crypto");
-const fs = require("node:fs");
-const path = require("node:path");
-const { ROOT, assertSafeCaseId, assertProbe, loadCaseInput, parseJsonFile, readText, slug, sumScore } = require('./lib');
-const { validateJsonText } = require('./json-validator-mcp');
+const crypto = __importStar(require("node:crypto"));
+const fs = __importStar(require("node:fs"));
+const path = __importStar(require("node:path"));
+const lib_js_1 = require("./lib.js");
+const json_validator_mcp_js_1 = require("./json-validator-mcp.js");
+const validateJsonText = json_validator_mcp_js_1.validateJsonText;
 exports.SCORE_DIMENSIONS = [
     'hit_rate',
     'contract_closure',
@@ -54,11 +88,11 @@ function replaceAllLiteral(text, placeholder, value) {
     return text.split(`{{${placeholder}}}`).join(value);
 }
 function evaluationSourceFiles(run, caseId, model, probe) {
-    assertSafeCaseId(caseId);
-    assertProbe(probe);
-    const evaluatorFile = path.join(ROOT, 'prompts', `evaluate-${probe}.md`);
-    const rubricFile = path.join(ROOT, 'cases', caseId, 'rubric.md');
-    const outputFile = path.join(ROOT, 'runs', run, caseId, 'agent-outputs', `${slug(model)}-${probe}.json`);
+    (0, lib_js_1.assertSafeCaseId)(caseId);
+    (0, lib_js_1.assertProbe)(probe);
+    const evaluatorFile = path.join(lib_js_1.ROOT, 'prompts', `evaluate-${probe}.md`);
+    const rubricFile = path.join(lib_js_1.ROOT, 'cases', caseId, 'rubric.md');
+    const outputFile = path.join(lib_js_1.ROOT, 'runs', run, caseId, 'agent-outputs', `${(0, lib_js_1.slug)(model)}-${probe}.json`);
     return { evaluatorFile, rubricFile, outputFile };
 }
 function buildEvaluationPrompt(run, caseId, model, probe) {
@@ -68,10 +102,10 @@ function buildEvaluationPrompt(run, caseId, model, probe) {
             throw new Error(`Missing evaluation ${label}: ${file}`);
         }
     }
-    const evaluator = readText(files.evaluatorFile);
-    const rubric = readText(files.rubricFile).trim();
-    const input = loadCaseInput(caseId, probe).trim();
-    const output = JSON.stringify(parseJsonFile(files.outputFile), null, 2);
+    const evaluator = (0, lib_js_1.readText)(files.evaluatorFile);
+    const rubric = (0, lib_js_1.readText)(files.rubricFile).trim();
+    const input = (0, lib_js_1.loadCaseInput)(caseId, probe).trim();
+    const output = JSON.stringify((0, lib_js_1.parseJsonFile)(files.outputFile), null, 2);
     let prompt = evaluator;
     prompt = replaceAllLiteral(prompt, 'CASE_ID', caseId);
     prompt = replaceAllLiteral(prompt, 'MODEL', model);
@@ -95,10 +129,10 @@ function buildEvaluationPrompt(run, caseId, model, probe) {
     };
 }
 function evaluationPaths(run, caseId, model, probe) {
-    assertSafeCaseId(caseId);
-    assertProbe(probe);
-    const baseName = `${slug(model)}-${probe}`;
-    const caseDir = path.join(ROOT, 'runs', run, caseId);
+    (0, lib_js_1.assertSafeCaseId)(caseId);
+    (0, lib_js_1.assertProbe)(probe);
+    const baseName = `${(0, lib_js_1.slug)(model)}-${probe}`;
+    const caseDir = path.join(lib_js_1.ROOT, 'runs', run, caseId);
     const draftDir = path.join(caseDir, 'scores', 'drafts');
     return {
         caseDir,
@@ -131,11 +165,11 @@ function nextEvaluationAttempt(paths) {
     };
 }
 function evaluationSchemaFile() {
-    return path.join(ROOT, 'schemas', 'evaluation-score.schema.json');
+    return path.join(lib_js_1.ROOT, 'schemas', 'evaluation-score.schema.json');
 }
 function validateEvaluationScore(score, expected) {
     const schemaFile = evaluationSchemaFile();
-    const schema = parseJsonFile(schemaFile);
+    const schema = (0, lib_js_1.parseJsonFile)(schemaFile);
     const validation = validateJsonText(JSON.stringify(score), schema);
     if (!validation.valid) {
         const details = validation.errors?.map((item) => item.message || String(item)).join('; ');
@@ -146,7 +180,7 @@ function validateEvaluationScore(score, expected) {
             throw new Error(`Evaluation ${field} mismatch: output has "${score[field]}", expected "${expected[field]}"`);
         }
     }
-    const computedTotal = sumScore(score.score);
+    const computedTotal = (0, lib_js_1.sumScore)(score.score);
     if (computedTotal !== score.total) {
         throw new Error(`Evaluation total mismatch: output has ${score.total}, computed ${computedTotal}`);
     }
