@@ -122,7 +122,18 @@ export function timestamp(): string {
 
 export function isMainScript(filename: string, argv: string[] = process.argv): boolean {
   const script = argv[1]
-  return typeof script === 'string' && path.resolve(script) === filename
+  if (typeof script !== 'string') {
+    return false
+  }
+  const resolvedScript = path.resolve(script)
+  if (resolvedScript === filename) {
+    return true
+  }
+  try {
+    return fs.realpathSync.native(resolvedScript) === fs.realpathSync.native(filename)
+  } catch {
+    return false
+  }
 }
 
 function loadLegacyCaseInput(caseDir: string): string {

@@ -155,7 +155,19 @@ function timestamp() {
 }
 function isMainScript(filename, argv = process.argv) {
     const script = argv[1];
-    return typeof script === 'string' && path.resolve(script) === filename;
+    if (typeof script !== 'string') {
+        return false;
+    }
+    const resolvedScript = path.resolve(script);
+    if (resolvedScript === filename) {
+        return true;
+    }
+    try {
+        return fs.realpathSync.native(resolvedScript) === fs.realpathSync.native(filename);
+    }
+    catch {
+        return false;
+    }
 }
 function loadLegacyCaseInput(caseDir) {
     const inputFile = path.join(caseDir, 'input.md');
