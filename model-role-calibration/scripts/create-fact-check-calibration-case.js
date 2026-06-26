@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const { parseArgs, requireArg } = require('./lib');
-const { createCaseFromWorkspaceRun } = require('./fact-check-calibration-lib');
+const fact_check_calibration_lib_js_1 = require("./fact-check-calibration-lib.js");
+const lib_js_1 = require("./lib.js");
+const createCaseFromWorkspaceRun = fact_check_calibration_lib_js_1.createCaseFromWorkspaceRun;
 function optionalString(value) {
     return value && value !== true ? String(value) : null;
 }
 function main() {
-    const args = parseArgs(process.argv);
-    const caseId = requireArg(args, 'case');
+    const args = (0, lib_js_1.parseArgs)(process.argv);
+    const caseId = (0, lib_js_1.requireArg)(args, 'case');
     const result = createCaseFromWorkspaceRun({
         caseId,
         runId: optionalString(args['run-id']),

@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { createCaseFromWorkspaceRun as createCaseFromWorkspaceRunUntyped } from './fact-check-calibration-lib.js'
+import { type ArgValue, parseArgs, requireArg } from './lib.js'
 
 interface CreateCaseResult {
   case_file: string
   issue_count: number
 }
 
-const { parseArgs, requireArg } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-}
-
-const { createCaseFromWorkspaceRun } = require('./fact-check-calibration-lib') as {
-  createCaseFromWorkspaceRun(opts: { caseId: string; runId: string | null; runDir: string | null }): CreateCaseResult
-}
+const createCaseFromWorkspaceRun = createCaseFromWorkspaceRunUntyped as (opts: {
+  caseId: string
+  runId: string | null
+  runDir: string | null
+}) => CreateCaseResult
 
 function optionalString(value: ArgValue): string | null {
   return value && value !== true ? String(value) : null
