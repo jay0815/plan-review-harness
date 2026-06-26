@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Probe Model Output",
+  "type": "object",
+  "required": ["probe", "issues", "missing_questions", "false_positive_risks"],
+  "properties": {
+    "probe": {
+      "enum": ["risk", "architecture", "execution", "rebuttal"]
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "type", "severity", "evidence", "why_it_matters", "suggested_fix", "confidence"],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": ["low", "medium", "high", "blocker"]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "why_it_matters": {
+            "type": "string"
+          },
+          "suggested_fix": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "false_positive_risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,37 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 1,
+    "false_positive_cost": 3
+  },
+  "total": 14,
+  "matched_known_issues": [
+    "明确非阻塞 Promise、相同 event_id 重试、发布顺序和回滚。",
+    "定义 _mode 与 event_id 的跨层传递位置。",
+    "覆盖失败、兼容、观测和灰度发布。"
+  ],
+  "missed_known_issues": [
+    "批量队列所在层级仍未确定，直接影响实时路径的绕过点。",
+    "没有基于输入确认服务端实际读取 event_id 的位置。"
+  ],
+  "valuable_new_findings": [
+    "明确接受有限重试后丢弃，不承诺最终必达。"
+  ],
+  "false_positives": [
+    "自行决定服务端从 payload.event_id 读取。",
+    "假设旧服务端会忽略 _mode 和 event_id。",
+    "把控制字段写入业务 payload，并扩展到所有事件。"
+  ],
+  "failure_modes": [
+    "事实纪律不足，主方案依赖多个未验证的旧版本行为。",
+    "关键队列位置虽列为待决，实施步骤却已经基于假设展开。"
+  ],
+  "notes": "角色判断：适合作为 Planner 的契约表达和发布检查辅助，不建议独立定稿；未经确认的字段位置和旧版本行为容易被固化为实施事实。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

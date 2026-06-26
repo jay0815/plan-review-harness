@@ -6,3 +6,6 @@ runs/
 
 .DS_Store
 *.log
+# Fact-check calibration generated artifacts
+model-role-calibration/fact-check-calibration/outputs/
+model-role-calibration/fact-check-calibration/runs/

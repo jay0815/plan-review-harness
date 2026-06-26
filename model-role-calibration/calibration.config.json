@@ -1,0 +1,27 @@
+{
+  "primary_cases": [
+    "synthetic/event-reporting",
+    "synthetic/plugin-lifecycle",
+    "synthetic/offline-drafts"
+  ],
+  "models": [
+    "kimi",
+    "deepseek",
+    "glm",
+    "qwen"
+  ],
+  "agent_execution": {
+    "timeout_ms": 600000,
+    "alias_resolution_timeout_ms": 10000,
+    "max_buffer_bytes": 20971520
+  },
+  "probe_concurrency_overrides": {
+    "synthesis": 1
+  },
+  "role_recommendation": {
+    "minimum_comparable_models": 2,
+    "minimum_average_score": 20,
+    "minimum_case_score": 18,
+    "maximum_standard_deviation": 3
+  }
+}

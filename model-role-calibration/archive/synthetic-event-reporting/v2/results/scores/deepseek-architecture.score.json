@@ -1,0 +1,37 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 2
+  },
+  "total": 15,
+  "matched_known_issues": [
+    "支付成功页同步耦合遥测网络。",
+    "传输路由指令泄漏到业务 payload。",
+    "跨团队同步发布阻碍独立演进。",
+    "重试和批量回退缺少 event_id 幂等闭环。"
+  ],
+  "missed_known_issues": [
+    "没有精确指出 is_realtime 写入和读取位置不一致导致实时功能失效。",
+    "没有覆盖生产观测和回滚结构。"
+  ],
+  "valuable_new_findings": [],
+  "false_positives": [
+    "建议新增独立参数、函数变体或 header，把 API 偏好当作结构答案。",
+    "建议本地持久化队列，违反首版范围。",
+    "用未来更多传输模式和至少一次送达语义扩大当前架构要求。",
+    "假设旧桥会默认降级到批量路径。"
+  ],
+  "failure_modes": [
+    "用偏好的 API 重构替代最小结构修订。",
+    "容易将可靠性基础设施加入 Architecture 建议。"
+  ],
+  "notes": "角色判断：仅适合作为模块边界辅助审查，不适合独立裁决最小架构方案；其 API 与可靠性建议需要严格过滤。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

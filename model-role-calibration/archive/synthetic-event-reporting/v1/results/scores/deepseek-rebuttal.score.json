@@ -1,0 +1,93 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 13,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "识别非阻塞、幂等、版本发布和验收问题，但遗漏最直接的 is_realtime 字段层级错位和快速回滚。",
+      "evidence": [
+        "识别 await 与需求冲突。",
+        "识别实时和批量路径需要复用 event_id。",
+        "覆盖旧客户端、同步发布和失败验收。",
+        "没有指出 payload.is_realtime 与事件顶层读取不一致。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "能够分析 await、批量回落和 event_id 的契约，但遗漏 wire shape 的直接矛盾，并通过能力探测引入新契约。",
+      "evidence": [
+        "指出实时失败回落批量队列时 await 的结算语义不清。",
+        "要求实时和批量复用 event_id。",
+        "建议新增原生能力标志和 JS 能力检测。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "多数反驳可用于修订方案，但重复报告阻塞问题，并给出五秒等待和可靠投递建设等错误方向。",
+      "evidence": [
+        "await 阻塞和三次重试白屏被拆为两个相近问题。",
+        "建议保留五秒总等待。",
+        "建议新增本地持久化或优先队列。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "多项影响和基础设施依赖未经输入确认，包括具体网络超时、批量队列持久化和应用生命周期恢复。",
+      "evidence": [
+        "假设移动网络单次请求通常耗时五到十秒。",
+        "假设批量队列使用 SQLite 或文件并能重启恢复。",
+        "推导用户可能重复支付和实时能力影响风控。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "为强化反驳引入能力探测、替代上报通道、本地持久化和优先队列，明显扩大方案。",
+      "evidence": [
+        "建议原生桥返回能力标志。",
+        "建议 JS 使用其他上报通道。",
+        "建议实时发送前本地持久化或写入优先队列。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "实时发送、重试和批量回落需要复用 event_id。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径和旧版本兼容验证。",
+    "await 在实时失败并回落批量队列后的语义不明确。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层。",
+    "缺少生产观测指标。",
+    "缺少快速回滚和实时模式关闭能力。"
+  ],
+  "valuable_new_findings": [
+    "指出旧原生桥静默降级时调用方对实际路径无感知。"
+  ],
+  "false_positives": [
+    "假设具体网络请求超时时长。",
+    "建议新增能力探测和替代上报通道。",
+    "假设批量队列具有本地持久化和重启恢复能力。",
+    "建议新增本地持久化或优先队列。",
+    "建议保留五秒等待。"
+  ],
+  "failure_modes": [
+    "遗漏最关键的跨层字段协议错误。",
+    "为了强化反驳而扩展可靠投递能力。",
+    "通过无依据运行时假设放大风险。"
+  ],
+  "notes": "角色判断：可以打破错误共识，但当前不适合作为 Rebuttal 终审。更适合补充审查；必须限制能力探测、替代通道和可靠投递建设。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "rebuttal"
+  ]
+}

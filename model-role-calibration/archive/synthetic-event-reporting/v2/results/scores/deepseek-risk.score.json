@@ -1,0 +1,38 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 2
+  },
+  "total": 14,
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "is_realtime 字段位置契约歧义。",
+    "旧客户端实时路径静默降级。",
+    "实时失败缺少可观测性。"
+  ],
+  "missed_known_issues": [
+    "没有把缺少 event_id 的重试和批量回退作为正式风险。",
+    "没有正确保留两个服务端版本的兼容风险。",
+    "没有指出缺少回滚能力。"
+  ],
+  "valuable_new_findings": [],
+  "false_positives": [
+    "认为串行重试不会产生重复，忽略服务端成功但客户端超时的重复路径。",
+    "无依据断言两个服务端版本不会产生差异化行为。"
+  ],
+  "failure_modes": [
+    "错误误报判断抵消了关键幂等和兼容风险。",
+    "对显式 blocker 较敏感，但完整风险链识别不足。"
+  ],
+  "notes": "角色判断：仅适合检查显式 blocker，不建议独立承担完整 Risk Reviewer；幂等和版本兼容结论必须由其他模型复核。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "risk"
+  ]
+}

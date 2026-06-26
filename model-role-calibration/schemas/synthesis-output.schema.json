@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Synthesis Probe Model Output",
+  "type": "object",
+  "required": [
+    "probe",
+    "source_findings",
+    "process_map",
+    "consensus_issues",
+    "disagreements",
+    "likely_false_positives",
+    "revision_instructions"
+  ],
+  "properties": {
+    "probe": {
+      "const": "synthesis"
+    },
+    "source_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "source_title",
+          "source_issue_id",
+          "fact_check_status",
+          "scope_status",
+          "disposition",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F[1-9][0-9]*$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_issue_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fact_check_status": {
+            "enum": [
+              "verified",
+              "partially_verified",
+              "unsupported",
+              "contradicted",
+              "unverifiable",
+              "not_available"
+            ]
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "not_determined"
+            ]
+          },
+          "disposition": {
+            "description": "retained/merged/duplicate 表示仍属于可保留来源；unsupported/contradicted/unverifiable/out_of_scope 表示排除来源。likely_false_positives 只能引用排除来源，不能引用 retained 或 merged finding。",
+            "enum": [
+              "retained",
+              "merged",
+              "duplicate",
+              "unsupported",
+              "contradicted",
+              "unverifiable",
+              "out_of_scope"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "process_map": {
+      "type": "object",
+      "required": ["title", "mermaid", "nodes"],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "mermaid": {
+          "type": "string",
+          "description": "Mermaid flowchart source. Use node ids declared in nodes."
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "stage", "status", "related_issue_titles", "evidence"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "stage": {
+                "type": "string"
+              },
+              "status": {
+                "enum": ["normal", "affected", "decision"]
+              },
+              "related_issue_titles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "consensus_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "merged_from",
+          "severity",
+          "affected_nodes",
+          "source_finding_ids",
+          "reason",
+          "required_plan_change"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "merged_from": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "severity": {
+            "enum": ["low", "medium", "high", "blocker"]
+          },
+          "affected_nodes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "required_plan_change": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "disagreements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "positions",
+          "affected_nodes",
+          "source_finding_ids",
+          "level",
+          "needs_human_decision",
+          "decision_options"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["source", "position", "reason"],
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "affected_nodes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
+          "level": {
+            "enum": ["L1_preference", "L2_local_change", "L3_direction_decision"]
+          },
+          "needs_human_decision": {
+            "type": "boolean"
+          },
+          "decision_options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "likely_false_positives": {
+      "description": "仅记录被排除的来源意见。source_finding_ids 必须引用 disposition 为 duplicate、unsupported、contradicted、unverifiable 或 out_of_scope 的 source_findings；不得引用 retained 或 merged finding。",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source_finding_ids", "reason"],
+        "properties": {
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "revision_instructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["instruction", "source_finding_ids"],
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source_finding_ids": {
+            "$ref": "#/$defs/findingIds"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "findingIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^F[1-9][0-9]*$"
+      }
+    }
+  },
+  "additionalProperties": false
+}

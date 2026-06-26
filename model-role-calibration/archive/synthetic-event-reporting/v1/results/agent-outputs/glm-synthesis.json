@@ -1,0 +1,112 @@
+{
+  "probe": "synthesis",
+  "consensus_issues": [
+    {
+      "title": "await reportEvent 阻塞支付结果页",
+      "merged_from": [
+        "Execution#blocking_await",
+        "Architecture#API_split（间接呼应非阻塞约束）"
+      ],
+      "severity": "blocker",
+      "reason": "直接违反需求约束\"失败不能阻塞支付结果\"；三方均未反对该约束，Execution 明确指出 await 模式的矛盾，Architecture 的 API 拆分建议也隐含非阻塞意图",
+      "suggested_fix": "将 await 改为 fire-and-forget 模式（Promise 不阻塞主流程），或拆出独立的 realtime 上报入口并在内部做 catch‑only 错误处理"
+    },
+    {
+      "title": "缺少跨版本兼容计划与验收矩阵",
+      "merged_from": [
+        "Architecture#version_coupling",
+        "Execution#missing_matrix"
+      ],
+      "severity": "high",
+      "reason": "Architecture 指出 JS/原生/服务端同时发布会形成版本耦合，Execution 补充缺少具体发布顺序和验收矩阵；线上线下同时存在新旧客户端和服务端版本，没有兼容计划会导致灰度期间去重或遗漏",
+      "suggested_fix": "定义向前向后兼容的发布顺序（建议服务端先上线兼容逻辑→新客户端灰度→旧客户端自然淘汰），并输出跨版本验收矩阵覆盖新旧组合场景"
+    },
+    {
+      "title": "重试→批量回退路径下的重复上报与旧客户端幂等缺口",
+      "merged_from": [
+        "Risk#retry_duplicate",
+        "Risk#old_client_event_id"
+      ],
+      "severity": "high",
+      "reason": "三次重试后进入批量队列，同一条事件可能被实时和批量各上报一次；旧客户端不带 event_id，服务端只对带 event_id 的去重，导致旧客户端事件完全不在幂等保护范围内",
+      "suggested_fix": "明确幂等边界：实时重试失败写入批量队列时应携带 retry_from_realtime 标记并使用同一 event_id；对旧客户端无 event_id 的事件，服务端需基于业务字段组合（如 order_id+event_type）做兜底去重"
+    },
+    {
+      "title": "缺少实时上报可观测性与回滚开关",
+      "merged_from": [
+        "Risk#missing_metrics",
+        "Risk#no_rollback_toggle"
+      ],
+      "severity": "medium",
+      "reason": "没有实时成功率、延迟 P99、回退批量次数等指标就无法判断实时链路是否健康；也没有关闭实时模式的开关，异常时无法快速止血",
+      "suggested_fix": "增加实时链路核心指标（成功率、延迟、回退计数）并接入监控告警；在客户端配置或服务端开关中增加 realtime_enabled toggle，异常时一键回退为纯批量模式"
+    }
+  ],
+  "disagreements": [
+    {
+      "title": "is_realtime 字段归属层级与严重度判断",
+      "positions": [
+        {
+          "source": "Architecture",
+          "position": "blocker，协议必须唯一归属，当前 JS 放 payload、原生放顶层，属于协议分裂",
+          "reason": "不同层读取不同位置会导致服务端必须双路径解析，属于根本性协议缺陷"
+        },
+        {
+          "source": "Risk",
+          "position": "低优先级偏好，放顶层更好但放 payload 也能工作",
+          "reason": "功能上不阻断，只是风格不一致，不值得阻断发布"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": true,
+      "decision_options": [
+        "统一放顶层，JS/原生/服务端三方对齐，本次发布前修正",
+        "统一放 payload，与 JS 现有结构对齐，原生做适配",
+        "允许双位置但服务端增加双路径解析逻辑并明确文档约定（向后兼容成本最高）"
+      ]
+    },
+    {
+      "title": "是否拆分 realtime 和 batch 为两个公开 API",
+      "positions": [
+        {
+          "source": "Architecture",
+          "position": "应拆为两个公开 API，职责更清晰",
+          "reason": "单一 API 内部区分 realtime/batch 会模糊调用方意图，增加误用风险"
+        },
+        {
+          "source": "Execution",
+          "position": "未表态，聚焦于内部实现细节和发布流程",
+          "reason": "关注点在接口规范和验收矩阵，未对 API 拆分发表意见"
+        },
+        {
+          "source": "Risk",
+          "position": "未表态，聚焦于幂等和可观测性",
+          "reason": "关注点在运行时风险，未对 API 设计方向发表意见"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": true,
+      "decision_options": [
+        "拆成 reportEventRealtime + reportEventBatch 两个公开 API",
+        "保持单一 reportEvent API，通过参数区分模式，内部走不同调度路径",
+        "单一 API + 参数区分，但内部拆分调度队列并隔离错误处理"
+      ]
+    }
+  ],
+  "likely_false_positives": [
+    {
+      "title": "建议建设 Kafka 和独立事件数据库",
+      "source": "Execution",
+      "reason": "该建议超出本次移动端客户端功能审查范围，属于服务端基础设施架构变更；且未提供当前消息队列或存储无法承载实时事件的证据，属于无 evidence 的高风险判断，应降权",
+      "downweight_to": "低优先级备忘，不纳入本次修订指令"
+    }
+  ],
+  "revision_instructions": [
+    "将 reportEvent 的 realtime 调用改为非阻塞模式（fire‑and‑forget 或 catch‑only），消除 await 对支付结果页的阻塞风险",
+    "在协议层明确 is_realtime 的唯一归属位置（待用户裁决后统一实现）",
+    "补充跨版本发布顺序和验收矩阵，覆盖新旧客户端×新旧服务端的四种组合",
+    "完善幂等策略：实时重试→批量回退使用同一 event_id 并增加来源标记；旧客户端兜底去重基于业务字段组合",
+    "增加实时链路可观测性指标和 realtime_enabled 回滚开关",
+    "API 拆分与否待用户裁决后确定，但无论哪种方案都需在内部隔离 realtime 的错误路径使其不影响批量链路"
+  ]
+}

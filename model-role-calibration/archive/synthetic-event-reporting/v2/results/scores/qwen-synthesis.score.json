@@ -1,0 +1,88 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 4
+  },
+  "total": 15,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "修订指令覆盖主要问题，但正式合成结论只保留发布兼容，且遗漏 API L3 分歧。",
+      "evidence": [
+        "consensus_issues 只有发布兼容问题。",
+        "revision_instructions 额外覆盖字段、非阻塞、幂等、观测和回滚。",
+        "将 API 拆分建议直接降权。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "修订目标大体正确，但结论与修订之间缺少结构化对应，API 方向也没有保留。",
+      "evidence": [
+        "要求统一 is_realtime 字段位置。",
+        "要求非阻塞和明确幂等范围。",
+        "多数修订要求没有对应 consensus_issue 或 disagreement。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "修订清单简洁可用，但来源链不完整，并擅自指定服务端先行的发布顺序。",
+      "evidence": [
+        "修订指令覆盖全部主要执行方向。",
+        "建议服务端先行兼容。",
+        "没有保留需要用户裁决的 API 方向。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "大量修订要求没有对应的合成来源，且新增服务端先行这一具体发布决策。",
+      "evidence": [
+        "await、event_id、指标和回滚没有出现在 consensus_issues。",
+        "直接指定服务端先行兼容。",
+        "把 API 拆分与需求冲突直接等同于误报。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 4,
+      "rationale": "没有引入复杂基础设施、业务字段或可靠投递体系，额外成本较低。",
+      "evidence": [
+        "正确丢弃 Kafka 和独立事件数据库。",
+        "没有新增持久化或业务键去重。",
+        "仅轻微越界到服务端先行发布决策。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 字段协议必须统一。",
+    "await reportEvent 违反非阻塞硬约束。",
+    "实时重试和批量回退存在幂等缺口。",
+    "缺少跨版本发布顺序和兼容矩阵。",
+    "缺少生产指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。"
+  ],
+  "missed_known_issues": [
+    "没有识别 API 拆分与复用 reportEvent 的 L3 方向分歧。",
+    "没有为大多数修订指令建立可追溯的 consensus_issue 或 disagreement。"
+  ],
+  "valuable_new_findings": [
+    "用较短的修订清单覆盖了主要执行目标。"
+  ],
+  "false_positives": [
+    "直接指定服务端先行兼容的发布顺序。",
+    "将公共 API 方向冲突直接判为应丢弃意见。"
+  ],
+  "failure_modes": [
+    "合成结构过度压缩，结论与修订指令之间失去来源追踪。",
+    "容易把真实方向分歧当作与需求冲突的误报直接删除。"
+  ],
+  "notes": "角色判断：适合作为辅助修订清单生成器，不适合作为主 Synthesizer。表达克制且范围扩张较少，但来源保真、合成结构和 L3 分歧识别不足。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "synthesis"
+  ]
+}

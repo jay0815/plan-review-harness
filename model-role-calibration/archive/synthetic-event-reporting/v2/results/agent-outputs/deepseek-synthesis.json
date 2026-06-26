@@ -1,0 +1,76 @@
+{
+  "probe": "synthesis",
+  "consensus_issues": [
+    {
+      "title": "is_realtime 字段在 JS 和原生之间归属不一致（契约问题）",
+      "merged_from": [
+        "Architecture Reviewer",
+        "Risk Reviewer"
+      ],
+      "severity": "blocker",
+      "reason": "Architecture Reviewer 指出 JS 方案将 is_realtime 放在 payload 内，原生却从事件顶层读取，协议无唯一归属，属于契约不一致的 blocker。Risk Reviewer 同样确认了放置不一致的事实，但将严重度评估为低优先级偏好。事实层面双方一致：当前双端读取位置不同，必须统一。",
+      "suggested_fix": "在公共事件协议中明确 is_realtime 的唯一归属位置（顶层或 payload 二选一），JS 和原生均按同一位置读写。"
+    },
+    {
+      "title": "缺少实时上报的运营保障措施",
+      "merged_from": [
+        "Risk Reviewer",
+        "Execution Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Risk Reviewer 指出缺少实时成功率、延迟、回退批量次数等指标，也没有关闭实时模式的回滚开关。Execution Reviewer 指出缺少跨版本验收矩阵和发布顺序。Architecture Reviewer 指出 JS、原生、服务端同时发布会形成版本耦合，需定义向前向后兼容顺序。三者互补，均属于上线前必须补齐的运营可观测性、可控性与兼容性缺口。",
+      "suggested_fix": "补充实时上报的关键指标埋点、回滚开关、分阶段发布顺序、跨版本验收矩阵及向前向后兼容顺序。"
+    },
+    {
+      "title": "await reportEvent 可能导致支付结果被遥测阻塞",
+      "merged_from": [
+        "Execution Reviewer"
+      ],
+      "severity": "blocker",
+      "reason": "Execution Reviewer 指出 await reportEvent 会让支付成功页依赖遥测网络请求，直接违反'不阻塞支付结果'的硬约束。支付成功路径不得等待上报完成。",
+      "suggested_fix": "实时上报调用从支付成功关键路径上去耦，采用 fire-and-forget 或后台队列方式，确保支付结果展示不被上报结果阻塞。"
+    },
+    {
+      "title": "重试回退批量队列可能导致重复上报，且旧客户端无 event_id 无法去重",
+      "merged_from": [
+        "Risk Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Risk Reviewer 指出三次重试后再进入批量队列的流程可能产生重复事件，而旧客户端没有 event_id，服务端无从去重。需要明确该场景下的幂等边界和兜底策略。",
+      "suggested_fix": "明确重试→批量回退路径的幂等保证范围：对新客户端依赖 event_id 去重，对旧客户端定义替代去重键或声明有限重复的可接受范围。"
+    }
+  ],
+  "disagreements": [
+    {
+      "title": "is_realtime 放置不一致的严重程度评估分歧",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "blocker：协议没有唯一归属，属于必须关闭的契约问题",
+          "reason": "字段在 JS payload 和原生顶层之间不一致，任何未对齐的契约都阻止发布。"
+        },
+        {
+          "source": "Risk Reviewer",
+          "position": "低优先级偏好：放在顶层更好，但放在 payload 也能工作",
+          "reason": "两种放置方式在功能上均可运行，不影响核心行为。"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": false,
+      "decision_options": [
+        "is_realtime 放在事件顶层",
+        "is_realtime 放在 payload 内"
+      ]
+    }
+  ],
+  "likely_false_positives": [
+    "[Execution Reviewer] 建议引入 Kafka 和独立事件数据库：需求未提供引入新中间件的依据；现有 reportEvent 已有批量通道，需求仅要求在复用前提下增加实时上报。引入 Kafka 和独立事件数据库超出需求边界，且无证据表明现有基础设施无法承载实时事件。降权处理，不进入修订指令。",
+    "[Architecture Reviewer] 建议将实时和批量上报拆成两个公开 API：需求明确要求'复用 reportEvent'，拆分公开 API 与需求约束直接冲突。功能区分可通过参数或配置在单一 API 内部实现。降权处理，不进入修订指令。"
+  ],
+  "revision_instructions": [
+    "【事件协议定义】在公共事件 schema 中统一 is_realtime 的归属位置（顶层或 payload），JS 和原生均按同一位置读写。",
+    "【支付成功页上报调用】将 reportEvent 调用从支付结果关键路径解耦，采用非阻塞方式（fire-and-forget 或后台队列），确保支付结果展示不被上报网络请求阻塞。",
+    "【重试与批量回退逻辑】定义重试→批量回退的幂等策略：新客户端依赖 event_id 去重，旧客户端明确替代去重方案或声明有限重复的可接受范围。",
+    "【运营可观测性、可控性与兼容性】补充实时上报成功率、延迟、回退次数等指标埋点；提供关闭实时模式降级为仅批量的回滚开关；制定分阶段发布顺序、跨版本验收矩阵以及 JS/原生/服务端的向前向后兼容顺序。"
+  ]
+}

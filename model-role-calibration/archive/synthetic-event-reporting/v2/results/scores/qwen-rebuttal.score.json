@@ -1,0 +1,37 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 2,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 4,
+    "false_positive_cost": 5
+  },
+  "total": 17,
+  "matched_known_issues": [
+    "await reportEvent 直接违反支付成功页不得被上报阻塞的硬约束。",
+    "实时重试与批量回退缺少 event_id 去重保护。"
+  ],
+  "missed_known_issues": [
+    "遗漏 is_realtime 在 payload 与事件顶层之间的 wire contract 矛盾。",
+    "未形成旧客户端和两个服务端版本的兼容发布结论。",
+    "未覆盖失败验收、生产观测和回滚。"
+  ],
+  "valuable_new_findings": [
+    "没有假设额外业务去重机制，保持了事实边界。",
+    "准确区分页面展示阻塞与 UI 线程是否卡死。"
+  ],
+  "false_positives": [
+    "将 await 的超时上限列为待确认问题，重新开放了已经明确不可阻塞的硬约束。"
+  ],
+  "failure_modes": [
+    "输出过度收敛，只能覆盖少量最显眼的核心矛盾。"
+  ],
+  "notes": "角色判断：适合作为辅助的核心矛盾检查器，不适合作为唯一 Rebuttal 模型。输出克制且误报低，但覆盖不足，需要其他模型补齐协议、兼容和上线闭环。",
+  "suggested_roles": [
+    "rebuttal"
+  ],
+  "unsuitable_roles": []
+}

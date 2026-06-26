@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 4,
+    "false_positive_cost": 3
+  },
+  "total": 19,
+  "matched_known_issues": [
+    "await reportEvent 违反支付成功页不得被上报阻塞的硬约束。",
+    "is_realtime 的写入层级与原生读取层级不一致。",
+    "实时重试和批量回退缺少稳定 event_id 契约。",
+    "旧客户端和两个服务端版本的兼容性未定义。",
+    "验收未覆盖失败路径和兼容性。"
+  ],
+  "missed_known_issues": [
+    "未明确覆盖生产可观测性和独立回滚。"
+  ],
+  "valuable_new_findings": [
+    "主动区分旧客户端保持批量上报可能属于合理降级。",
+    "主动说明 event_id 缺失不能直接升级为业务 blocker。"
+  ],
+  "false_positives": [
+    "把立即重试导致更长阻塞从 await 根因中重复拆成独立问题。",
+    "建议依靠现有本地批量队列保证事件不丢失，输入没有提供该可靠性保证。"
+  ],
+  "failure_modes": [
+    "覆盖面较广时容易重复计算同一根因。",
+    "会把合理的批量降级隐含提升为可靠投递保证。"
+  ],
+  "notes": "角色判断：适合作为 Rebuttal 主模型或 GLM 的覆盖补充。覆盖较全面，但正式采用前需要合并重复根因并删除未经证实的可靠性承诺。",
+  "suggested_roles": [
+    "rebuttal"
+  ],
+  "unsuitable_roles": []
+}

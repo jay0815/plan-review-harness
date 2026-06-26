@@ -1,0 +1,92 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 17,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "覆盖全部主要问题并正确降权 Kafka，但没有把字段层级错位裁决为确定缺陷。",
+      "evidence": [
+        "合并发布、非阻塞、幂等、观测和回滚问题。",
+        "识别 API 拆分与需求复用的方向分歧。",
+        "将 is_realtime 字段错位保留为严重性分歧。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "合并结构清楚，但字段错位仍允许作为技术债，且旧客户端 event_id 修订方向无法由当前方案闭合。",
+      "evidence": [
+        "修订指令要求统一字段协议。",
+        "决策选项允许接受 payload 放置但不明确原生同步修改。",
+        "建议评估为旧客户端补充客户端幂等标识。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "修订清单覆盖接口、发布、兼容、幂等、监控和降级，但仍要求用户裁决字段严重性，并简化了版本组合。",
+      "evidence": [
+        "要求列出各层接口修改和发布顺序。",
+        "要求跨版本验收矩阵和实时模式开关。",
+        "使用新旧客户端乘新旧服务端的 2×2 矩阵，未体现两个服务端版本。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要来源可追溯，但把未表态视为无分歧，并引入旧客户端补标识和动态开关等机制。",
+      "evidence": [
+        "声称 await 问题三方无分歧，实际仅 Execution Reviewer 明确提出。",
+        "建议为旧客户端补充客户端生成的幂等标识。",
+        "建议提供服务端或客户端动态开关。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "正确降权 Kafka 和独立数据库，但旧客户端补标识与动态开关扩大了修订范围。",
+      "evidence": [
+        "将 Kafka 和独立数据库判定为超范围。",
+        "引入旧客户端幂等标识补充方案。",
+        "引入客户端或服务端动态开关。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付结果页。",
+    "实时重试和批量回落存在 event_id 幂等缺口。",
+    "同窗口发布缺少跨版本兼容顺序和验收矩阵。",
+    "缺少生产观测指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。",
+    "两个公开 API 与复用 reportEvent 构成 L3 方向分歧。"
+  ],
+  "missed_known_issues": [
+    "没有将 is_realtime 写入和读取位置不一致裁决为确定缺陷。",
+    "没有精确覆盖两个服务端版本形成的实际兼容组合。"
+  ],
+  "valuable_new_findings": [
+    "将架构发布耦合与执行层接口清单、顺序和验收矩阵合并。",
+    "明确 API 拆分需要修改需求约束。"
+  ],
+  "false_positives": [
+    "允许字段错位作为技术债而不阻塞发布。",
+    "把未表态描述为三方无分歧。",
+    "建议为旧客户端补充客户端幂等标识。",
+    "假设可以提供动态开关。"
+  ],
+  "failure_modes": [
+    "将事实性错误保留为人工严重性裁决。",
+    "把来源未表态错误解释为共识。",
+    "在合成中加入无法作用于已发布旧客户端的修订方向。"
+  ],
+  "notes": "角色判断：可作为主 Synthesizer 候选。结构化合并能力强；需要强化来源保真、事实分歧裁决和版本组合精度。",
+  "suggested_roles": [
+    "synthesis"
+  ],
+  "unsuitable_roles": []
+}

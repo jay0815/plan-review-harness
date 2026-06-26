@@ -1,0 +1,98 @@
+{
+  "probe": "synthesis",
+  "consensus_issues": [
+    {
+      "title": "支付成功页 await reportEvent 会阻塞支付结果",
+      "merged_from": [
+        "Execution Reviewer"
+      ],
+      "severity": "blocker",
+      "reason": "Execution Reviewer 指出 `await reportEvent` 会让支付成功页依赖遥测网络请求，直接违反需求中“失败不能阻塞支付结果”的硬约束。",
+      "suggested_fix": "在支付成功路径中将实时上报改为非阻塞调用（fire-and-forget 或异步调度），不等待网络结果。"
+    },
+    {
+      "title": "缺少跨版本发布与兼容性验收计划",
+      "merged_from": [
+        "Architecture Reviewer",
+        "Execution Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Architecture Reviewer 指出 JS、原生、服务端同时发布会形成版本耦合，应定义向前/向后兼容顺序；Execution Reviewer 进一步指出缺少每一层具体接口、发布顺序和跨版本验收矩阵。两者互补，共同指向缺少可执行的兼容性发布计划。",
+      "suggested_fix": "制定分层的接口变更清单、发布顺序、前后兼容规则以及跨客户端/服务端版本的验收矩阵。"
+    },
+    {
+      "title": "重试落入批量队列与旧客户端 event_id 缺失导致幂等范围不清",
+      "merged_from": [
+        "Risk Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Risk Reviewer 指出三次重试后再进入批量队列可能重复上报，且旧客户端没有 `event_id`，与服务端“只对带 event_id 的事件去重”的契约冲突，幂等边界未定义。",
+      "suggested_fix": "明确幂等范围：服务端基于 event_id 去重的适用边界、无 event_id 旧客户端的处理策略，以及重试后落入批量队列的判重/去重规则。"
+    },
+    {
+      "title": "缺少实时上报的可观测性指标",
+      "merged_from": [
+        "Risk Reviewer"
+      ],
+      "severity": "medium",
+      "reason": "Risk Reviewer 提出缺少实时成功率、延迟、回退批量次数等核心运行指标，无法判断实时链路健康度。",
+      "suggested_fix": "补充实时成功率、上报延迟、回退批量次数等指标及对应告警/看板。"
+    }
+  ],
+  "disagreements": [
+    {
+      "title": "`is_realtime` 字段位置不一致的定级与修复选择（事实/严重度判断 + 局部修改）",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "`is_realtime` 在 JS 方案中位于 payload、原生从顶层读取，协议没有唯一归属，属于 blocker 级契约不一致。",
+          "reason": "协议归属不唯一会导致 JS/原生/服务端解析行为不一致，必须统一字段位置和语义归属。"
+        },
+        {
+          "source": "Risk Reviewer",
+          "position": "`is_realtime` 最好放在顶层，但放在 payload 也能工作，只是低优先级偏好。",
+          "reason": "认为两种位置都能运行，顶层只是偏好，未将其定为高严重度问题。"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": false,
+      "decision_options": [
+        "统一将 `is_realtime` 置于事件顶层",
+        "统一将 `is_realtime` 置于 payload 内部"
+      ]
+    },
+    {
+      "title": "是否将实时与批量上报拆分为两个公开 API（方向选择）",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "应拆分为实时和批量两个公开 API，职责更清晰。",
+          "reason": "拆分可减少职责混杂，使实时链路与批量链路有明确边界。"
+        },
+        {
+          "source": "需求背景",
+          "position": "在复用 `reportEvent` 的前提下为支付成功事件增加实时上报。",
+          "reason": "需求明确以复用现有 `reportEvent` 为前提，拆分会改变公共契约和复用边界。"
+        }
+      ],
+      "level": "L3_direction_decision",
+      "needs_human_decision": true,
+      "decision_options": [
+        "拆分为实时与批量两个公开 API",
+        "保持单一 `reportEvent` API，通过参数/模式区分实时与批量上报"
+      ]
+    }
+  ],
+  "likely_false_positives": [
+    "Execution Reviewer 建议建设 Kafka 和独立事件数据库：需求背景仅要求移动端在复用 `reportEvent` 前提下增加实时上报，未提供需要新消息系统或持久化存储的依据，属于越出当前需求边界的高风险基础设施建议，应降权。",
+    "Risk Reviewer 建议增加关闭实时模式的回滚开关：该能力属于功能开关，需求中未给出需要运行时开关的证据，应降权处理，不自动纳入修订指令。"
+  ],
+  "revision_instructions": [
+    "统一 `is_realtime` 字段位置与协议归属：选定单一位置（建议事件顶层以与原生读取保持一致），同步修改 JS、原生、服务端的读取/写入逻辑，并在协议文档中明确归属。",
+    "消除支付成功页的阻塞风险：将实时上报调用改为非阻塞方式，禁止在支付结果路径中 `await` 遥测网络请求。",
+    "制定并输出跨版本兼容性发布计划：包括各层接口变更、发布顺序、向前/向后兼容规则、以及新旧客户端/服务端组合的验收矩阵。",
+    "明确幂等边界：定义 `event_id` 服务端去重的适用范围、旧客户端无 `event_id` 时的处理策略，以及重试后回退批量队列的判重规则。",
+    "补齐实时链路可观测性指标：实时成功率、上报延迟、回退批量次数，并配套告警/看板。",
+    "待用户裁决公开 API 方向：若决定拆分，则定义实时 API 与批量 API 的契约；若决定复用，则在 `reportEvent` 内明确区分实时/批量模式，且不破坏现有调用方。"
+  ]
+}

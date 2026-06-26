@@ -1,0 +1,106 @@
+{
+  "probe": "synthesis",
+  "consensus_issues": [
+    {
+      "title": "await reportEvent 会阻塞支付结果页，违反「失败不阻塞支付结果」约束",
+      "merged_from": [
+        "Execution Reviewer"
+      ],
+      "severity": "blocker",
+      "reason": "需求明确要求实时上报失败不能阻塞支付结果展示。如果上层对 reportEvent 使用 await，则遥测网络请求的延迟或失败会直接阻塞支付成功页渲染，与核心约束矛盾。没有任何审查者对此提出异议。",
+      "suggested_fix": "将实时上报调用改为 fire-and-forget 模式（不 await），或在 reportEvent 内部用 Promise.race 加超时后静默降级到批量队列，确保支付结果页渲染路径零遥测依赖。"
+    },
+    {
+      "title": "重试后回退批量队列可能产生重复上报，旧客户端缺少 event_id 导致幂等范围不明确",
+      "merged_from": [
+        "Risk Reviewer",
+        "Architecture Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Architecture Reviewer 指出服务端仅对带 event_id 的事件去重；Risk Reviewer 指出三次实时重试后再入批量队列会产生重复。两者共同暴露：旧客户端不带 event_id，服务端无法去重，幂等保证存在盲区。这是数据正确性问题，两位审查者从不同角度触及同一根因。",
+      "suggested_fix": "在方案中明确：(1) 客户端必须在调用侧生成 event_id 并贯穿实时与批量两条路径；(2) 服务端对无 event_id 的旧客户端事件声明「尽力去重但不保证」，并在文档中标注幂等边界；(3) 回退入批量队列时携带相同 event_id 以保证服务端去重生效。"
+    },
+    {
+      "title": "缺少跨版本兼容顺序、发布编排和验收矩阵",
+      "merged_from": [
+        "Architecture Reviewer",
+        "Execution Reviewer"
+      ],
+      "severity": "high",
+      "reason": "Architecture Reviewer 要求定义向前/向后兼容顺序（JS、原生、服务端三方同时发布形成版本耦合）；Execution Reviewer 要求具体到每一层的接口变更、发布顺序和跨版本验收矩阵。两者互补，共同指出方案在发布工程维度严重不足。线上同时存在新旧客户端和两个服务端版本，无编排计划将导致灰度期间数据丢失或重复。",
+      "suggested_fix": "补充发布编排章节，至少包含：(1) 发布顺序（建议服务端先部署并兼容无 is_realtime 字段的事件，再推客户端）；(2) 四种兼容场景矩阵（新客户端+新服务端、新客户端+旧服务端、旧客户端+新服务端、旧客户端+旧服务端）及预期行为；(3) 每个场景的验收用例。"
+    },
+    {
+      "title": "缺少实时模式的观测指标和回滚开关",
+      "merged_from": [
+        "Risk Reviewer"
+      ],
+      "severity": "medium",
+      "reason": "实时上报是新引入的上行路径，没有成功率、端到端延迟、回退批量次数等核心指标，也没有关闭实时模式的开关。一旦实时通道异常（如 CDN 故障或限流），无法快速止血。其他审查者未提出反对意见，属于被忽略但必要的运维能力。",
+      "suggested_fix": "补充：(1) 实时上报成功率、P99 延迟、回退到批量队列的比率三个 dashboard 指标；(2) 一个服务端下发的 feature flag 用于一键关闭实时上报、全量回退到批量模式；(3) 告警阈值定义。"
+    }
+  ],
+  "disagreements": [
+    {
+      "title": "is_realtime 字段归属位置及严重程度判定",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "is_realtime 在 JS 方案中位于 payload、原生却从事件顶层读取，协议没有唯一归属，判定为 blocker",
+          "reason": "字段位置不统一会导致跨端解析歧义，属于协议层面的根本缺陷"
+        },
+        {
+          "source": "Risk Reviewer",
+          "position": "is_realtime 放在顶层更好，但放在 payload 也能工作，判定为低优先级偏好",
+          "reason": "只要各端能正确读取并转发，具体位置不影响功能正确性，属于风格问题"
+        }
+      ],
+      "level": "L2_local_change",
+      "needs_human_decision": true,
+      "decision_options": [
+        "统一放到事件顶层（与原生一致，JS 侧做适配提取）",
+        "统一放到 payload 内部（与 JS 一致，原生侧做适配下探）",
+        "接受现状不统一，但在协议文档中明确声明各端读取路径差异"
+      ]
+    },
+    {
+      "title": "是否将实时上报与批量上报拆分为两个独立公开 API",
+      "positions": [
+        {
+          "source": "Architecture Reviewer",
+          "position": "应该拆成两个公开 API（如 reportEventRealtime 和 reportEventBatch），职责更清晰",
+          "reason": "单一 API 内部根据 is_realtime 分支会导致调用方对行为预期不明确，拆开后接口语义更干净"
+        },
+        {
+          "source": "需求背景（隐含）",
+          "position": "移动端要在「复用 reportEvent」的前提下增加实时上报能力",
+          "reason": "需求明确要求复用现有 API，拆分 API 与需求方向冲突"
+        }
+      ],
+      "level": "L3_direction_decision",
+      "needs_human_decision": true,
+      "decision_options": [
+        "保持单一 reportEvent API，内部通过参数区分实时/批量路径（符合需求原文）",
+        "拆分为两个 API，修改需求前提（需评估对现有调用方的迁移成本）",
+        "保持单一 API 但暴露一个新的 optional 参数显式声明上报模式，并在文档中注明行为差异"
+      ]
+    }
+  ],
+  "likely_false_positives": [
+    {
+      "title": "建设 Kafka 和独立事件数据库",
+      "source": "Execution Reviewer",
+      "reason": "该建议要求引入全新中间件和存储层，但：(1) 需求仅是在现有遥测管道上增加实时上报路径，未提及当前基础设施无法承载；(2) 没有其他审查者支持此判断；(3) 没有提供任何证据表明现有消息通道存在可靠性问题；(4) 建设 Kafka + 独立数据库的工程量远超本次需求范围，属于典型的无证据高风险范围膨胀建议。降权处理。"
+    }
+  ],
+  "revision_instructions": [
+    "将 reportEvent 的实时上报路径改为 fire-and-forget，禁止 await，并在文档中显式标注「调用方不得 await」",
+    "统一 is_realtime 字段在协议中的位置（需人工裁决后选定），并在跨端协议文档中明确声明",
+    "补充 event_id 生成规范：客户端侧生成，贯穿实时与批量两条路径，确保服务端去重覆盖",
+    "明确幂等边界：对无 event_id 的旧客户端事件声明去重策略（尽力而为/不保证）",
+    "补充发布编排章节：包含发布顺序、四种新旧版本兼容矩阵和验收用例",
+    "补充观测能力：实时成功率、P99 延迟、回退批量比率三个指标及对应告警",
+    "补充回滚机制：服务端 feature flag 一键关闭实时上报，全量回退批量模式",
+    "关于是否拆分 API（实时 vs 批量）需人工裁决后在方案中明确立场"
+  ]
+}

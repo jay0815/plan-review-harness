@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 2,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 12,
+  "matched_known_issues": [
+    "await reportEvent 违反支付成功页不得被上报阻塞的硬约束。",
+    "识别旧客户端覆盖和两个服务端版本兼容性缺口。",
+    "识别 is_realtime 在 payload 与事件顶层之间的歧义。"
+  ],
+  "missed_known_issues": [
+    "event_id 只作为待确认问题，没有形成正式反驳。",
+    "未覆盖生产观测、回滚和完整失败验收。"
+  ],
+  "valuable_new_findings": [
+    "明确指出页面展示被等待，即使不阻塞 UI 线程也仍然违反用户可见的非阻塞约束。"
+  ],
+  "false_positives": [
+    "假设批量队列存在磁盘满、队列满和本地存储写入失败等具体机制。",
+    "提出 JS 直接实时上报或替代通道，超出既有方案边界。",
+    "询问三次重试间隔和队列容量，把注意力引向不必要的参数与实现设计。"
+  ],
+  "failure_modes": [
+    "为了强化反驳而引入未提供的基础设施和失败机制。",
+    "修订建议容易扩张为替代架构。"
+  ],
+  "notes": "角色判断：仅适合作为辅助风险发散模型，不适合作为 Rebuttal 主模型。需要严格过滤基础设施假设和替代发送路径，避免把反驳变成范围扩张。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "rebuttal"
+  ]
+}

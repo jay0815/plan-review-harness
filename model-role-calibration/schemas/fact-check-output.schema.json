@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fact Check Probe Output",
+  "type": "object",
+  "required": ["probe", "checked_issues", "source_summaries", "limits"],
+  "properties": {
+    "probe": {
+      "const": "fact_check"
+    },
+    "checked_issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "issue_id",
+          "source",
+          "issue_title",
+          "status",
+          "scope_status",
+          "evidence_status",
+          "claim_support",
+          "reason",
+          "checked_files"
+        ],
+        "properties": {
+          "issue_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string"
+          },
+          "issue_title": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "verified",
+              "partially_verified",
+              "unsupported",
+              "contradicted",
+              "unverifiable"
+            ]
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "not_determined"
+            ]
+          },
+          "evidence_status": {
+            "enum": [
+              "quote_matches",
+              "quote_mismatch",
+              "citation_missing",
+              "file_missing",
+              "line_missing",
+              "plan_only",
+              "not_checked"
+            ]
+          },
+          "claim_support": {
+            "enum": [
+              "direct",
+              "partial",
+              "none",
+              "contradicted",
+              "unverifiable"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "checked_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "source_summaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "source",
+          "total_issues",
+          "verified",
+          "partially_verified",
+          "unsupported",
+          "contradicted",
+          "unverifiable"
+        ],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "total_issues": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "verified": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "partially_verified": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unsupported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contradicted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unverifiable": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "limits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

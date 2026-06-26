@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 2,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 14,
+  "matched_known_issues": [
+    "支付成功页与遥测上传结构性耦合。",
+    "传输控制字段进入业务 payload。",
+    "跨团队同步发布耦合。"
+  ],
+  "missed_known_issues": [
+    "遗漏 event_id、重试和批量回退的幂等链路。",
+    "没有识别 is_realtime 写入与读取位置错位。",
+    "遗漏生产观测和回滚。"
+  ],
+  "valuable_new_findings": [
+    "明确把重试参数视为实现细节，不重复拆分问题。"
+  ],
+  "false_positives": [
+    "无依据判断服务端契约没有变化、同步发布缺乏必要性。",
+    "建议改为独立参数或 context，并推演未来更多传输模式。"
+  ],
+  "failure_modes": [
+    "对显式依赖耦合敏感，但跨路径契约覆盖不足。",
+    "容易以未来扩展性替代当前 wire contract 检查。"
+  ],
+  "notes": "角色判断：不建议担任 Architecture 主审。可辅助检查显式依赖耦合，但必须由其他模型补充字段路径、幂等、观测和回滚。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "architecture"
+  ]
+}

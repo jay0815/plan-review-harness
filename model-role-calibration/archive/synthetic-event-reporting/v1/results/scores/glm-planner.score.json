@@ -1,0 +1,38 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "planner",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 1,
+    "false_positive_cost": 2
+  },
+  "total": 15,
+  "matched_known_issues": [
+    "公共 API 与线上协议分层。",
+    "event_id 生成责任和原生桥路径。",
+    "分阶段发布、测试、监控和回滚。"
+  ],
+  "missed_known_issues": [
+    "未严格隔离旧版本和基础设施未知事实。"
+  ],
+  "valuable_new_findings": [
+    "v1 中契约闭环表现最强。",
+    "清晰区分公共 API 输入和线上报文封装。"
+  ],
+  "false_positives": [
+    "假设旧服务端忽略新增字段。",
+    "假设已有队列优先级或相关基础设施。",
+    "自行设计旧事件复合键去重。",
+    "引入最终到达语义。"
+  ],
+  "failure_modes": [
+    "用未经确认的旧端行为闭合主方案。",
+    "自行扩展去重和可靠投递能力。"
+  ],
+  "notes": "角色判断：v1 Planner 备选，适合契约复核。契约能力强，但证据纪律不足，错误假设可能固化为实施方案。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

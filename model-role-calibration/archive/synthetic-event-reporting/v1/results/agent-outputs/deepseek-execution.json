@@ -1,0 +1,80 @@
+{
+  "probe": "execution",
+  "issues": [
+    {
+      "title": "Step 3 与需求核心约束矛盾：await 阻塞支付成功页",
+      "type": "step",
+      "severity": "blocker",
+      "evidence": "Step 3: '支付成功页执行 await reportEvent(...)，确认上传成功后再展示结果页，确保事件不会丢失'；需求明确约束 '上报失败不能阻塞支付成功页，也不能改变支付结果'",
+      "why_it_matters": "等待上传成功后再展示页面直接违反了 '上报失败不能阻塞支付成功页' 这条硬约束。如果实时上传失败或重试耗时较长，支付成功页将一直无法展示，影响支付体验甚至让用户以为支付未完成。",
+      "suggested_fix": "移除 await 和 '确认上传成功后再展示' 的依赖。支付成功页调用 reportEvent（或 reportEvent 内部异步上报）后立即展示结果页。若必须确认送达，可选方案：设一个短超时（如 1-2 秒），超时后无论如何展示页面，上报结果通过回调或日志异步记录。",
+      "confidence": 0.95
+    },
+    {
+      "title": "is_realtime 字段所处层级不一致",
+      "type": "ambiguity",
+      "severity": "high",
+      "evidence": "Step 1 示例将 is_realtime 放在 payload 内部：'{ \"is_realtime\": true }'；Step 2 描述 '原生桥从事件对象顶层读取 is_realtime'",
+      "why_it_matters": "JS 放入 payload、原生从顶层读，两边逻辑不匹配，原生桥将永远读不到 is_realtime，实时上传功能完全失效。两个团队各自按自己的理解实现会导致联调失败。",
+      "suggested_fix": "明确定义 is_realtime 的准确路径。建议统一为 '事件对象顶层字段'（与 name、payload 平级），或明确写为 '从 payload 中读取 is_realtime'，并确保端到端透传不被中间层改写。",
+      "confidence": 0.9
+    },
+    {
+      "title": "缺少 event_id 的生成与传递规范",
+      "type": "input",
+      "severity": "high",
+      "evidence": "需求提到 '服务端仅对带有 event_id 的事件去重'；方案全文未提及 event_id 由谁生成、何时附加、实时上传与降级批量队列时如何保持 event_id 一致",
+      "why_it_matters": "服务端依赖 event_id 去重。如果没有 event_id，实时上传重试可能导致重复事件。从实时降级到批量队列时如果 event_id 不一致或丢失，服务端无法识别为同一事件，可能产生重复记录。",
+      "suggested_fix": "在方案中补充：支付成功事件在调用 reportEvent 前由 JS 层生成唯一 event_id 并放入 payload；实时上传和批量队列上传共用同一个 event_id；降级入批量队列时 event_id 保持不变。",
+      "confidence": 0.9
+    },
+    {
+      "title": "重试策略缺少关键参数与错误分类",
+      "type": "acceptance",
+      "severity": "medium",
+      "evidence": "Step 4: '实时上传失败时立即重试三次；仍失败则重新放入批量队列'，未定义重试间隔、总超时上限、是否区分错误类型",
+      "why_it_matters": "'立即'重试无退避可能放大瞬时故障；不区分 4xx（客户端错误，重试无意义）和 5xx/网络错误会导致浪费重试次数；没有总超时会导致 Step 3 中 await 场景等待时间不可控。",
+      "suggested_fix": "补充：重试间隔建议 200-500ms 递增或小指数退避；总耗时不超过 3s；仅网络错误和 5xx 触发重试，4xx 直接降级入批量队列；定义超时后行为。",
+      "confidence": 0.85
+    },
+    {
+      "title": "发布协调描述模糊且未考虑向后兼容",
+      "type": "dependency",
+      "severity": "medium",
+      "evidence": "Step 5: 'JS、原生和服务端在同一个版本窗口一起发布'；需求确认 '线上存在旧客户端和两个服务端版本'",
+      "why_it_matters": "'同一个版本窗口'在不同组织中有不同理解（同时发版 vs 同一迭代周期先后发版）。旧客户端不知道 is_realtime，新服务端如果有任何对 is_realtime 字段的强制校验可能拒绝旧客户端请求。后续回滚时也需要考虑兼容。",
+      "suggested_fix": "明确发布顺序：服务端先上线（对 is_realtime 做可选/忽略处理），再发客户端；或客户端始终兼容服务端不识别 is_realtime 的情况。说明旧客户端的兼容策略：不传 is_realtime 的事件仍正常进入批量队列。",
+      "confidence": 0.8
+    },
+    {
+      "title": "验收标准仅覆盖正向 happy path",
+      "type": "acceptance",
+      "severity": "medium",
+      "evidence": "Step 6: '开发环境能看到支付成功事件请求立即发出，普通事件仍进入批量队列'，未涉及失败、降级、边界场景",
+      "why_it_matters": "核心风险场景（重试 3 次失败后降级批量、网络断开时行为、App 退出时未完成上传的处理、降级后 event_id 一致性）没有验收项，上线后可能出现意外行为。",
+      "suggested_fix": "增加验收项：1）断网时实时上传重试 3 次后事件进入批量队列并能在恢复网络后正常发出；2）降级前后 event_id 一致；3）支付成功页展示不依赖上报结果；4）旧版本客户端行为不变。",
+      "confidence": 0.85
+    },
+    {
+      "title": "reportEvent 异步语义未明确",
+      "type": "output",
+      "severity": "low",
+      "evidence": "Step 1 强调 '保持 reportEvent 函数签名不变'，Step 3 使用 await 等待上传完成，两者隐含的异步契约不明确",
+      "why_it_matters": "原 reportEvent 如果返回 void，await 不会真正等待上传完成，方案意图落空。如果改为返回 Promise 并在实时上传完成后 resolve，对已有调用方可能是行为变更。",
+      "suggested_fix": "明确定义 reportEvent 的异步语义：返回 Promise<void>，实时模式下上传完成（或降级入队列）后 resolve，批量模式下入队后立即 resolve。或者保持 fire-and-forget，Step 3 不 await。",
+      "confidence": 0.7
+    }
+  ],
+  "missing_questions": [
+    "实时上传的超时时间是多少？与重试总时长如何协调？",
+    "支付成功事件是否需要携带 event_id？event_id 由 JS 层生成还是原生桥生成？",
+    "批量队列中已有的事件若需改为实时发送，是否支持？",
+    "原生桥改造由哪个团队负责？JS 层是否需要感知原生桥的实时/批量实现细节？",
+    "现有上传接口是否已能区分实时/批量？服务端是否需要新增字段或接口？",
+    "App 生命周期事件（如退到后台、被 kill）发生时，正在重试的实时任务如何处理？"
+  ],
+  "false_positive_risks": [
+    "Step 3 的 await 如果仅是伪代码意图表达，实际 reportEvent 实现中实时上传为 fire-and-forget，则不存在阻塞支付页的风险——但需要开发者确认实际逻辑。",
+    "三个团队同一版本窗口发布在某些组织的 CI/CD 中可能是标准流程，若已有成熟的协调机制则不一定是高风险项。"
+  ]
+}

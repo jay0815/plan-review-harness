@@ -1,0 +1,40 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 5,
+    "contract_closure": 5,
+    "actionability": 5,
+    "evidence_discipline": 4,
+    "false_positive_cost": 4
+  },
+  "total": 23,
+  "matched_known_issues": [
+    "await reportEvent 违反非阻塞硬约束。",
+    "is_realtime 在 payload 与事件顶层之间位置冲突。",
+    "event_id 生成责任和跨重试复用未定义。",
+    "旧客户端、两个服务端版本和同步发布缺少兼容矩阵。",
+    "服务端变更范围和 reportEvent 返回语义未定义。",
+    "缺少自动化失败测试、生产验收和回滚。"
+  ],
+  "missed_known_issues": [
+    "没有进一步要求提供仓库、模块和调用点的定位清单。"
+  ],
+  "valuable_new_findings": [
+    "区分服务端是否实际需要改动，并指出不同答案会改变发布步骤。",
+    "把 Promise 成功语义与批量回退的调用方行为作为独立执行契约检查。"
+  ],
+  "false_positives": [
+    "把 event_id 缺失标为 blocker，严重度略高。",
+    "建议把可靠性保证交给本地队列，隐含未确认的队列可靠性。"
+  ],
+  "failure_modes": [
+    "覆盖全面时仍会轻微越界到可靠性实现方向。"
+  ],
+  "notes": "角色判断：Execution 主模型首选。输出可以直接转化为 Planner 补充清单；正式采用时只需过滤少量可靠性实现暗示。",
+  "suggested_roles": [
+    "execution"
+  ],
+  "unsuitable_roles": []
+}

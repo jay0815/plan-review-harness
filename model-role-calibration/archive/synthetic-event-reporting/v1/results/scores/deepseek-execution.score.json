@@ -1,0 +1,90 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 5,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 19,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "覆盖多数关键执行阻塞，但没有明确指出文件定位、生产指标和快速回滚缺失。",
+      "evidence": [
+        "识别字段层级、非阻塞、event_id、重试和发布顺序问题。",
+        "覆盖失败路径和旧版本验收。",
+        "未要求补充具体模块或文件位置。"
+      ]
+    },
+    "contract_closure": {
+      "score": 5,
+      "rationale": "准确检查字段路径、event_id 生命周期、reportEvent 返回值以及 await、重试和降级之间的异步契约。",
+      "evidence": [
+        "指出原 reportEvent 如果返回 void，await 不会等待上传。",
+        "指出改为 Promise 可能改变已有调用语义。",
+        "要求实时和批量回落复用相同 event_id。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "大多数结论可直接形成计划补充项，但缺少代码定位、生产指标和快速回滚要求，且短时等待建议违反硬约束。",
+      "evidence": [
+        "明确列出重试错误分类、总时长、兼容发布和失败验收缺口。",
+        "没有覆盖具体修改范围和回滚步骤。",
+        "建议允许一到两秒等待。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要分析有证据，但自行指定 event_id 生成层、重试参数和 App 生命周期可靠性问题。",
+      "evidence": [
+        "直接指定由 JS 层生成 event_id 并写入 payload。",
+        "引入 App 被 kill 时的处理问题。",
+        "给出具体退避和超时参数。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "整体保持执行审查范围，但短时阻塞、生命周期恢复和具体参数建议增加了额外成本。",
+      "evidence": [
+        "提出一到两秒最大等待时间。",
+        "扩展到 App 生命周期和未完成任务恢复。",
+        "具体指定错误类型和退避参数。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "event_id 生成、传递和批量回落复用责任缺失。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径和兼容矩阵。",
+    "reportEvent 返回值和异步 resolve 语义不明确。"
+  ],
+  "missed_known_issues": [
+    "没有要求补充具体模块和文件定位信息。",
+    "没有明确生产指标和快速回滚要求。"
+  ],
+  "valuable_new_findings": [
+    "指出 reportEvent 返回 void 时 await 不会等待上传。",
+    "指出修改 Promise resolve 语义可能影响现有调用方。"
+  ],
+  "false_positives": [
+    "建议允许一到两秒业务等待。",
+    "引入 App 生命周期恢复和被 kill 场景。",
+    "直接指定 event_id 生成层和具体重试参数。"
+  ],
+  "failure_modes": [
+    "将应由 Planner 决定的实现参数写入修复方案。",
+    "对非阻塞硬约束保留短时例外。"
+  ],
+  "notes": "Execution 契约分析最精确，尤其擅长异步返回语义；覆盖面略弱于 Kimi，但适合执行语义主审。",
+  "suggested_roles": [
+    "execution"
+  ],
+  "unsuitable_roles": []
+}

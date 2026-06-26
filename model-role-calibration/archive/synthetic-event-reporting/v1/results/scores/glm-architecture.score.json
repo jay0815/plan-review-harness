@@ -1,0 +1,82 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 2,
+    "contract_closure": 2,
+    "actionability": 2,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 10,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 2,
+      "rationale": "识别了阻塞与发布耦合，但问题集中重复在 await，遗漏协议错位、event_id 和观测回滚。",
+      "evidence": [
+        "两个独立 issue 都在描述 await 与三次重试造成的阻塞。",
+        "没有识别字段层级不一致和去重责任。"
+      ]
+    },
+    "contract_closure": {
+      "score": 2,
+      "rationale": "没有闭合 is_realtime 的字段归属，也没有覆盖 event_id 生成、复用和服务端去重。",
+      "evidence": [
+        "只把 is_realtime 描述为业务 payload 污染。",
+        "没有形成 event_id 相关 issue 或修订目标。"
+      ]
+    },
+    "actionability": {
+      "score": 2,
+      "rationale": "部分建议会产生新的错误依赖，且缺少兼容矩阵、幂等验证、指标和回滚。",
+      "evidence": [
+        "建议旧客户端根据事件名称进行默认实时路由。",
+        "未提供可执行的 event_id 与双服务端兼容闭环。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "多次把输入没有提供的超时、服务端消费方式和旧客户端能力写成推断依据。",
+      "evidence": [
+        "假设单次请求超时为 10 秒并推导 30 秒等待。",
+        "假设服务端未来会依据 is_realtime 执行逻辑。",
+        "推测可修改旧客户端并按事件名称进行路由。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "重复报告同一阻塞问题，并提出按业务事件名路由和清理字段等可能破坏边界的建议。",
+      "evidence": [
+        "把 await 与三次重试拆成两个高度重复的问题。",
+        "建议原生桥依赖 payment_success 等业务事件名称。",
+        "建议回落批量队列前清除 is_realtime，但服务端是否消费该字段并不明确。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "三端同窗口发布造成部署耦合。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层，实时分支无法触发。",
+    "实时重试和批量回落需要稳定 event_id 去重。",
+    "验收缺少兼容矩阵、指标和回滚方式。"
+  ],
+  "valuable_new_findings": [],
+  "false_positives": [
+    "假设具体请求超时时长。",
+    "建议旧客户端或原生桥按业务事件名称路由。",
+    "假设服务端会使用 is_realtime 并要求批量回落时清除字段。"
+  ],
+  "failure_modes": [
+    "同一问题重复占用输出，导致关键架构问题漏报。",
+    "依据未知实现细节推导结构结论。",
+    "提出会制造业务层与基础设施层新耦合的修复方向。"
+  ],
+  "notes": "只能发现显性的约束冲突，跨层契约和责任闭合能力不足；当前不适合作为 Architecture 主审。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "architecture"
+  ]
+}

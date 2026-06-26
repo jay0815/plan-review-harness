@@ -1,0 +1,87 @@
+{
+  "probe": "execution",
+  "issues": [
+    {
+      "title": "Step 3 contradicts core requirement about not blocking payment success page",
+      "type": "ambiguity",
+      "severity": "blocker",
+      "evidence": "需求明确说\"上报失败不能阻塞支付成功页，也不能改变支付结果\"，但 Step 3 要求\"确认上传成功后再展示结果页\"",
+      "why_it_matters": "如果上传失败（即使重试3次后），Step 3 会阻塞用户看到支付结果页，直接违反核心需求",
+      "suggested_fix": "明确 Step 3 的超时和失败处理：支付成功页应该有最大等待时间（如2秒），超时或失败后立即展示结果页，事件降级到批量队列",
+      "confidence": 0.95
+    },
+    {
+      "title": "Missing upload API specification for real-time events",
+      "type": "input",
+      "severity": "high",
+      "evidence": "Step 2 提到\"立即调用上传接口\"但未定义接口地址、请求格式、响应格式、认证方式",
+      "why_it_matters": "开发者无法实现原生桥的实时上传功能，不知道调用哪个端点、如何构造请求、如何判断成功失败",
+      "suggested_fix": "补充实时上传接口的完整规范：endpoint URL、HTTP method、request body schema（是否复用现有批量上报接口）、response schema、error codes",
+      "confidence": 0.92
+    },
+    {
+      "title": "No backward compatibility strategy for old clients",
+      "type": "dependency",
+      "severity": "high",
+      "evidence": "需求背景说明\"线上存在旧客户端和两个服务端版本\"，但 Step 5 仅说\"同一个版本窗口一起发布\"，未说明如何处理已发布的旧客户端",
+      "why_it_matters": "旧客户端不会发送 is_realtime 字段，服务端需要兼容处理；新客户端遇到旧服务端时行为未定义",
+      "suggested_fix": "明确兼容性策略：1) 服务端如何处理缺少 is_realtime 的事件 2) 新客户端如何检测服务端版本并降级 3) 是否需要 feature flag 控制灰度发布",
+      "confidence": 0.88
+    },
+    {
+      "title": "Retry mechanism lacks timing specification",
+      "type": "step",
+      "severity": "medium",
+      "evidence": "Step 4 说\"立即重试三次\"但未定义重试间隔、总超时时间、是否使用指数退避",
+      "why_it_matters": "如果三次重试各等待10秒，总阻塞时间可能超过30秒，严重阻塞支付成功页；开发者无法实现合理的超时控制",
+      "suggested_fix": "补充重试策略细节：每次重试间隔（如0.5s/1s/2s）、单次请求超时（如2s）、总超时上限（如5s），超时后立即降级到批量队列",
+      "confidence": 0.85
+    },
+    {
+      "title": "Acceptance criteria are not measurable",
+      "type": "acceptance",
+      "severity": "medium",
+      "evidence": "Step 6 说\"能看到支付成功事件请求立即发出\"，但\"立即\"没有量化定义，也没有验证失败场景的标准",
+      "why_it_matters": "测试人员无法判断什么算\"立即\"（100ms? 1s? 5s?），也无法验收失败降级、重试、兼容性等关键场景",
+      "suggested_fix": "定义可测量的验收标准：1) 实时事件在X秒内发出请求 2) 失败重试次数和间隔符合预期 3) 降级到批量队列的事件可查询 4) 旧客户端事件正常处理 5) 不阻塞支付成功页的量化指标",
+      "confidence": 0.9
+    },
+    {
+      "title": "Missing server-side event_id generation logic",
+      "type": "step",
+      "severity": "medium",
+      "evidence": "需求说\"服务端仅对带有 event_id 的事件去重\"，但方案未说明实时上报时 event_id 由谁生成、何时生成",
+      "why_it_matters": "如果客户端不生成 event_id，实时上报失败后降级到批量队列会导致重复上报；如果客户端生成，需要定义生成规则避免冲突",
+      "suggested_fix": "明确 event_id 生成策略：建议客户端在调用 reportEvent 时生成 UUID 作为 event_id，确保实时上报和批量上报使用相同 event_id 实现去重",
+      "confidence": 0.82
+    },
+    {
+      "title": "No specification for is_realtime field handling on server",
+      "type": "output",
+      "severity": "low",
+      "evidence": "Step 1 在 payload 中添加 is_realtime 字段，但未说明服务端收到后是否需要剥离该字段、是否存储、是否影响下游消费",
+      "why_it_matters": "服务端开发者不知道是否需要修改存储逻辑、是否需要在转发给下游系统前移除该字段",
+      "suggested_fix": "补充服务端处理规范：is_realtime 仅用于客户端路由决策，服务端收到后应剥离该字段，不影响现有事件存储和消费逻辑",
+      "confidence": 0.75
+    },
+    {
+      "title": "Unclear which call sites need modification",
+      "type": "file",
+      "severity": "low",
+      "evidence": "Step 1 说\"支付成功调用方\"需要修改，但未列出具体文件路径、函数名、涉及的代码仓库",
+      "why_it_matters": "开发者需要搜索代码库找到所有支付成功事件的调用点，可能遗漏某些场景",
+      "suggested_fix": "提供具体的代码位置清单：涉及的仓库、文件路径、函数名，或至少提供搜索关键词帮助定位",
+      "confidence": 0.7
+    }
+  ],
+  "missing_questions": [
+    "支付成功页的最大可接受等待时间是多少？（用于设计超时和降级策略）",
+    "实时上报接口是否复用现有的批量上报接口，还是需要新建专用接口？",
+    "如何灰度发布此功能？是否需要 feature flag 控制开关？",
+    "实时上报失败降级到批量队列后，是否需要告警或监控？"
+  ],
+  "false_positive_risks": [
+    "如果团队已有内部的接口文档规范和重试策略标准，部分缺失的细节可能在其他文档中已定义",
+    "如果这是内部小型项目，代码位置可能对团队成员是显而易见的"
+  ]
+}

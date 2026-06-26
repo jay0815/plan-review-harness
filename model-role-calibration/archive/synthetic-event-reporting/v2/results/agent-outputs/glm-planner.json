@@ -1,0 +1,214 @@
+{
+  "probe": "planner",
+  "summary": "在现有 reportEvent API 上通过 payload 保留字段 _mode 增加实时上报模式：支付成功事件标记 _mode=realtime 后绕过批量队列立即发送，Promise 立即 resolve 不阻塞调用方，网络失败最多 2 次短间隔重试后静默丢弃，重试携带同一 event_id 保证幂等；新客户端为所有事件生成 UUID v4 写入 payload.event_id 改善去重；不改 API 签名、不新增公共接口、不建设持久化或重放机制。",
+  "scope": {
+    "in_scope": [
+      "JS SDK: 检测 payload._mode=realtime 并绕过 JS 侧批量队列立即 dispatch",
+      "JS SDK: 为所有事件生成 event_id (UUID v4) 写入 payload.event_id",
+      "JS SDK: realtime 模式下 Promise 立即 resolve，网络结果不传播到调用方",
+      "JS SDK: realtime 事件失败后最多 2 次重试（间隔 500ms），之后静默丢弃并记录日志",
+      "原生侧: 从 payload._mode 读取模式，realtime 时绕过原生批量队列立即发送",
+      "服务端: 兼容 payload 中新增的 _mode 与 event_id 字段，优先使用客户端提供的 event_id 去重",
+      "兼容性保障: 旧客户端无 _mode 无 event_id 继续批量上报，两版服务端均能处理新旧格式事件",
+      "分阶段发布（服务端→原生→JS SDK）与各环节独立回滚方案"
+    ],
+    "out_of_scope": [
+      "新增平行上报公共 API 或修改 reportEvent 函数签名",
+      "建设消息平台、新数据库、持久化队列、重放系统或最终送达保证",
+      "服务端事件处理优先级排序或专用实时投递通道",
+      "批量上报行为的任何变更（阈值、时机、格式）",
+      "通用任务调度或重试框架",
+      "离线事件缓存或离线后补偿上报机制"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "实时模式信号机制",
+      "decision": "使用 payload 保留字段 _mode=\"realtime\" 标记实时上报，调用方在 payload 中写入该字段，JS SDK 读取后决定传输路径。不修改 reportEvent(name, payload) 签名。",
+      "reason": "复用现有 API 且不改签名；payload 为 Record<string, unknown> 可自然扩展；_ 前缀约定为元数据/控制字段，与业务数据隔离；调用方自主决定哪些事件需要实时，SDK 不需硬编码事件名列表。"
+    },
+    {
+      "title": "event_id 生成与放置",
+      "decision": "新客户端为所有事件（不论 realtime 或 batch）生成 UUID v4 作为 event_id，写入 payload.event_id。旧客户端不生成 event_id，继续现有行为。",
+      "reason": "服务端已按 event_id 去重，客户端提供 event_id 使去重更准确且不依赖服务端生成；为所有事件生成而非仅 realtime，使批量事件也受益于去重改善；UUID v4 无需协调即可全局唯一。"
+    },
+    {
+      "title": "非阻塞 Promise 行为",
+      "decision": "realtime 模式下 reportEvent 返回的 Promise 在事件被 dispatch 到网络层后立即 resolve（下一个微任务），网络请求的成功或失败不传播到调用方。batch 模式下 Promise 在事件加入批量队列后 resolve（保持现有行为）。",
+      "reason": "硬约束要求上报失败不能阻塞支付成功页；立即 resolve 确保调用方 await 时不等待网络；网络结果通过内部日志和指标观测，不影响调用方流程。"
+    },
+    {
+      "title": "重试策略与幂等边界",
+      "decision": "realtime 事件网络失败后最多 2 次重试，间隔 500ms；仅对网络错误和 5xx 重试，4xx 不重试；每次重试携带相同 event_id；超过重试次数后静默丢弃并记录客户端日志。batch 事件不增加重试逻辑。",
+      "reason": "有限重试提高送达概率但不建设持久化机制；相同 event_id 保证服务端幂等去重；4xx 为客户端数据问题不应重试；静默丢弃符合不阻塞和不改变支付结果的约束。"
+    },
+    {
+      "title": "原生桥接传递方式",
+      "decision": "不改桥接函数签名；JS 将 _mode 写入 payload 传递，原生侧从 payload._mode 读取模式决定是否绕过原生批量队列。原生侧更新为内部逻辑变更而非接口变更。",
+      "reason": "避免跨团队接口变更的协调成本和兼容风险；payload 作为数据载体自然承载 _mode；旧原生版本不读 _mode 则忽略（渐进增强），新原生版本读取后实现完整实时路径。"
+    },
+    {
+      "title": "_mode 是否传输到服务端",
+      "decision": "_mode 保留在 payload 中随事件一起传输到服务端，服务端可用于可观测性（区分实时与批量事件比例、延迟统计），但不影响事件处理逻辑。",
+      "reason": "服务端观测实时上报效果需要区分来源；旧服务端忽略未知字段不受影响；_mode 作为元数据字段语义清晰，不干扰业务数据处理。"
+    },
+    {
+      "title": "发布顺序与兼容策略",
+      "decision": "按服务端→原生→JS SDK 顺序分阶段发布；每阶段确保向后兼容：新服务端处理旧格式事件、新原生忽略旧 JS 无 _mode 的 payload、新 JS SDK 的 _mode 和 event_id 为纯增量字段；任一环节回滚不影响其他环节。",
+      "reason": "服务端先部署确保接收新字段时不崩溃；原生次之确保实时路径完整；JS 最后使端到端通路就绪；向后兼容设计使回滚安全。"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "定义数据契约与字段规范",
+      "details": [
+        "规定 payload._mode 取值：\"realtime\" 表示立即发送，缺省或非 \"realtime\" 表示批量发送",
+        "规定 payload.event_id 格式：UUID v4 字符串（36 字符，含连字符），由客户端生成，全局唯一",
+        "规定 payload 中 _ 前缀字段为客户端/传输层控制字段，服务端不应将其视为业务数据",
+        "编写契约文档分发至 JS、原生、服务端三团队，明确字段名、字段位置（payload 内）、生成方（客户端）、消费方（JS SDK 读 _mode 决定路径；原生读 _mode 决定队列；服务端读 event_id 去重、读 _mode 观测）"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "字段规范文档（_mode 取值与语义、event_id 格式与生成规则、_ 前缀约定）",
+        "三团队确认签字"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "服务端兼容性改造",
+      "details": [
+        "确认旧服务端版本收到含 _mode 和 event_id 的 payload 不会崩溃或误处理（JSON 反序列化忽略未知字段）",
+        "新服务端版本：从 payload 中读取 event_id 用于去重，若客户端未提供 event_id 则保持现有去重或不去重行为",
+        "新服务端版本：从 payload 中读取 _mode 写入日志/指标（event_mode 字段），不影响事件处理逻辑",
+        "新服务端版本：确保两版服务端（新旧）对含新字段事件的处理结果一致（均正常入库/存储）",
+        "部署新服务端版本，与旧版本并行运行，验证旧格式事件和新格式事件均正常处理"
+      ],
+      "dependencies": [
+        "步骤1的契约文档"
+      ],
+      "outputs": [
+        "新服务端版本部署完成",
+        "两版服务端对新旧格式事件的处理验证报告"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "原生侧实时上报路径实现",
+      "details": [
+        "在原生事件上报模块中，添加 payload._mode 读取逻辑：若 payload._mode === \"realtime\" 则绕过原生批量队列，立即调用网络层发送",
+        "若 payload._mode 缺省或非 \"realtime\"，保持现有批量队列行为",
+        "确保原生侧不修改桥接函数对外接口签名，仅内部逻辑变更",
+        "原生侧发送时保留 payload 中所有字段（含 _mode 和 event_id），不剥离",
+        "编写原生侧单元测试：realtime payload 绕过队列、batch payload 进入队列、无 _mode payload 进入队列",
+        "部署新原生版本至客户端"
+      ],
+      "dependencies": [
+        "步骤1的契约文档",
+        "步骤2服务端部署完成"
+      ],
+      "outputs": [
+        "新原生版本发布",
+        "原生侧单元测试通过报告"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "JS SDK 改造",
+      "details": [
+        "reportEvent(name, payload) 函数签名不变",
+        "入口逻辑：读取 payload._mode，若值为 \"realtime\" 进入实时路径，否则进入现有批量路径",
+        "event_id 生成：在 reportEvent 入口处为所有事件生成 UUID v4，写入 payload.event_id（若 payload 已有 event_id 则保留不覆盖）",
+        "实时路径：绕过 JS 侧批量队列，立即调用桥接函数 reportEvent(name, payload)（payload 此时含 _mode 和 event_id），然后在下一个微任务 resolve 返回的 Promise",
+        "批量路径：保持现有逻辑，事件加入批量队列（payload 含 event_id），Promise 在入队后 resolve",
+        "实时路径网络层回调：注册网络请求完成回调，成功则记录日志，失败则触发重试逻辑",
+        "重试逻辑：失败后最多 2 次重试，间隔 500ms，仅对网络错误和 HTTP 5xx 重试，4xx 不重试；每次重试携带相同 event_id 和完整 payload；超过重试次数后记录丢弃日志",
+        "实时路径错误边界：桥接调用异常时 catch 错误、记录日志、Promise 已 resolve 不影响调用方",
+        "编写 JS SDK 单元测试与集成测试"
+      ],
+      "dependencies": [
+        "步骤1的契约文档",
+        "步骤3原生版本发布完成"
+      ],
+      "outputs": [
+        "新 JS SDK 版本发布",
+        "JS SDK 测试通过报告"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "端到端集成联调",
+      "details": [
+        "搭建集成测试环境：新 JS SDK + 新原生 + 新服务端",
+        "验证实时上报端到端通路：支付成功事件标记 _mode=realtime，确认从 JS 到原生到服务端全链路不进入批量队列",
+        "验证批量上报端到端通路：普通事件无 _mode，确认从 JS 到原生到服务端全链路走批量队列",
+        "验证兼容性：旧 JS SDK + 新原生 + 新服务端、新 JS SDK + 旧原生 + 新服务端 两种组合均正常",
+        "验证去重：同一 event_id 的多次上报（重试场景）被服务端去重为一条",
+        "验证非阻塞：模拟网络失败，确认支付成功页渲染不受 await reportEvent 阻塞"
+      ],
+      "dependencies": [
+        "步骤2",
+        "步骤3",
+        "步骤4"
+      ],
+      "outputs": [
+        "端到端集成测试报告",
+        "兼容性矩阵验证报告"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "分阶段灰度发布与监控",
+      "details": [
+        "阶段一：新服务端全量部署（两版并行期间新格式事件均正常处理）",
+        "阶段二：新原生版本灰度发布（5%→20%→50%→100%），每阶段观察 48 小时无异常后推进",
+        "阶段三：新 JS SDK 灰度发布（5%→20%→50%→100%），每阶段观察 48 小时",
+        "监控指标：实时事件送达率、实时事件端到端延迟 P99、实时事件重试率、实时事件丢弃率、批量事件总量与去重率、旧格式事件处理成功率",
+        "告警条件：实时事件送达率 < 95%、实时事件延迟 P99 > 5s、实时事件丢弃率 > 10%、旧格式事件处理错误率 > 0.1%",
+        "每个灰度阶段配备回滚预案：原生或 JS SDK 灰度异常时回滚至旧版本"
+      ],
+      "dependencies": [
+        "步骤5集成测试通过"
+      ],
+      "outputs": [
+        "全量发布完成确认",
+        "监控仪表盘与告警配置"
+      ]
+    }
+  ],
+  "failure_handling": [
+    "实时上报网络错误（无响应/超时）：最多 2 次重试（间隔 500ms），携带相同 event_id；超过后静默丢弃并记录客户端日志（事件名、event_id、重试次数、最终状态=dropped）；Promise 已 resolve 不影响调用方",
+    "实时上报服务端 5xx：同网络错误重试策略；5xx 视为服务端临时异常，重试可能成功",
+    "实时上报服务端 4xx：不重试；记录客户端日志（事件名、event_id、状态码、最终状态=dropped_4xx）；4xx 为客户端数据问题，重试无意义",
+    "原生桥接调用异常（桥未初始化/崩溃）：JS 层 catch 桥接调用异常，记录日志（事件名、event_id、异常信息、最终状态=bridge_error）；Promise 已 resolve 不传播异常到调用方",
+    "JS SDK 回滚至旧版本：旧 JS SDK 不生成 event_id 不写 _mode，事件恢复纯批量上报；新原生和新服务端兼容旧格式，无影响",
+    "原生回滚至旧版本：旧原生不读 _mode，实时事件仍经原生批量队列（延迟增加但最终送达）；JS 侧绕过 JS 队列的收益保留（减少 JS 层等待）；服务端正常处理",
+    "服务端回滚至旧版本：旧服务端忽略 _mode 和 event_id 字段，事件正常入库但去重降级（无法按 event_id 去重）；新客户端事件仍正常送达不丢失",
+    "两版服务端并存期间新客户端事件随机路由：无论命中新旧服务端，事件均正常处理——新服务端用 event_id 去重并记录 _mode；旧服务端忽略新字段正常入库；去重效果在旧服务端命中时降级，但数据不丢失"
+  ],
+  "test_plan": [
+    "正常实时上报：调用 reportEvent(\"payment_success\", { _mode: \"realtime\", amount: 100 })，网络正常——事件绕过 JS 和原生批量队列，5 秒内到达服务端；payload 含 _mode=realtime 和 event_id；Promise 立即 resolve；服务端正常入库并按 event_id 去重",
+    "正常批量上报：调用 reportEvent(\"page_view\", { page: \"home\" })，无 _mode——事件进入 JS 批量队列，按现有阈值批量上传；payload 含 event_id 但无 _mode；服务端正常入库并按 event_id 去重",
+    "实时上报网络失败：调用 reportEvent(\"payment_success\", { _mode: \"realtime\" })，模拟网络断开——最多 2 次重试后丢弃；Promise 立即 resolve 不阻塞调用方；客户端日志记录 event_id 和 dropped 状态；支付成功页正常渲染不受影响",
+    "实时上报重试去重：调用 reportEvent(\"payment_success\", { _mode: \"realtime\" })，第一次请求成功但因超时触发重试，第二次也成功到达服务端——两次请求携带相同 event_id；服务端按 event_id 去重为一条记录；数据不重复",
+    "旧客户端兼容：使用旧 JS SDK（无 _mode 无 event_id）上报事件至新旧两版服务端——事件按旧批量逻辑上报；两版服务端均正常处理；旧服务端行为不变；新服务端无 event_id 时保持现有去重或不去重行为",
+    "新 JS + 旧原生组合：新 JS SDK 上报 _mode=realtime 事件，但原生为旧版本（不读 _mode）——JS 侧绕过 JS 批量队列立即调用桥接；原生侧不识别 _mode，事件仍经原生批量队列；事件最终送达但延迟比完整实时路径高；不崩溃不丢数据",
+    "JS SDK 回滚：新 JS SDK 灰度后回滚至旧版本——旧 JS SDK 不生成 event_id 不写 _mode；事件恢复批量上报；新原生和新服务端兼容旧格式；无功能异常",
+    "实时上报 4xx 响应：调用 reportEvent(\"payment_success\", { _mode: \"realtime\" })，服务端返回 400——不重试；记录日志含状态码和 event_id；Promise 已 resolve 不传播错误；支付成功页不受影响"
+  ],
+  "acceptance_criteria": [
+    "实时事件（_mode=realtime）在正常网络条件下从调用 reportEvent 到服务端接收的端到端延迟 P99 < 5 秒",
+    "调用方 await reportEvent(...) 在实时模式下不超过 1 个微任务周期 resolve，支付成功页渲染不受上报阻塞或延迟",
+    "旧客户端（无 _mode 无 event_id）上报的事件在新旧两版服务端均正常处理，无功能降级",
+    "相同 event_id 的多次上报（含重试）被服务端去重为一条记录，数据无重复",
+    "reportEvent 函数签名不变，未引入新的公共上报 API",
+    "实时事件网络失败后最多 2 次重试然后丢弃，丢弃后客户端无崩溃无阻塞，日志可观测",
+    "新 JS SDK + 新原生 + 新服务端、新 JS SDK + 旧原生 + 新服务端、旧 JS SDK + 新原生 + 新服务端三种组合均通过集成测试",
+    "各灰度阶段可独立回滚，回滚后不产生功能异常或数据丢失"
+  ],
+  "open_decisions": [
+    "批量队列实现位置：若批量队列仅在 JS 侧实现，则 JS 绕过队列即可实现完整实时路径，原生侧改动仅为渐进增强；若原生侧也有独立批量队列，则原生必须读 _mode 绕过该队列才能实现完整实时路径。当前假设两处均有批量逻辑，JS 侧绕过为主要收益，原生侧绕过为完整路径。影响步骤3和步骤4的绕过点确定。",
+    "服务端当前对无 event_id 事件的处理方式：若服务端当前为无 event_id 事件自动生成 event_id，则新客户端提供的 event_id 需确保不与服务端生成规则冲突；若服务端当前对无 event_id 事件不做去重，则新客户端提供 event_id 是纯增量改善。需服务端团队确认后调整步骤2的兼容性改造细节。",
+    "原生桥接层参数严格性：若桥接层对传入参数做严格校验（拒绝未知字段），则 payload 新增 _mode 和 event_id 可能被旧桥接拒绝；若桥接层宽松接受任意 JSON payload，则增量字段无风险。需原生团队确认后决定是否需要在步骤3中同时添加 payload 字段白名单更新。"
+  ]
+}

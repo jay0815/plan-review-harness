@@ -1,0 +1,286 @@
+{
+  "probe": "planner",
+  "summary": "在现有 reportEvent 接口上扩展可选实时模式参数，使支付成功等关键事件绕过批量队列立即上报，同时保持向后兼容、不阻塞业务流程、不新增平行 API 或基础设施。",
+  "scope": {
+    "in_scope": [
+      "JS SDK reportEvent 接口扩展（增加可选 options 参数）",
+      "原生桥增加实时上报分发路径",
+      "服务端接收并处理实时单事件请求",
+      "新客户端 event_id 生成逻辑",
+      "实时上报失败后的回退与重试机制",
+      "跨版本兼容策略（旧客户端、旧服务端）"
+    ],
+    "out_of_scope": [
+      "建设新的消息平台、数据库或通用任务系统",
+      "批量上报流程的重构或优化",
+      "服务端事件存储、分析、展示的改动",
+      "多事件并发实时上报（第一版仅支持单事件实时）",
+      "旧客户端代码的主动升级或强制更新"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "实时模式的传递方式",
+      "decision": "在 reportEvent 第三参数增加可选 options 对象，包含 mode 字段：reportEvent(name, payload, { mode: 'realtime' | 'batch' })，默认值为 batch",
+      "reason": "不污染 payload 业务数据；不新增平行 API，符合复用要求；第三参数可选，完全向后兼容旧调用方；mode 默认 batch 保证无参调用行为不变"
+    },
+    {
+      "title": "实时上报的 Promise 解析策略",
+      "decision": "实时模式下 Promise 在请求发出后立即 resolve（fire-and-dispatch），不等待服务端确认；SDK 内部维护独立重试与回退逻辑，不反映到返回的 Promise",
+      "reason": "满足'上报失败不阻塞支付成功页'的硬约束；调用方可以 await 但不会因网络延迟被卡住；内部重试异步进行，对业务层透明"
+    },
+    {
+      "title": "event_id 生成责任与兼容",
+      "decision": "新客户端（支持实时模式的版本）在调用 reportEvent 时由 JS SDK 自动生成 event_id（UUID v4），写入 payload 的 _event_id 字段；旧客户端不生成，服务端对无 _event_id 的事件使用 name+timestamp+payload_hash 降级去重",
+      "reason": "避免依赖服务端或原生桥生成，减少跨团队协调；UUID v4 全端可用、碰撞概率极低；降级去重保证旧客户端事件不被重复计入"
+    },
+    {
+      "title": "实时上报失败回退机制",
+      "decision": "实时请求失败后：最多重试 2 次（间隔 1s、3s），仍失败则将事件降级放入批量队列，按原有批量规则上报",
+      "reason": "优先保证实时送达，但最终兜底保证不丢事件；有限重试避免无限循环；降级入批量队列复用已有可靠通道，不引入新的持久化机制"
+    },
+    {
+      "title": "服务端兼容策略",
+      "decision": "实时事件使用同一上报 endpoint，请求体增加 realtime: true 标记；新服务端识别该标记后优先处理（同步写入、跳过批量解包）；旧服务端忽略未知字段，将实时请求当作单事件批量请求正常处理",
+      "reason": "不新增 endpoint，减少服务端改动和部署复杂度；旧服务端忽略多余字段是 HTTP/JSON 的标准兼容方式；实时事件体格式与批量事件体中的单条事件格式一致，旧服务端可自然处理"
+    },
+    {
+      "title": "原生桥实时请求的传输格式",
+      "decision": "实时请求将单事件包装为与批量上报相同的 JSON 结构（仅 events 数组含 1 条），外加 realtime: true 和 _event_id 字段，通过同一网络通道发送",
+      "reason": "复用已有网络层和鉴权逻辑，原生桥改动最小；服务端只需判断 realtime 标记和 events 长度即可区分处理模式"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "定义跨团队接口协议文档",
+      "details": [
+        "产出 JS SDK → 原生桥的调用协议：reportEvent(name, payload, options?)，options 含 mode 和未来扩展预留",
+        "产出原生桥 → 服务端的请求协议：JSON body 含 events 数组、realtime 标记、_event_id 字段",
+        "产出服务端响应协议：保持现有 { success: true } 响应，不新增字段",
+        "产出 event_id 格式规范：UUID v4，由 JS SDK 生成，存于 payload._event_id",
+        "产出降级去重规范：服务端对无 _event_id 事件使用 name+timestamp+SHA256(payload 摘要) 作为 dedup_key",
+        "三方团队（JS、原生桥、服务端）共同评审并签字确认协议"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "interface_contract.md：包含完整协议定义与示例",
+        "各团队确认记录"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "JS SDK 扩展 reportEvent 接口",
+      "details": [
+        "修改 reportEvent 签名：reportEvent(name: string, payload: Record<string, unknown>, options?: { mode?: 'realtime' | 'batch' })",
+        "options 默认值为 { mode: 'batch' }，无第三参数时行为完全不变",
+        "当 mode 为 realtime 时：立即生成 _event_id（UUID v4）注入 payload，同步调用原生桥的实时分发方法",
+        "当 mode 为 batch 时：行为与现有逻辑一致（排队，由批量条件触发上传）",
+        "实时模式下返回的 Promise 在调用原生桥后立即 resolve（不等待网络结果）",
+        "增加 mode 校验：非法 mode 值降级为 batch 并打印 warning 日志"
+      ],
+      "dependencies": [
+        "步骤1的接口协议确认"
+      ],
+      "outputs": [
+        "JS SDK 新版 reportEvent 实现",
+        "TypeScript 类型定义更新"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "原生桥增加实时上报分发路径",
+      "details": [
+        "新增原生方法：reportEventRealtime(name, payloadWithEventId) 或在现有桥方法增加 realtime 参数",
+        "实时路径逻辑：绕过批量队列，立即构造 HTTP 请求体（events 数组含 1 条事件 + realtime: true），发送至同一上报 endpoint",
+        "实现重试机制：失败后最多重试 2 次（间隔 1s、3s），使用指数退避",
+        "实现回退机制：3 次均失败后，将事件插入批量队列，标记已尝试实时（避免批量上传时再次触发实时重试）",
+        "复用现有网络层：鉴权、TLS、超时设置与批量上报一致，仅跳过排队逻辑",
+        "添加实时上报的内部监控日志：记录实时发送次数、重试次数、回退入批量次数"
+      ],
+      "dependencies": [
+        "步骤1的接口协议确认",
+        "步骤2的 JS SDK 改动"
+      ],
+      "outputs": [
+        "原生桥 iOS/Android 实时分发实现",
+        "桥方法注册与 JS 可调用验证"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "服务端支持实时事件接收与处理",
+      "details": [
+        "在现有上报 endpoint 的请求解析层：识别 realtime: true 标记和 _event_id 字段",
+        "实时事件处理路径：同步写入事件存储（不经过批量解包队列），立即返回成功响应",
+        "event_id 去重逻辑：优先使用 payload._event_id 作为 dedup_key；若 _event_id 缺失，使用 name+timestamp+payload_hash 降级去重",
+        "兼容旧服务端版本：旧版本不识别 realtime 字段，但 JSON 解析忽略未知 key，会将含 1 条事件的请求按现有批量逻辑正常处理（延迟略高但不会丢事件）",
+        "增加 realtime 事件的处理监控日志：记录实时事件接收数、去重命中数、降级去重使用数"
+      ],
+      "dependencies": [
+        "步骤1的接口协议确认"
+      ],
+      "outputs": [
+        "服务端新版本部署",
+        "服务端实时处理逻辑与降级去重逻辑"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "支付成功页集成实时上报",
+      "details": [
+        "在支付成功页将支付成功事件上报改为：reportEvent('payment_success', payload, { mode: 'realtime' })",
+        "调用方不 await 该 Promise（或 await 但加 50ms 超时保护），确保不阻塞页面渲染和跳转",
+        "确认 payload 中不含 _event_id（由 SDK 自动注入，业务层不感知）",
+        "保留支付成功页原有的非上报逻辑不变"
+      ],
+      "dependencies": [
+        "步骤2的 JS SDK 改动"
+      ],
+      "outputs": [
+        "支付成功页代码改动",
+        "调用方式验证"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "灰度发布与全量推滚",
+      "details": [
+        "阶段一：服务端新版本先上线（旧版本并行运行），确保新服务端可处理实时和批量两种请求",
+        "阶段二：原生桥新版本灰度至 5% 用户，验证实时分发路径和回退机制",
+        "阶段三：JS SDK 新版本灰度至 5% 用户，验证支付成功事件实时到达服务端",
+        "阶段四：三方全量推滚，按服务端→原生桥→JS SDK 的顺序依次全量",
+        "每个阶段设置回滚观察窗口（24h），异常率超过阈值时自动回滚至上一阶段"
+      ],
+      "dependencies": [
+        "步骤2",
+        "步骤3",
+        "步骤4",
+        "步骤5"
+      ],
+      "outputs": [
+        "灰度发布计划文档",
+        "各阶段监控指标与回滚阈值定义"
+      ]
+    }
+  ],
+  "failure_handling": [
+    {
+      "scenario": "实时上报网络请求失败（超时、DNS错误、服务端5xx）",
+      "handling": "原生桥自动重试最多2次（间隔1s、3s），仍失败则降级放入批量队列，最终保证事件不丢失；调用方Promise已resolve，业务层无感知"
+    },
+    {
+      "scenario": "新服务端宕机，请求到达旧服务端版本",
+      "handling": "旧服务端忽略realtime和_event_id未知字段，按现有批量逻辑处理单事件请求，事件可达但有延迟；实时模式的时效性降级但功能不中断"
+    },
+    {
+      "scenario": "旧客户端（不支持实时模式）继续上报",
+      "handling": "旧客户端调用reportEvent(name, payload)无第三参数，默认batch模式，行为完全不变；服务端降级去重逻辑处理无_event_id的事件"
+    },
+    {
+      "scenario": "原生桥实时分发方法未注册（JS调到未实现的新桥方法）",
+      "handling": "JS SDK检测桥方法是否存在，不存在时降级为batch模式并打印warning日志，保证旧原生桥版本上功能不中断"
+    },
+    {
+      "scenario": "UUID碰撞导致event_id重复（极端情况）",
+      "handling": "服务端去重逻辑命中时静默丢弃重复事件，不影响业务；碰撞概率（UUID v4）约10^-18，实际可忽略"
+    },
+    {
+      "scenario": "灰度阶段实时上报异常率超阈值",
+      "handling": "触发自动回滚：JS SDK回退至旧版本（全部batch），原生桥回退至旧版本，服务端新版本继续运行（兼容batch）；回滚后事件全部走批量通道，不丢事件"
+    }
+  ],
+  "test_plan": [
+    {
+      "scenario": "JS SDK接口向后兼容",
+      "steps": [
+        "调用 reportEvent('test', {}) 无第三参数，验证行为与旧版一致（批量排队）",
+        "调用 reportEvent('test', {}, { mode: 'batch' })，验证显式batch模式行为一致",
+        "调用 reportEvent('test', {}, { mode: 'realtime' })，验证立即调用原生桥实时方法",
+        "调用 reportEvent('test', {}, { mode: 'invalid' })，验证降级为batch并打印warning"
+      ],
+      "expected": "无参和batch调用行为不变；realtime调用走实时路径；非法mode降级为batch"
+    },
+    {
+      "scenario": "原生桥实时分发与回退",
+      "steps": [
+        "模拟网络成功：发送实时请求，验证HTTP请求体含realtime:true和_event_id，验证服务端收到并同步处理",
+        "模拟网络失败（mock 5xx）：触发重试2次后验证事件降级入批量队列",
+        "模拟部分失败（mock首次失败后成功）：验证重试1次后成功送达，不进入批量队列"
+      ],
+      "expected": "成功时实时送达；3次失败后降级入批量；重试成功时不降级"
+    },
+    {
+      "scenario": "服务端实时处理与兼容",
+      "steps": [
+        "发送含realtime:true和_event_id的单事件请求至新服务端，验证同步处理和去重",
+        "发送不含realtime和_event_id的请求至新服务端，验证降级去重（name+timestamp+hash）",
+        "发送含realtime:true的请求至旧服务端版本，验证忽略未知字段后正常处理"
+      ],
+      "expected": "新服务端实时同步处理；无event_id时降级去重；旧服务端兼容处理"
+    },
+    {
+      "scenario": "支付成功页不阻塞验证",
+      "steps": [
+        "支付成功页调用 reportEvent('payment_success', payload, { mode: 'realtime' })",
+        "mock网络延迟5s，验证页面渲染和跳转在50ms内完成",
+        "mock网络完全不可达，验证页面渲染和跳转不受影响，事件最终通过批量队列上报"
+      ],
+      "expected": "页面响应时间不受上报网络状态影响；事件最终可达服务端"
+    },
+    {
+      "scenario": "跨版本客户端混合环境",
+      "steps": [
+        "旧客户端（无mode参数）和新客户端（realtime模式）同时上报至同一服务端",
+        "验证旧客户端事件走批量通道，新客户端支付事件走实时通道",
+        "验证服务端正确处理两种事件，去重逻辑分别适用"
+      ],
+      "expected": "混合环境下两种客户端各行其道，服务端正确处理，无事件丢失或重复"
+    },
+    {
+      "scenario": "event_id去重验证",
+      "steps": [
+        "同一事件携带相同_event_id上报2次，验证服务端去重后仅记录1次",
+        "不同事件携带不同_event_id上报，验证均被记录",
+        "旧客户端事件无_event_id上报2次（相同name和timestamp），验证降级去重生效"
+      ],
+      "expected": "相同event_id去重；不同event_id均记录；无event_id时降级去重生效"
+    }
+  ],
+  "acceptance_criteria": [
+    "reportEvent(name, payload) 无第三参数时行为与旧版完全一致，零回归",
+    "reportEvent(name, payload, { mode: 'realtime' }) 触发即时网络请求，绕过批量队列",
+    "实时上报的 Promise 在请求发出后立即 resolve，不阻塞调用方",
+    "支付成功页使用实时模式上报后，页面渲染和跳转时间与未上报时差异 ≤ 50ms",
+    "实时请求失败后最多重试2次，3次均失败后事件降级进入批量队列，最终送达服务端",
+    "服务端新版本正确识别 realtime 标记并同步处理实时事件",
+    "服务端使用 _event_id 去重，无 _event_id 时降级去重逻辑正常工作",
+    "旧服务端版本能正常处理含 realtime 和 _event_id 的请求（忽略未知字段）",
+    "旧客户端（无实时模式）上报行为完全不受影响",
+    "灰度阶段实时事件到达服务端的延迟 < 5s（批量事件延迟可 > 30s）",
+    "全量后无事件丢失：实时直达 + 回退批量保证送达率 ≥ 99.99%",
+    "跨版本混合环境下无事件重复计入"
+  ],
+  "open_decisions": [
+    {
+      "question": "实时上报的HTTP请求是否需要独立的超时配置（与批量上报超时不同）",
+      "impact": "影响实时模式的时效性保证和重试策略的时间窗口",
+      "suggestion": "建议实时请求超时设为3s（批量通常10s），更快触发重试或回退"
+    },
+    {
+      "question": "服务端实时事件是否需要写入独立的事件表或存储分区以区分实时与批量事件",
+      "impact": "影响后续事件分析的时效性统计和实时事件监控能力",
+      "suggestion": "第一版写入同一存储但增加 source=realtime 标记字段，后续可按标记筛选分析"
+    },
+    {
+      "question": "降级去重中 payload_hash 的计算范围：是否排除 _event_id 等元数据字段",
+      "impact": "影响旧客户端事件的去重准确性",
+      "suggestion": "计算 hash 时排除以 _ 开头的 SDK 内部字段，仅对业务 payload 内容取 hash"
+    },
+    {
+      "question": "是否需要为实时上报增加服务端 ACK 确认机制（当前仅返回 success:true）",
+      "impact": "影响客户端是否能区分'服务端已持久化'与'服务端已接收但可能未持久化'",
+      "suggestion": "第一版沿用现有 success:true 响应，不做额外确认；后续版本可扩展响应体"
+    }
+  ]
+}

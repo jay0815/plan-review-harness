@@ -1,0 +1,39 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "qwen",
+  "probe": "execution",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 2,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 14,
+  "matched_known_issues": [
+    "await 阻塞支付成功页。",
+    "is_realtime 字段位置冲突。",
+    "event_id 责任和实时到批量的幂等缺口。",
+    "reportEvent 返回值语义未定义。",
+    "旧客户端与双版本服务端兼容未处理。"
+  ],
+  "missed_known_issues": [
+    "遗漏测试、生产观测、灰度退出和回滚检查。"
+  ],
+  "valuable_new_findings": [],
+  "false_positives": [
+    "建议页面等待首次上传尝试和短超时，仍违反非阻塞硬约束。",
+    "无依据推演数十秒阻塞。",
+    "要求完整 endpoint、认证、headers 和响应格式。",
+    "直接决定由客户端生成 event_id。"
+  ],
+  "failure_modes": [
+    "识别硬约束后仍给出保留短时阻塞的修订方向。",
+    "用具体接口设计替代计划缺口描述。"
+  ],
+  "notes": "角色判断：不建议担任 Execution 主审。可辅助检查接口契约，但硬约束和具体实现建议必须由其他 Reviewer 过滤。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "execution"
+  ]
+}

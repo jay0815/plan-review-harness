@@ -1,0 +1,327 @@
+{
+  "probe": "planner",
+  "summary": "为 reportEvent 增加可选的 immediate 模式：新增第三个参数 options?: { immediate?: boolean }，immediate=true 时跳过批量队列直接发送；客户端统一生成 event_id 以支持服务端去重；直接发送失败时静默回退到批量队列；保持签名向后兼容，旧调用方无需改动。",
+  "scope": {
+    "in_scope": [
+      "reportEvent 函数签名扩展：增加可选第三个参数 options: { immediate?: boolean }",
+      "客户端统一生成 event_id（UUID v4），对 immediate 事件必带，对批量事件新增但可降级",
+      "immediate 模式发送逻辑：跳过本地批量队列，直接调用底层传输层发送",
+      "immediate 发送失败处理：静默降级，将事件写入批量队列，不抛异常也不阻塞调用方",
+      "支付成功场景接入：将支付成功的 reportEvent 调用改为传入 { immediate: true }",
+      "服务端兼容：event_id 存在则去重，不存在则按旧逻辑处理（不拒绝请求）",
+      "类型定义更新和文档"
+    ],
+    "out_of_scope": [
+      "新增平行上报 API（如 reportImmediateEvent）",
+      "建设新的消息平台、数据库或通用任务调度系统",
+      "批量队列本身的重构或替换",
+      "多事件类型的批量 immediate 模式（第一版仅支持单事件实时）",
+      "客户端离线场景下 immediate 的本地持久化重试",
+      "实时上行通道的长连接建设（如 WebSocket），复用现有传输层",
+      "服务端版本升级或发布（仅做兼容性保障说明）"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "immediate 模式通过可选参数传递，不改变现有调用签名兼容性",
+      "decision": "reportEvent 新增第三个可选参数 options?: ReportEventOptions，其中 ReportEventOptions = { immediate?: boolean }。不传入或 immediate=false 时行为与旧版完全一致。",
+      "reason": "复用同一 API 是硬约束。增加可选参数是最小侵入方式，旧调用方无需任何改动即可与新 SDK 共存；TypeScript 类型层面即可约束。"
+    },
+    {
+      "title": "客户端生成 event_id，对 immediate 事件强依赖，对批量事件尽力生成",
+      "decision": "SDK 内部在序列化事件时统一调用 generateEventId() 生成 UUID v4。immediate 事件强制带 event_id；批量事件也带 event_id，但本地队列写入失败时允许不带 event_id 的旧格式作为降级路径。",
+      "reason": "服务端已有 event_id 去重能力，旧客户端缺失导致支付成功类事件可能重复。新 SDK 主动生成可覆盖所有新版本客户端；对批量事件保持灵活以避免破坏旧队列持久化数据的读取兼容性。"
+    },
+    {
+      "title": "immediate 发送失败回退到批量队列，不阻塞调用方",
+      "decision": "immediate 路径使用 try-catch 包裹直接发送；失败时 catch 中将同一事件写入批量队列（与普通 reportEvent 路径一致），Promise 仍然 resolve，不向上抛出异常。",
+      "reason": "上报失败不能阻塞支付成功页面展示也不能改变支付结果，因此必须 fire-and-forget；同时为保证事件最终不丢，利用已有的批量队列作为兜底。"
+    },
+    {
+      "title": "不改变服务端协议语义，仅新增 event_id 字段的消费逻辑说明",
+      "decision": "上报请求的 HTTP body 结构保持不变（JSON），仅新增 event_id 字段（可选）。服务端若收到 event_id 则据此去重，若未收到则退化为不去重或按时间戳弱去重。",
+      "reason": "服务端由其他团队维护且有旧版本在线。不能要求服务端强制升级或改变必填字段；新字段以可选方式附加，旧服务端忽略未知字段即可正常处理。"
+    },
+    {
+      "title": "调用方不改动 Promise 使用方式，但需确保不 await 阻塞 UI",
+      "decision": "reportEvent 返回 Promise<void>，内部 immediate 路径在发送后（无论成败）尽快 resolve。调用方在支付成功页调用时应避免 await（或 await 但不阻塞渲染），SDK 文档中给出最佳实践示例。",
+      "reason": "API 签名不变意味着返回类型不变，但需要从使用方式上保证非阻塞。SDK 内部已确保不抛异常，但若调用方 await 且处于关键渲染路径则可能引起帧延迟，需要在接入指南中明确。"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "类型定义与接口扩展",
+      "details": [
+        "定义 ReportEventOptions 接口：{ immediate?: boolean }",
+        "扩展 reportEvent 签名：reportEvent(name: string, payload: Record<string, unknown>, options?: ReportEventOptions): Promise<void>",
+        "导出新类型，更新 index.d.ts 或等价声明文件",
+        "确保旧调用方不传第三个参数时无编译错误（可选参数默认 undefined）"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "类型定义文件更新",
+        "接口文档注释"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "客户端 event_id 生成器实现",
+      "details": [
+        "实现 generateEventId(): string，使用 UUID v4 或等效的唯一 ID 方案",
+        "考虑使用 crypto.randomUUID()（若运行环境支持）或回退到 Math.random 为基础的 polyfill",
+        "单测覆盖唯一性和格式"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "generateEventId 工具函数",
+        "单元测试"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Immediate 发送路径实现",
+      "details": [
+        "在 reportEvent 内部，当 options?.immediate === true 时进入新分支",
+        "构造事件对象：{ name, payload, event_id: generateEventId(), timestamp: Date.now() }",
+        "直接调用底层传输模块（如 HTTP post）发送，不经过批量队列的 enqueue 逻辑",
+        "用 try-catch 包裹发送：成功则 resolve；失败则 catch 中将同一事件对象写入批量队列再 resolve",
+        "确保 Promise 不 reject（除非批量队列写入也失败，此时记录本地日志后 resolve）",
+        "对 immediate=false 或未传 options 的路径，保持原有逻辑不变，但增加 event_id 的生成与附加（尽力而为）"
+      ],
+      "dependencies": [
+        "步骤1 类型定义",
+        "步骤2 event_id 生成器"
+      ],
+      "outputs": [
+        "reportEvent 核心逻辑更新",
+        "单元测试"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "批量队列写入兼容 event_id",
+      "details": [
+        "确保批量队列的持久化数据结构能容纳 event_id 字段",
+        "若旧持久化数据无 event_id，反序列化时兼容缺失字段（设为 undefined 或空字符串）",
+        "批量上传时，对于有 event_id 的事件原样上报，无 event_id 的事件不上报该字段"
+      ],
+      "dependencies": [
+        "步骤2",
+        "步骤3"
+      ],
+      "outputs": [
+        "批量队列读写逻辑更新",
+        "兼容性测试"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "服务端兼容性保障说明与对齐",
+      "details": [
+        "输出服务端兼容性说明文档：告知服务端团队新客户端会新增 event_id 字段（String，可选）",
+        "确认旧服务端忽略未知字段不会导致 4xx 错误（通常 JSON 解析器默认行为）",
+        "若服务端有严格 schema 校验，需提前沟通放开 event_id 字段",
+        "确认两个在线服务端版本均兼容新字段"
+      ],
+      "dependencies": [
+        "步骤3"
+      ],
+      "outputs": [
+        "服务端兼容性说明文档",
+        "跨团队对齐确认"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "支付成功场景接入",
+      "details": [
+        "找到支付成功页或支付结果回调中调用 reportEvent('payment_success', ...) 的位置",
+        "改为 reportEvent('payment_success', payload, { immediate: true })",
+        "确保该调用不处于关键渲染路径的 await 链中（fire-and-forget）",
+        "若现有代码 await 了 reportEvent，将其改为 .catch(() => {}) 或无 await 的独立调用"
+      ],
+      "dependencies": [
+        "步骤3",
+        "步骤5"
+      ],
+      "outputs": [
+        "支付模块代码变更",
+        "接入验证"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "测试与灰度发布",
+      "details": [
+        "运行 test_plan 中全部测试场景",
+        "选择小比例用户灰度（如 1% -> 10% -> 全量），监控 immediate 上报成功率与延迟",
+        "监控服务端 event_id 去重命中率及异常日志",
+        "确认旧版本客户端不受影响（无 event_id 的请求仍正常处理）"
+      ],
+      "dependencies": [
+        "步骤4",
+        "步骤5",
+        "步骤6"
+      ],
+      "outputs": [
+        "灰度发布计划",
+        "监控看板",
+        "回滚方案确认"
+      ]
+    }
+  ],
+  "failure_handling": [
+    {
+      "scenario": "immediate 直接发送网络失败",
+      "handling": "catch 后将事件写入批量队列，Promise 正常 resolve。事件最终通过批量机制上报。",
+      "rollback": "无需回滚，这是设计内的降级路径。"
+    },
+    {
+      "scenario": "批量队列写入也失败（本地存储满/损坏）",
+      "handling": "记录本地 error 日志（console.error / 日志模块），Promise 仍 resolve。该事件丢失但业务不中断。",
+      "rollback": "需后续版本增加本地日志上传或监控告警，当前版本不影响主流程。"
+    },
+    {
+      "scenario": "旧服务端收到 event_id 后解析失败",
+      "handling": "事前与后端对齐，确保 event_id 为可选字段；若现网已有严格 schema 校验，需后端先发版放开。若上线后发现 4xx，客户端不做特殊处理（Promise 已 resolve），后端紧急修复。",
+      "rollback": "若后端无法及时修复，客户端可通过配置中心关闭 immediate 模式的 event_id 生成（降级为不传 event_id），仅依赖旧去重逻辑。"
+    },
+    {
+      "scenario": "immediate 事件因 event_id 重复被服务端丢弃但实际是不同事件",
+      "handling": "概率极低（UUID v4 碰撞），发生则丢失该事件。监控碰撞告警阈值设为 0。",
+      "rollback": "若 UUID 方案出现质量问题，替换 generateEventId 实现即可。"
+    },
+    {
+      "scenario": "新 SDK 在旧版本 APP 上运行（热更新）但运行时 API 不兼容",
+      "handling": "在 generateEventId 中对 crypto.randomUUID 做特性检测，不存在则使用 polyfill。在 options 参数解构前做 undefined 检查。",
+      "rollback": "若出现大面积崩溃，通过热修复回滚 SDK 版本；原生 SDK 通过应用商店回滚。"
+    }
+  ],
+  "test_plan": [
+    {
+      "id": "T1",
+      "scenario": "旧调用方不传第三个参数，行为不变",
+      "steps": [
+        "使用旧版本调用方式 reportEvent('click', { x: 1 })",
+        "验证事件进入批量队列，不触发直接发送",
+        "验证 Promise 行为与旧版一致"
+      ],
+      "expected": "批量队列中包含该事件，无直接发送日志。"
+    },
+    {
+      "id": "T2",
+      "scenario": "传入 { immediate: true }，网络正常时直接发送",
+      "steps": [
+        "调用 reportEvent('payment_success', { orderId: '123' }, { immediate: true })",
+        "截获网络请求，验证直接发送的请求中包含 event_id、name、payload",
+        "验证事件未进入批量队列"
+      ],
+      "expected": "直接发送成功，批量队列无该事件。"
+    },
+    {
+      "id": "T3",
+      "scenario": "immediate 发送失败，回退到批量队列",
+      "steps": [
+        "模拟网络不可用或返回 5xx",
+        "调用 reportEvent('payment_success', { orderId: '123' }, { immediate: true })",
+        "验证 Promise resolve（不 reject）",
+        "验证事件被写入批量队列"
+      ],
+      "expected": "Promise 正常 resolve，批量队列包含该事件，无异常抛出。"
+    },
+    {
+      "id": "T4",
+      "scenario": "支付成功页不因上报阻塞",
+      "steps": [
+        "在支付成功页关键渲染路径中调用 reportEvent",
+        "记录调用前后时间戳和 UI 帧率",
+        "模拟网络延迟 3s",
+        "验证页面渲染不受影响"
+      ],
+      "expected": "UI 渲染不被阻塞，Promise 在超时前已 resolve（或调用方使用 fire-and-forget）。"
+    },
+    {
+      "id": "T5",
+      "scenario": "event_id 唯一性与格式",
+      "steps": [
+        "连续调用 10000 次 generateEventId()",
+        "验证全部唯一",
+        "验证符合 UUID v4 格式"
+      ],
+      "expected": "10000 个唯一 UUID v4 字符串。"
+    },
+    {
+      "id": "T6",
+      "scenario": "新客户端 + 旧服务端兼容",
+      "steps": [
+        "使用新 SDK 发送带 event_id 的事件到旧服务端",
+        "验证服务端正常返回 200",
+        "验证服务端日志无异常"
+      ],
+      "expected": "旧服务端正常处理，忽略 event_id 字段。"
+    },
+    {
+      "id": "T7",
+      "scenario": "旧客户端不带 event_id + 新服务端正常处理",
+      "steps": [
+        "使用旧 SDK 发送无 event_id 的事件到新服务端",
+        "验证服务端正常处理并返回 200"
+      ],
+      "expected": "新服务端在 event_id 缺失时降级为不去重或弱去重，正常处理。"
+    },
+    {
+      "id": "T8",
+      "scenario": "批量队列持久化数据兼容",
+      "steps": [
+        "使用旧 SDK 写入一条无 event_id 的事件到本地队列",
+        "升级 SDK 到新版本",
+        "触发批量上传，验证旧事件被正确读取和上报"
+      ],
+      "expected": "旧事件正常上报，不因缺少 event_id 字段而崩溃。"
+    },
+    {
+      "id": "T9",
+      "scenario": "传入 { immediate: false } 等同于不传",
+      "steps": [
+        "调用 reportEvent('click', {}, { immediate: false })",
+        "验证行为与不传第三个参数完全一致"
+      ],
+      "expected": "事件进入批量队列。"
+    }
+  ],
+  "acceptance_criteria": [
+    "reportEvent(name, payload) 旧调用方式行为与旧版本完全一致，无 breaking change",
+    "reportEvent(name, payload, { immediate: true }) 直接发送到服务端，延迟 < 500ms（P95，正常网络）",
+    "immediate 发送失败时 Promise 绝不 reject，事件落入批量队列",
+    "支付成功页面渲染不被 reportEvent 阻塞（调用处无 await 或 await 发生在渲染之后）",
+    "所有 immediate 事件均携带有效的 event_id（UUID v4）",
+    "服务端两个在线版本均能正常处理带 event_id 字段的请求（200 响应）",
+    "旧客户端（无 event_id）的请求在服务端仍正常处理",
+    "10000 次连续 generateEventId() 调用零碰撞",
+    "灰度期间 immediate 上报成功率 >= 批量上报成功率 - 1%（允许略低但不显著恶化）",
+    "部署后旧版本 APP 崩溃率不上升"
+  ],
+  "open_decisions": [
+    {
+      "title": "底层传输层是否支持同步立即发送且不阻塞调用方",
+      "question": "当前底层传输模块（如 HTTP client）是否已有非阻塞 sendNow 方法？若无，是否需要在 SDK 内实现一个轻量的独立发送通道，还是复用批量上传的网络层？",
+      "impact": "若底层仅支持批量 flush，则需要新增一个独立单次发送方法，工作量和风险不同。"
+    },
+    {
+      "title": "批量队列持久化格式的版本管理策略",
+      "question": "本地队列的序列化格式是否已有版本号字段？若没有，新增 event_id 字段后旧版本 APP 读取新格式数据是否会崩溃？是否需要做两段式兼容（先支持读取无 event_id 的旧数据，后续版本再写新字段）？",
+      "impact": "影响升级路径设计，可能需要先发一个仅读兼容的中间版本。"
+    },
+    {
+      "title": "服务端 JSON schema 校验严格度",
+      "question": "两个在线服务端版本是否对请求 body 做严格 schema 校验（如 additionalProperties: false）？新增 event_id 字段是否会被拒绝？",
+      "impact": "若服务端严格校验，需要服务端团队先发版支持新字段，客户端才能上线；否则可直接上线。"
+    },
+    {
+      "title": "是否需要服务端返回 event_id 回执用于客户端对账",
+      "question": "服务端去重后是否需要在响应中返回 event_id 或去重状态，供客户端确认上报生效？",
+      "impact": "若需要，涉及服务端改动和客户端响应处理逻辑；若不需要，客户端 fire-and-forget 即可。当前方案假设不需要。"
+    }
+  ]
+}

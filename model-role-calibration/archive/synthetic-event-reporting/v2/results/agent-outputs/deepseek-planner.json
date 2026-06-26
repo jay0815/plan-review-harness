@@ -1,0 +1,264 @@
+{
+  "probe": "planner",
+  "summary": "为 reportEvent 增加可选的 immediate 参数，使支付成功等关键事件绕过本地批量队列直接上报，同时保持其他事件的批量行为不变。通过新增 client 端 event_id 生成、桥接层 immediate 透传、Native 层后台直发 HTTP 三条并行改动实现，Promise 在 Native 确认收到后立即 resolve，网络失败仅打日志不 reject，确保不阻塞支付成功页。",
+  "scope": {
+    "in_scope": [
+      "reportEvent 增加可选第三个参数 immediate?: boolean，默认 false",
+      "新版本 SDK 为所有事件生成 event_id（UUID v4）",
+      "Native 层新增 immediate 事件直发 HTTP 路径，绕过本地批量队列",
+      "JS–Native 桥接协议增加 immediate 和 event_id 字段",
+      "Promise 在 immediate 模式下于 Native 确认收到后立即 resolve，不等待 HTTP 响应",
+      "immediate 事件网络失败时打日志 + 上报指标，不 reject Promise",
+      "服务端兼容性验证（已有 event_id 去重能力，无需改动）",
+      "支付成功页以 fire-and-forget 方式调用 reportEvent(..., true)",
+      "分阶段灰度发布：新 SDK → 支付页升级 → 监控",
+      "观测指标：immediate 事件发送成功率、延迟、失败原因分布"
+    ],
+    "out_of_scope": [
+      "不新增 reportEvent 之外的平行上报 API",
+      "不建设新的消息平台、数据库、持久化队列、重放系统",
+      "不做通用任务系统或通用实时通道",
+      "V1 不做 immediate 事件的重试或最终送达保证",
+      "不改变 batch 事件的现有队列、触发条件、上传逻辑",
+      "不改变支付业务流程或支付结果",
+      "不在服务端新增接口",
+      "不支持事件优先级、多事件批量 immediate、QoS 等级"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "API 签名：新增可选参数 immediate，不新增平行 API",
+      "decision": "reportEvent(name: string, payload: Record<string, unknown>, immediate?: boolean): Promise<void>。immediate 默认 false，调用方无需修改现有代码。",
+      "reason": "需求明确要求继续复用 reportEvent，不新增平行 API。可选参数是向后兼容的最小改动。"
+    },
+    {
+      "title": "event_id 生成责任与时机",
+      "decision": "新版本 JS SDK 在调用 reportEvent 时，无论 immediate 取值，均为每个事件生成 UUID v4 作为 event_id，置于事件顶层字段（与 name、payload、timestamp 同级）。旧版本客户端不生成 event_id。",
+      "reason": "服务端已按 event_id 去重。旧客户端不生成 event_id，服务端已有对应处理路径。新客户端统一生成 event_id 可提升所有事件的去重能力，且对服务端向后兼容。"
+    },
+    {
+      "title": "immediate 事件的路由与 Promise 语义",
+      "decision": "当 immediate=true 时：(1) SDK 不将事件放入本地批量队列；(2) SDK 通过桥接层将事件（含 event_id、immediate 标志）发送给 Native；(3) Native 收到后在后台发起 HTTP POST，同时立即向 JS 发送确认；(4) JS Promise 在收到 Native 确认时 resolve。Promise 不等待 HTTP 响应，网络错误不导致 Promise reject。",
+      "reason": "必须确保 Promise 在毫秒级 resolve，不阻塞支付成功页。Native 确认表示事件已被接收并进入发送流程，与 batch 模式 Promise 在事件入队时 resolve 的语义一致。"
+    },
+    {
+      "title": "Native 层 immediate 发送的 HTTP 协议",
+      "decision": "Native 使用与 batch 上传相同的 HTTP endpoint 和方法，请求体为包含单个事件的数组：{\"events\":[{\"event_id\":\"...\",\"name\":\"...\",\"payload\":{...},\"timestamp\":\"...\"}]}。不新增 endpoint 或 method。",
+      "reason": "复用现有上传通道，服务端无需改动。单事件数组与 batch 上传结构一致，服务端按相同逻辑处理。"
+    },
+    {
+      "title": "桥接层协议扩展",
+      "decision": "JS→Native 桥接消息新增两个字段：event_id（string，必填，新 SDK 生成）和 immediate（boolean，必填，默认 false）。Native→JS 确认消息不变，仍为成功/失败确认。旧版 Native 忽略未知字段，事件回退到 batch 队列。",
+      "reason": "三个团队分别维护 JS、桥接、Native，需要明确定义跨层协议。向后兼容设计确保新旧混部时降级到 batch 而非报错。"
+    },
+    {
+      "title": "降级路径与回滚方案",
+      "decision": "降级路径：(1) 支付页移除第三个参数 → 回退 batch；(2) 新版 JS + 旧版 Native → immediate 字段被忽略，事件进入 batch 队列（自动降级）；(3) 新版 Native + 旧版 JS → immediate 永不为 true，全量 batch。回滚：重新发布支付页去掉 immediate 参数即可，无需 SDK 回滚。",
+      "reason": "多层降级确保任何时候都不会因为 immediate 功能导致事件丢失或支付页异常。"
+    },
+    {
+      "title": "event_id 在事件对象中的位置",
+      "decision": "event_id 与 name、payload、timestamp 同为事件顶层字段，不嵌套在 payload 内部。数据结构：{event_id: string, name: string, payload: Record<string,unknown>, timestamp: string}。",
+      "reason": "服务端已按 event_id 去重，且旧客户端不发送此字段，说明服务端已在事件顶层读取 event_id。放在 payload 外部避免与业务字段冲突，且与现有服务端解析逻辑一致。"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "协议规范文档定稿与团队对齐",
+      "details": [
+        "输出事件数据结构规范：{event_id: string (UUID v4), name: string, payload: Record<string,unknown>, timestamp: string (ISO 8601)}",
+        "输出桥接消息规范：JS→Native 方向新增 event_id 和 immediate 字段；Native→JS 确认消息沿用现有格式",
+        "输出 HTTP 上传格式：POST 现有 endpoint，body 为 {events: [Event]}，immediate 模式数组长度为 1",
+        "输出 Promise 行为规范：immediate 模式下 Promise 在 Native 确认时 resolve，不等待 HTTP 响应；网络错误仅日志不 reject",
+        "与 JS SDK 团队、桥接团队、Native 团队、服务端团队确认协议无异议"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "协议规范文档（含字段定义、消息格式、Promise 契约、兼容性矩阵）",
+        "四方团队确认记录"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "JS SDK：增加 event_id 生成",
+      "details": [
+        "在 reportEvent 函数入口处，为每个事件生成 UUID v4 作为 event_id",
+        "event_id 存储于事件对象顶层，与 name、payload 同级",
+        "batch 和 immediate 路径均生成 event_id",
+        "确保 UUID 生成不依赖网络、不抛异常",
+        "单元测试覆盖：event_id 非空、格式为 UUID v4、每次调用唯一"
+      ],
+      "dependencies": [
+        "协议规范文档（步骤1）"
+      ],
+      "outputs": [
+        "reportEvent 内部 event_id 生成逻辑",
+        "单元测试用例"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "JS SDK：增加 immediate 参数与路由逻辑",
+      "details": [
+        "reportEvent 签名增加第三个可选参数 immediate?: boolean，默认 false",
+        "当 immediate === true 时：跳过本地批量队列，构造桥接消息（含 event_id 和 immediate: true），发送给 Native",
+        "当 immediate === false/undefined 时：走现有批量队列逻辑（event_id 仍写入事件对象）",
+        "Promise 行为：immediate 模式下，Promise 在收到 Native 确认时 resolve；若桥接消息发送本身失败（非网络），Promise reject",
+        "不增加对 HTTP 响应状态的依赖"
+      ],
+      "dependencies": [
+        "event_id 生成（步骤2）",
+        "协议规范（步骤1）"
+      ],
+      "outputs": [
+        "reportEvent 更新后的完整实现",
+        "桥接消息构造逻辑（含 event_id 和 immediate 字段）",
+        "Promise 路由逻辑（batch vs immediate 两条路径）"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "桥接层：协议升级支持 immediate 和 event_id",
+      "details": [
+        "JS→Native 消息 schema 增加 event_id (string) 和 immediate (boolean) 字段",
+        "Native→JS 确认消息不变，Native 收到 immediate 事件后立即回复确认（不等 HTTP 完成）",
+        "向后兼容：旧 Native 收到含未知字段的消息时，忽略 unknown fields，按 batch 处理",
+        "向后兼容：旧 JS 发来的消息不含 immediate 字段，新 Native 按 immediate=false 处理",
+        "桥接层序列化/反序列化适配"
+      ],
+      "dependencies": [
+        "协议规范（步骤1）"
+      ],
+      "outputs": [
+        "桥接层 schema 定义更新",
+        "JS 侧和 Native 侧的消息构造/解析代码",
+        "新旧版本互通测试用例"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Native 层：实现 immediate 事件直发路径",
+      "details": [
+        "Native 收到 immediate=true 的桥接消息后：a) 校验 event_id、name 非空；b) 构造 HTTP POST 请求（单事件数组）；c) 在后台线程/协程发起请求；d) 立即向 JS 回复确认",
+        "HTTP 请求使用与 batch 上传相同的 endpoint、headers、超时配置",
+        "HTTP 响应处理：成功→打 debug 日志+记指标；失败→打 error 日志（含 event_id、statusCode、errorMessage）+记失败指标。不重试，不回调 JS",
+        "Native 层确保后台请求不因 UI 线程阻塞或 App 退到后台而被系统杀死（使用后台任务/URLSession background 等平台机制）",
+        "不改变现有 batch 队列逻辑"
+      ],
+      "dependencies": [
+        "桥接层升级（步骤4）"
+      ],
+      "outputs": [
+        "Native immediate 发送模块",
+        "HTTP 请求构造与后台发送逻辑",
+        "日志与指标埋点代码"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "服务端兼容性验证",
+      "details": [
+        "验证服务端接收含 event_id 的单事件数组请求（与 batch 相同 endpoint）",
+        "验证 event_id 去重逻辑对新增 UUID v4 格式生效",
+        "验证旧客户端（无 event_id）事件处理不受影响",
+        "无需服务端代码变更"
+      ],
+      "dependencies": [
+        "协议规范（步骤1）"
+      ],
+      "outputs": [
+        "服务端兼容性测试报告",
+        "确认无服务端变更的结论"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "观测指标与告警接入",
+      "details": [
+        "新增指标：immediate_event_dispatched（Native 确认数）、immediate_event_http_success（HTTP 2xx）、immediate_event_http_failure（HTTP 非 2xx / 网络错误）、immediate_event_latency_ms（dispatch→HTTP 响应时间）",
+        "指标按 event name 分维度",
+        "告警规则：immediate_event_http_failure / immediate_event_dispatched > 5% 持续 5 分钟 → 触发告警",
+        "日志规范：每次 immediate 发送失败记录 event_id、name、error 详情"
+      ],
+      "dependencies": [
+        "Native immediate 发送（步骤5）"
+      ],
+      "outputs": [
+        "指标定义文档",
+        "埋点代码",
+        "告警配置"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "支付成功页集成",
+      "details": [
+        "在支付成功回调中调用 reportEvent('payment_success', payload, true)，不 await（fire-and-forget）",
+        "若有 lint 规则要求 await，使用 .catch(() => {}) 或 void 操作符",
+        "确保 reportEvent 调用在支付结果确认之后，且不改变支付结果返回值"
+      ],
+      "dependencies": [
+        "JS SDK immediate 参数（步骤3）",
+        "Native immediate 发送（步骤5）"
+      ],
+      "outputs": [
+        "支付成功页代码变更（单行调用）",
+        "端到端测试用例"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "灰度发布与监控",
+      "details": [
+        "Phase 1：发布含 event_id 生成的新 SDK（不影响行为，仅增加字段），观察 1 天",
+        "Phase 2：发布含 immediate 能力的新 SDK + 新 Native，支付页暂不使用 immediate，观察事件上报正常",
+        "Phase 3：支付页灰度 5% → 20% → 100% 开启 immediate: true，每个阶段观察 immediate 成功率与延迟",
+        "异常回滚：支付页配置回退去掉 immediate 参数即可；SDK 和 Native 无需回滚（immediate 功能不使用时无影响）"
+      ],
+      "dependencies": [
+        "所有前置步骤完成"
+      ],
+      "outputs": [
+        "灰度发布计划",
+        "每阶段监控数据与通过/回滚决策"
+      ]
+    }
+  ],
+  "failure_handling": [
+    "【immediate HTTP 发送失败】Native 捕获错误，记录 error 日志（含 event_id、name、statusCode、message），递增 immediate_event_http_failure 指标。Promise 已在 Native 确认时 resolve，不受影响。不重试（V1 范围约束）。事件丢失，依赖服务端侧业务对账发现。观测：日志 + 指标 + 告警。",
+    "【JS→Native 桥接消息发送失败】Promise reject（与现有 reportEvent 行为一致）。支付页 fire-and-forget 不 await，异常被静默丢弃。观测：JS SDK 内部 error 日志。",
+    "【新版 JS + 旧版 Native】旧 Native 忽略 unknown fields（immediate），将事件按 batch 处理。事件最终通过批量队列上传，不丢失。观测：batch 事件指标无异常。",
+    "【旧版 JS + 新版 Native】Native 按 immediate=false/default 处理，进入 batch 队列。行为不变。观测：batch 事件指标无异常。",
+    "【服务端收到重复 event_id】服务端按现有 event_id 去重逻辑丢弃重复事件，幂等处理。观测：服务端去重计数（现有指标）。",
+    "【App 在 immediate HTTP 请求进行中被杀死】HTTP 请求中断，事件丢失。Native 不恢复（无持久化队列）。观测：immediate_event_http_failure 指标（可能无上报机会）；服务端侧事件缺失可通过对账发现。"
+  ],
+  "test_plan": [
+    "【正常：immediate 事件成功上报】支付页调用 reportEvent('payment_success', {order_id:'123'}, true) 但不 await → Native 日志显示收到 immediate 事件并发起 HTTP POST → 服务端收到含 event_id 的事件。验收：事件在 3s 内到达服务端；支付页无阻塞；Promise 在 50ms 内 resolve。pass：服务端 3s 内收到事件且支付页无卡顿。",
+    "【失败：网络不可用】设备断网 → 支付页调用 reportEvent(..., true) → Native 日志记录 HTTP 请求失败 → Promise resolve（不 reject）。验收：Promise resolved 且 error 日志含 event_id 和失败原因；支付页正常展示。pass：Promise resolved 且支付页无异常且日志正确。",
+    "【失败：服务端 5xx】Mock 服务端返回 500 → 支付页调用 reportEvent(..., true) → Promise resolve → 日志记录 HTTP 500 及 event_id → immediate_event_http_failure 指标 +1。验收：Promise resolved 且指标正确。pass：指标正确递增。",
+    "【兼容：旧版 JS + 新版 Native】旧版 JS（不传第三个参数）调用 reportEvent → 事件进入 batch 队列。验收：行为与升级前一致。pass：batch 事件正常上传，无报错。",
+    "【兼容：新版 JS + 旧版 Native】新版 JS 调用 reportEvent(..., true) → 旧 Native 忽略 immediate 字段 → 事件进入 batch 队列 → 最终通过批量上传到达服务端。验收：事件未丢失。pass：事件通过 batch 通道到达服务端。",
+    "【去重：重复 event_id】以相同 event_id 发送两次 immediate 事件 → 服务端只保留第一条。验收：服务端仅记录一条事件。pass：第二条被正确去重。",
+    "【混合：batch 与 immediate 并发】同时调用 reportEvent('click', {...}) 和 reportEvent('payment_success', {...}, true) → click 进入 batch 队列，payment_success 直发 HTTP。验收：两条事件各自按预期通道到达服务端，互不干扰。pass：两条事件各自按预期通道到达。",
+    "【回滚：支付页去掉 immediate 参数】支付页改为 reportEvent('payment_success', payload) → 事件进入 batch 队列。验收：行为与升级前一致。pass：事件通过 batch 通道到达服务端。",
+    "【边界：event_id 唯一性】连续调用 10000 次 reportEvent，收集所有 event_id。验收：10000 个全部唯一。pass：零碰撞。"
+  ],
+  "acceptance_criteria": [
+    "immediate 事件从调用 reportEvent 到服务端收到，P95 延迟 ≤ 3 秒（正常网络环境）",
+    "immediate 模式下 Promise 在 Native 确认后 50ms 内 resolve（本地测量，不含网络）",
+    "immediate 事件网络失败时 Promise 不 reject（100 次失败测试零 reject）",
+    "支付成功页在 immediate 事件上报失败时的展示时间与不上报事件时一致（差值 < 10ms）",
+    "旧版客户端（不传 immediate）行为与升级前完全一致",
+    "新版 JS + 旧版 Native 时事件不丢失，降级到 batch 并最终到达服务端",
+    "新版 Native + 旧版 JS 时行为不变，全量 batch",
+    "immediate_event_http_failure / immediate_event_dispatched > 5% 持续 5 分钟触发告警",
+    "所有 event_id 在单设备单次运行期间全局唯一（UUID v4 碰撞概率可忽略）"
+  ],
+  "open_decisions": [
+    "【服务端去重窗口时长】服务端 event_id 去重窗口时长是多少？是永久还是有时效？影响：若窗口较短，immediate 事件的重复发送（如 App 被杀后用户重新触发支付成功页）可能不被去重。不影响 V1 实现，但影响失败场景的数据准确性预期。owner：服务端团队。",
+    "【Native 后台任务保活策略】Native 后台 HTTP 任务在 App 被杀死时的保活策略？iOS URLSession background 与 Android WorkManager/JobScheduler 能力不同。V1 使用平台最佳实践但不保证被杀时送达。owner：Native 团队。",
+    "【immediate HTTP 超时配置】immediate 事件是否需要比 batch 更短的超时？batch 上传通常 10-30s，immediate 建议 5s 以快速释放资源，但需确认服务端在此时间内能响应。owner：Native 团队 + 服务端团队。",
+    "【immediate 事件 rate limit】是否需要为 immediate 事件单独设置 rate limit 或并发上限？V1 仅支付成功一个场景风险低，但协议设计应预留扩展空间以防未来多类事件开启 immediate 对服务端造成突发压力。owner：服务端团队 + SDK 团队。"
+  ]
+}

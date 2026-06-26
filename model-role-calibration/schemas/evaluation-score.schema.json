@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Automated Evaluation Score",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "case_id",
+    "model",
+    "probe",
+    "score",
+    "total",
+    "dimension_assessments",
+    "matched_known_issues",
+    "missed_known_issues",
+    "valuable_new_findings",
+    "false_positives",
+    "failure_modes",
+    "notes",
+    "suggested_roles",
+    "unsuitable_roles"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "probe": {
+      "type": "string",
+      "enum": [
+        "planner",
+        "risk",
+        "architecture",
+        "execution",
+        "rebuttal",
+        "synthesis"
+      ]
+    },
+    "score": {
+      "$ref": "#/$defs/score"
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 25
+    },
+    "dimension_assessments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hit_rate",
+        "contract_closure",
+        "actionability",
+        "evidence_discipline",
+        "false_positive_cost"
+      ],
+      "properties": {
+        "hit_rate": {
+          "$ref": "#/$defs/dimensionAssessment"
+        },
+        "contract_closure": {
+          "$ref": "#/$defs/dimensionAssessment"
+        },
+        "actionability": {
+          "$ref": "#/$defs/dimensionAssessment"
+        },
+        "evidence_discipline": {
+          "$ref": "#/$defs/dimensionAssessment"
+        },
+        "false_positive_cost": {
+          "$ref": "#/$defs/dimensionAssessment"
+        }
+      }
+    },
+    "matched_known_issues": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "missed_known_issues": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "valuable_new_findings": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "false_positives": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "failure_modes": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suggested_roles": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "unsuitable_roles": {
+      "$ref": "#/$defs/stringArray"
+    }
+  },
+  "$defs": {
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hit_rate",
+        "contract_closure",
+        "actionability",
+        "evidence_discipline",
+        "false_positive_cost"
+      ],
+      "properties": {
+        "hit_rate": {
+          "$ref": "#/$defs/scoreValue"
+        },
+        "contract_closure": {
+          "$ref": "#/$defs/scoreValue"
+        },
+        "actionability": {
+          "$ref": "#/$defs/scoreValue"
+        },
+        "evidence_discipline": {
+          "$ref": "#/$defs/scoreValue"
+        },
+        "false_positive_cost": {
+          "$ref": "#/$defs/scoreValue"
+        }
+      }
+    },
+    "scoreValue": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "dimensionAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score",
+        "rationale",
+        "evidence"
+      ],
+      "properties": {
+        "score": {
+          "$ref": "#/$defs/scoreValue"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

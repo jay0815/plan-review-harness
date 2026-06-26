@@ -1,0 +1,280 @@
+{
+  "probe": "planner",
+  "summary": "在现有 reportEvent 接口上增加可选的 realtime 模式，使支付成功事件能实时上报。客户端生成 event_id 用于去重，实时上报失败时降级到批量队列，全程不阻塞支付成功页。",
+  "scope": {
+    "in_scope": [
+      "扩展 reportEvent 接口，增加可选第三参数 options: { realtime?: boolean }",
+      "客户端为实时事件生成 event_id (UUID v4)",
+      "实现实时发送路径：立即发送、超时控制、失败降级到批量队列",
+      "原生桥增加立即发送能力，兼容旧桥降级",
+      "服务端 event_id 去重兼容性验证",
+      "观测指标：实时上报成功率、降级率、耗时分布",
+      "分阶段发布与回滚方案"
+    ],
+    "out_of_scope": [
+      "新增开发者上报 API",
+      "新增消息平台、数据库或通用任务系统",
+      "批量上报逻辑变更",
+      "批量事件增加 event_id（后续迭代）",
+      "服务端处理逻辑变更（仅验证兼容性）"
+    ]
+  },
+  "decisions": [
+    {
+      "title": "API 扩展方式",
+      "decision": "reportEvent 增加可选第三参数 options?: { realtime?: boolean }，realtime 默认为 false。调用方不传 options 时行为与旧版完全一致。",
+      "reason": "保持向后兼容，不新增平行 API，满足约束「继续复用 reportEvent」。"
+    },
+    {
+      "title": "event_id 生成策略",
+      "decision": "新版客户端在实时模式下为每个事件生成 UUID v4 作为 event_id，放在事件对象顶层字段。批量模式暂不强制生成 event_id。",
+      "reason": "服务端已按 event_id 去重，实时事件可能重试，必须有稳定标识。批量事件复用现有行为，缩小首版变更范围。"
+    },
+    {
+      "title": "实时发送路径",
+      "decision": "JS 层检测到 options.realtime === true 时，构造事件对象，通过原生桥的立即发送能力发出单次 HTTP 请求，使用同一上报端点。若桥不支持立即发送，则降级到批量队列。",
+      "reason": "复用现有端点，服务端无需区分实时或批量；桥降级保证旧版客户端不出错。"
+    },
+    {
+      "title": "超时与重试",
+      "decision": "实时请求超时设为 3 秒（可配置）。超时或服务端 5xx 响应时，使用相同 event_id 重试 1 次。重试仍失败则将该事件投入批量队列。4xx 响应不重试，记录错误日志后丢弃。",
+      "reason": "3 秒超时确保不阻塞支付成功页；同 event_id 重试利用服务端去重；降级到批量队列保证最终送达。"
+    },
+    {
+      "title": "Promise 语义",
+      "decision": "reportEvent 返回的 Promise 在实时模式下于首次尝试完成后 resolve（无论成功或失败），不等待重试。重试和降级在后台异步执行。批量模式下 Promise 立即 resolve。",
+      "reason": "满足「不阻塞支付成功页」的硬约束，调用方可 await 但不会被长时间阻塞。"
+    },
+    {
+      "title": "原生桥接口",
+      "decision": "桥新增方法 sendImmediateEvent(eventJson: string, callbackId: string): void，callbackId 用于异步回调结果。JS 层通过检测该方法是否存在来判断桥能力。旧桥无此方法，JS 自动降级到批量路径。",
+      "reason": "方法级能力检测简单可靠，不需要版本协商，旧桥无需修改。"
+    },
+    {
+      "title": "上报数据结构",
+      "decision": "实时上报请求体与批量上报使用相同结构：{ \"events\": [event_object] }，实时模式 events 数组长度为 1。event_object 结构：{ \"event_id\": string, \"name\": string, \"payload\": object, \"timestamp\": number }。",
+      "reason": "服务端无需区分实时和批量请求，复用现有解析和去重逻辑。"
+    },
+    {
+      "title": "服务端兼容",
+      "decision": "不修改服务端代码。验证两个服务端版本均能正确处理带 event_id 的事件并执行去重。若某个版本不支持 event_id 字段，则该版本需要补丁（列入 open_decisions）。",
+      "reason": "需求明确服务端已按 event_id 去重，理论上无需修改；但需验证两个版本的实际行为。"
+    }
+  ],
+  "implementation_steps": [
+    {
+      "order": 1,
+      "title": "定义数据契约与接口规范文档",
+      "details": [
+        "编写 event_object JSON schema：event_id (string, UUID v4, 必填于实时模式), name (string, 必填), payload (object, 必填), timestamp (number, Unix 毫秒, 必填)",
+        "编写上报请求体 schema：{ \"events\": [event_object] }",
+        "编写桥接口规范：sendImmediateEvent(eventJson: string, callbackId: string): void，回调格式 { callbackId: string, success: boolean, statusCode?: number, error?: string }",
+        "编写 JS SDK reportEvent 签名：reportEvent(name: string, payload: Record<string, unknown>, options?: { realtime?: boolean }): Promise<void>",
+        "文档分发给 JS、桥、服务端三个团队确认"
+      ],
+      "dependencies": [],
+      "outputs": [
+        "接口规范文档",
+        "三个团队确认签字"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "实现客户端 event_id 生成模块",
+      "details": [
+        "选择各平台 UUID v4 实现：JS 端使用 crypto.randomUUID() 或 polyfill，iOS 使用 NSUUID，Android 使用 java.util.UUID",
+        "封装统一接口 generateEventId(): string",
+        "验证生成的 UUID 格式符合 RFC 4122 v4",
+        "编写单元测试覆盖唯一性和格式"
+      ],
+      "dependencies": [
+        "1"
+      ],
+      "outputs": [
+        "generateEventId 模块",
+        "单元测试"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "扩展 JS SDK reportEvent 实现",
+      "details": [
+        "增加第三参数 options?: { realtime?: boolean }，默认 undefined 等同 { realtime: false }",
+        "realtime === false 或缺省时，走现有批量入队逻辑，行为不变",
+        "realtime === true 且 feature flag 开启时：调用 generateEventId() 生成 event_id，构造 event_object，记录 timestamp",
+        "将 event_object 序列化为 JSON，调用桥 sendImmediateEvent(eventJson, callbackId)",
+        "若桥不存在 sendImmediateEvent 方法，直接降级：将 event_object 投入现有批量队列，记录降级日志",
+        "feature flag 关闭时，realtime === true 也走批量路径，等价于 realtime === false"
+      ],
+      "dependencies": [
+        "1",
+        "2"
+      ],
+      "outputs": [
+        "更新后的 JS SDK reportEvent 实现",
+        "降级路径代码",
+        "feature flag 检查逻辑"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "实现实时发送超时与重试逻辑",
+      "details": [
+        "桥回调超时设为 3 秒（从配置读取，默认 3000ms）",
+        "超时或回调 success === false 且为网络或服务端 5xx 错误时，使用相同 event_id 和 event_object 重试 1 次",
+        "重试通过新 callbackId 发起，保持 event_id 不变以确保服务端去重",
+        "重试仍失败则将 event_object 投入批量队列，记录降级指标",
+        "4xx 错误不重试，记录错误日志",
+        "首次尝试完成（成功或失败）后立即 resolve Promise",
+        "重试和降级在 Promise resolve 后异步执行，不阻塞调用方"
+      ],
+      "dependencies": [
+        "3"
+      ],
+      "outputs": [
+        "超时控制模块",
+        "重试逻辑",
+        "降级到批量队列逻辑",
+        "Promise 语义实现"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "实现原生桥 sendImmediateEvent",
+      "details": [
+        "iOS 桥：新增 sendImmediateEvent 方法，解析 eventJson，使用 URLSession 发起 POST 请求到现有上报端点，超时 3 秒，通过 callbackId 回调结果",
+        "Android 桥：新增 sendImmediateEvent 方法，使用 OkHttp 或 HttpURLConnection 发起 POST 请求，超时 3 秒，通过 callbackId 回调结果",
+        "请求头与现有批量上报一致（Content-Type, Auth token 等）",
+        "请求体为 { \"events\": [parsed_event_object] }",
+        "回调格式：{ callbackId: string, success: boolean, statusCode?: number, error?: string }",
+        "旧版桥不实现此方法，JS 层检测方法不存在时自动降级"
+      ],
+      "dependencies": [
+        "1"
+      ],
+      "outputs": [
+        "iOS 桥 sendImmediateEvent 实现",
+        "Android 桥 sendImmediateEvent 实现",
+        "桥层单元测试"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "服务端兼容性验证",
+      "details": [
+        "向两个服务端版本分别发送带 event_id 的单事件请求",
+        "验证服务端正确接收并存储事件",
+        "验证相同 event_id 的重复请求被正确去重",
+        "验证不带 event_id 的事件（模拟旧客户端）仍被正常处理",
+        "验证上报端点对 events 数组长度为 1 的请求无异常",
+        "若某个服务端版本存在兼容问题，记录问题并评估是否需要补丁"
+      ],
+      "dependencies": [
+        "1"
+      ],
+      "outputs": [
+        "兼容性测试报告",
+        "问题清单（如有）"
+      ]
+    },
+    {
+      "order": 7,
+      "title": "添加观测指标与告警",
+      "details": [
+        "指标：realtime_send_total（总实时上报数）, realtime_send_success（成功数）, realtime_send_retry（重试数）, realtime_send_fallback（降级到批量数）, realtime_send_duration_ms（耗时直方图）",
+        "维度：按 event_name, platform (ios/android), server_version 分组",
+        "告警条件：realtime_send_success / realtime_send_total < 95% 持续 5 分钟；realtime_send_fallback 突增超过基线 200%",
+        "日志：实时事件发送结果（info 级别），降级事件（warn 级别），4xx 错误（error 级别）"
+      ],
+      "dependencies": [
+        "3",
+        "4"
+      ],
+      "outputs": [
+        "指标定义文档",
+        "告警规则配置",
+        "日志格式规范"
+      ]
+    },
+    {
+      "order": 8,
+      "title": "编写集成测试与回归测试",
+      "details": [
+        "测试实时事件正常上报：调用 reportEvent('payment_success', payload, { realtime: true })，验证事件立即发出",
+        "测试批量事件不受影响：调用 reportEvent('page_view', payload)，验证事件进入批量队列",
+        "测试桥降级：在不支持 sendImmediateEvent 的桥上调用实时模式，验证事件进入批量队列",
+        "测试超时降级：模拟网络延迟超过 3 秒，验证事件降级到批量队列",
+        "测试重试去重：模拟首次超时后重试成功，同时首次请求也到达服务端，验证服务端只记录一条事件",
+        "测试 4xx 不重试：模拟服务端返回 400，验证不重试且记录错误日志",
+        "测试不传 options：调用 reportEvent(name, payload)，验证行为与旧版一致",
+        "测试旧客户端兼容：使用旧版客户端上报，验证服务端正常处理无 event_id 的事件"
+      ],
+      "dependencies": [
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "outputs": [
+        "集成测试用例",
+        "回归测试用例",
+        "测试通过报告"
+      ]
+    },
+    {
+      "order": 9,
+      "title": "分阶段发布",
+      "details": [
+        "阶段 1：发布新版客户端，realtime feature flag 默认关闭，仅批量模式",
+        "阶段 2：开启 realtime flag，仅对 payment_success 事件生效，灰度 5% 用户",
+        "阶段 3：观察指标 48 小时，确认 realtime_send_success 率 > 99%，无异常降级",
+        "阶段 4：全量开启 realtime 模式",
+        "回滚方案：关闭 feature flag，所有事件回到批量模式，无需客户端发版"
+      ],
+      "dependencies": [
+        "7",
+        "8"
+      ],
+      "outputs": [
+        "发布计划",
+        "feature flag 配置",
+        "回滚操作手册"
+      ]
+    }
+  ],
+  "failure_handling": [
+    "场景：实时请求网络超时 | 处理：首次超时后使用相同 event_id 重试 1 次，重试仍超时则将事件投入批量队列。Promise 在首次超时后 resolve，不阻塞调用方。| 可观测：realtime_send_fallback 指标 +1，warn 级别日志记录 event_id 和超时时长",
+    "场景：服务端返回 5xx | 处理：使用相同 event_id 重试 1 次，重试仍 5xx 则投入批量队列。| 可观测：realtime_send_retry 或 realtime_send_fallback 指标 +1，error 级别日志",
+    "场景：服务端返回 4xx | 处理：不重试，不降级到批量队列（请求本身有误，重试无意义），记录错误日志后丢弃该事件。| 可观测：error 级别日志记录 event_id、status_code、响应体摘要",
+    "场景：桥不支持 sendImmediateEvent | 处理：JS 层检测方法不存在，直接将事件投入批量队列，Promise 立即 resolve。| 可观测：realtime_send_fallback 指标 +1，info 级别日志",
+    "场景：重试导致重复到达服务端 | 处理：服务端按 event_id 去重，相同 event_id 的多次到达只保留一条。客户端无需额外处理。| 可观测：服务端去重日志（如有），客户端无感知",
+    "场景：批量队列已满时降级事件入队 | 处理：遵循现有批量队列溢出策略，降级事件与普通批量事件同等对待。若队列满则事件可能丢失，由 open_decisions 中确认是否需要特殊处理。| 可观测：若队列溢出丢弃事件，现有批量丢弃指标触发"
+  ],
+  "test_plan": [
+    "名称：实时事件正常上报 | 类型：normal | 步骤：调用 reportEvent('payment_success', { order_id: '123' }, { realtime: true })，mock 桥正常回调 success: true | 预期：事件在 3 秒内到达服务端，Promise resolve，服务端记录事件且 event_id 正确",
+    "名称：批量事件不受影响 | 类型：regression | 步骤：调用 reportEvent('page_view', {})，不传 options | 预期：事件进入批量队列，满足条件后批量上报，行为与旧版完全一致",
+    "名称：桥降级到批量 | 类型：compatibility | 步骤：在不暴露 sendImmediateEvent 的桥环境调用 reportEvent(name, payload, { realtime: true }) | 预期：事件进入批量队列，Promise 立即 resolve，降级指标 +1，无异常抛出",
+    "名称：超时后降级到批量 | 类型：failure | 步骤：mock 桥回调延迟 5 秒（超过 3 秒超时），调用实时上报 | 预期：Promise 在约 3 秒后 resolve，事件投入批量队列，降级指标 +1",
+    "名称：重试成功与服务端去重 | 类型：duplicate | 步骤：mock 首次请求超时但实际也到达服务端，重试请求也到达服务端 | 预期：服务端收到两条相同 event_id 的请求，去重后只保留一条记录",
+    "名称：4xx 不重试 | 类型：failure | 步骤：mock 桥回调 success: false, statusCode: 400 | 预期：不重试，不降级到批量队列，error 日志记录，Promise resolve",
+    "名称：旧客户端兼容 | 类型：compatibility | 步骤：使用旧版客户端（无 event_id）上报事件到两个服务端版本 | 预期：服务端正常接收处理，无报错，行为与升级前一致",
+    "名称：feature flag 回滚 | 类型：rollback | 步骤：关闭 realtime feature flag，调用 reportEvent('payment_success', payload, { realtime: true }) | 预期：realtime 参数被忽略，事件走批量路径，行为与 flag 关闭前一致"
+  ],
+  "acceptance_criteria": [
+    "reportEvent 不传 options 时行为与旧版完全一致，所有现有批量事件测试通过",
+    "reportEvent 传 { realtime: true } 且 feature flag 开启时，事件在 3 秒内到达服务端（网络正常情况下）",
+    "实时上报失败时支付成功页不被阻塞：Promise 在超时后 resolve，页面无卡顿",
+    "实时上报失败降级到批量队列后，事件最终通过批量路径送达服务端",
+    "重试使用相同 event_id，服务端去重后不产生重复记录",
+    "旧版客户端（无 event_id、无 sendImmediateEvent）在两个服务端版本上均正常工作",
+    "新版客户端在旧版桥（无 sendImmediateEvent）上自动降级到批量模式，无异常",
+    "realtime_send_success / realtime_send_total >= 99%（网络正常条件下）",
+    "feature flag 关闭后所有事件回到批量模式，无需客户端发版即可回滚"
+  ],
+  "open_decisions": [
+    "问题：实时请求超时值是否确认为 3 秒？| 影响：超时值影响支付成功页的等待时间和实时上报成功率。过短导致不必要的降级，过长影响页面跳转体验。| 选项：3 秒（推荐）/ 5 秒 / 可配置，默认 3 秒",
+    "问题：两个服务端版本是否均已实现 event_id 去重？| 影响：若某个版本不支持 event_id 字段（忽略或报错），实时事件的去重保证将失效，需要服务端补丁或客户端适配。| 选项：两个版本均支持（需验证）/ 仅一个版本支持（需补丁或客户端条件逻辑）",
+    "问题：降级到批量队列的支付成功事件是否需要业务告警？| 影响：支付成功事件未实时到达可能影响下游业务（如实时风控、订单状态推送）。告警可触发人工介入。| 选项：需要告警（推荐）/ 仅指标监控，不告警",
+    "问题：批量队列满时降级事件的处理策略？| 影响：如果批量队列已满，降级事件可能被丢弃。需确认现有队列溢出策略是否可接受，或是否需要为降级事件保留配额。| 选项：与普通批量事件同等对待（可能丢弃）/ 为降级事件预留队列空间 / 丢弃时触发告警"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "deepseek",
+  "probe": "risk",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 3,
+    "false_positive_cost": 1
+  },
+  "total": 14,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "核心风险覆盖较完整，但缺少实时模式回滚开关等事实分析。",
+      "evidence": [
+        "识别了字段位置不一致、支付页阻塞、重试重复、跨版本兼容和可观测性问题。",
+        "未明确指出方案缺少实时模式回滚开关。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "风险分析基本形成因果链，但修复建议引入需求范围外的数据与发送路径，未保持审查结论的一致边界。",
+      "evidence": [
+        "建议旧原生桥不支持时由 JS 直接 HTTP 上报。",
+        "需求没有提出 JS 直接 HTTP 上报能力或新的并行发送路径。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "输出包含可执行建议，但少分析了既有事实，尤其缺少实时模式回滚开关，导致修订指令不完整。",
+      "evidence": [
+        "提供了字段、event_id、重试和监控方面的修改建议。",
+        "没有把实时模式回滚能力作为明确修订项。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "输出混入了输入未提供的假设和实现建议，没有严格停留在证据支持的风险分析范围内。",
+      "evidence": [
+        "假设支付成功事件相对整体事件量属于低频。",
+        "建议使用 JS 直接 HTTP、beforeunload 或页面生命周期等输入未提供的能力。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 1,
+      "rationale": "Risk Reviewer 不应通过无效假设和超范围实现建议扩张结论；本输出引入了多个不必要的新方向。",
+      "evidence": [
+        "建议新增 JS 直接 HTTP 上报路径。",
+        "建议通过 beforeunload 或页面生命周期确保事件不丢。",
+        "对服务端负载使用了无证据的低频假设。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "重试和批量回落缺少稳定的 event_id 规则。",
+    "同窗口发布缺少跨版本兼容设计。",
+    "验收缺少生产可观测性。"
+  ],
+  "missed_known_issues": [
+    "没有明确指出缺少实时模式回滚开关。"
+  ],
+  "valuable_new_findings": [
+    "指出首次发送、重试和批量回落应复用同一个 event_id。"
+  ],
+  "false_positives": [
+    "建议旧原生桥不支持时由 JS 直接 HTTP 上报。",
+    "建议通过 beforeunload 或页面生命周期确保事件不丢。",
+    "假设支付成功事件相对整体事件量属于低频。"
+  ],
+  "failure_modes": [
+    "通过实现建议替代风险分析。",
+    "引入输入未提供的并行发送路径。",
+    "使用无证据假设支持判断。"
+  ],
+  "notes": "核心问题命中较好，但 Risk Reviewer 提供了较多超范围建议和假设，且遗漏实时模式回滚开关。",
+  "suggested_roles": [],
+  "unsuitable_roles": []
+}

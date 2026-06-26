@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "claude_bin": "claude",
+  "workspace_runs_dir": "./workspace-runs",
+  "models": {
+    "kimi": {
+      "settings_file": "~/.config/plan-review-harness/settings/kimi.settings.json",
+      "required_env": [
+        "ANTHROPIC_BASE_URL"
+      ]
+    },
+    "deepseek": {
+      "settings_file": "~/.config/plan-review-harness/settings/deepseek.settings.json",
+      "required_env": [
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_MODEL"
+      ]
+    },
+    "glm": {
+      "settings_file": "~/.config/plan-review-harness/settings/glm.settings.json",
+      "required_env": [
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_MODEL"
+      ]
+    },
+    "qwen": {
+      "settings_file": "~/.config/plan-review-harness/settings/qwen.settings.json",
+      "required_env": [
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_MODEL"
+      ]
+    }
+  },
+  "roles": {
+    "risk": "kimi",
+    "architecture": "kimi",
+    "execution": "kimi",
+    "rebuttal": "glm",
+    "fact_check": "glm",
+    "synthesis": "glm",
+    "planner": "kimi"
+  },
+  "execution": {
+    "max_concurrency": 3,
+    "timeout_ms": 900000,
+    "max_buffer_bytes": 20971520,
+    "max_turns": 24,
+    "compact_plan": true,
+    "isolate_reviewers": true,
+    "read_scope_max_files": 80
+  }
+}

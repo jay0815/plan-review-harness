@@ -1,0 +1,92 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "synthesis",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 2,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 12,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "覆盖主要问题并降权 Kafka，但错误分类 API 分歧，且没有裁决字段协议错误。",
+      "evidence": [
+        "保留非阻塞、幂等、发布和观测问题。",
+        "将 API 拆分标记为 L2_local_change。",
+        "将字段错位继续保留为人工分歧。"
+      ]
+    },
+    "contract_closure": {
+      "score": 2,
+      "rationale": "字段分歧选项无法修复原生读取问题，旧客户端去重方案也建立在不存在的业务字段上。",
+      "evidence": [
+        "建议允许双位置并由服务端双路径解析，但问题发生在 JS 与原生桥之间。",
+        "建议使用 order_id 与 event_type 为旧客户端兜底去重。",
+        "新增 retry_from_realtime 标记。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "修订指令覆盖主要方向，但部分指令可能制造错误去重或无法修复当前协议。",
+      "evidence": [
+        "覆盖非阻塞、发布矩阵、幂等和监控。",
+        "服务端双路径解析不能解决原生读取不到字段。",
+        "业务字段组合去重可能误杀合法事件。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "存在错误来源归因，并新增服务端解析、业务字段、来源标记和配置开关等来源中不存在的内容。",
+      "evidence": [
+        "将 await 问题合并自 Architecture 的 API 拆分意见。",
+        "把字段错位解释为服务端必须双路径解析。",
+        "新增 order_id、event_type 和 retry_from_realtime。",
+        "假设存在客户端配置或服务端开关。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "虽然正确降权 Kafka，但新增双路径解析、业务字段去重、来源标记和开关机制，成本和误伤风险较高。",
+      "evidence": [
+        "建议服务端双路径解析。",
+        "建议旧客户端使用业务字段组合去重。",
+        "新增 retry_from_realtime 标记。",
+        "引入客户端配置或服务端开关。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付结果页。",
+    "实时重试和批量回落存在 event_id 幂等缺口。",
+    "同窗口发布缺少跨版本兼容顺序和验收矩阵。",
+    "缺少生产观测指标和实时模式回滚能力。",
+    "Kafka 和独立数据库属于超范围误报。"
+  ],
+  "missed_known_issues": [
+    "没有将 is_realtime 写入和读取位置不一致裁决为确定缺陷。",
+    "没有正确识别两个公开 API 与复用 reportEvent 是 L3 方向分歧。",
+    "没有保持准确的来源归因。"
+  ],
+  "valuable_new_findings": [],
+  "false_positives": [
+    "错误将 await 与 Architecture 的 API 拆分意见合并。",
+    "建议服务端双路径解析修复 JS 与原生桥字段错位。",
+    "编造 order_id、event_type 和 retry_from_realtime。",
+    "建议未经确认的客户端配置或服务端开关。",
+    "使用业务字段组合为旧客户端去重。"
+  ],
+  "failure_modes": [
+    "来源保真不足。",
+    "错误分类方向性分歧。",
+    "合成过程中新增可能破坏数据正确性的修订方案。"
+  ],
+  "notes": "角色判断：当前不适合作为主 Synthesizer。能够完成表面汇总，但来源保真、分歧分类和修订安全性不足。",
+  "suggested_roles": [],
+  "unsuitable_roles": [
+    "synthesis"
+  ]
+}

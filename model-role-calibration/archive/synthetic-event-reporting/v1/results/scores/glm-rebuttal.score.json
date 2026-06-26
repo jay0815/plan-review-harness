@@ -1,0 +1,91 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "glm",
+  "probe": "rebuttal",
+  "score": {
+    "hit_rate": 4,
+    "contract_closure": 4,
+    "actionability": 4,
+    "evidence_discipline": 3,
+    "false_positive_cost": 3
+  },
+  "total": 18,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 4,
+      "rationale": "覆盖非阻塞、字段错位、event_id、版本兼容和生产验收问题，但字段错位严重性偏低且遗漏快速回滚。",
+      "evidence": [
+        "识别 await 与非阻塞硬约束冲突。",
+        "识别 payload 与事件顶层的字段位置不一致。",
+        "覆盖 event_id、同步发布和生产监控。",
+        "将导致实时功能完全失效的字段错位仅标为 medium。"
+      ]
+    },
+    "contract_closure": {
+      "score": 4,
+      "rationale": "能够定位字段路径、event_id 跨路径一致性和 Promise 结算问题，但对旧版本行为存在未验证假设。",
+      "evidence": [
+        "要求统一 is_realtime 的结构层级。",
+        "要求批量回落保留原 event_id。",
+        "询问实时失败回落后 Promise 应 resolve 还是 reject。"
+      ]
+    },
+    "actionability": {
+      "score": 4,
+      "rationale": "反驳可直接转化为协议、幂等、兼容和验收修订项，但发布建议依赖旧桥安全忽略字段，且缺少快速回滚要求。",
+      "evidence": [
+        "补充失败、兼容和生产指标验收。",
+        "建议 JS 先上线并依赖旧原生桥忽略字段。",
+        "未明确要求独立回滚或关闭实时模式。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 3,
+      "rationale": "主要问题有证据，也主动列出可能误报，但使用了具体超时推演并假设旧桥会安全降级。",
+      "evidence": [
+        "假设单次请求可能十到三十秒。",
+        "假设旧原生桥忽略字段并走批量。",
+        "false_positive_risks 主动说明事件对象可能被扁平化。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 3,
+      "rationale": "整体保持独立且克制，但具体退避参数、JS 生成 event_id 和发布顺序建议略微越界。",
+      "evidence": [
+        "指定一秒、两秒、四秒退避和五秒超时。",
+        "指定由 JS 层生成 event_id。",
+        "建议 JS 先上线。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "is_realtime 写入位置与读取位置不一致。",
+    "await reportEvent 阻塞支付成功页。",
+    "实时重试和批量回落缺少稳定 event_id。",
+    "同窗口发布缺少跨版本兼容顺序。",
+    "验收缺少失败路径、兼容场景和生产指标。",
+    "实时失败并回落批量队列后的 Promise 语义不明确。"
+  ],
+  "missed_known_issues": [
+    "没有明确指出快速关闭实时模式和独立回滚路径缺失。"
+  ],
+  "valuable_new_findings": [
+    "主动评估字段错位和 event_id 风险可能成立或不成立的条件。",
+    "指出未声明的旧客户端降级会影响验收和排障。"
+  ],
+  "false_positives": [
+    "假设具体网络超时时长。",
+    "假设旧原生桥会安全忽略字段。",
+    "指定具体退避参数和 event_id 生成层。",
+    "建议基于未验证兼容行为让 JS 先上线。"
+  ],
+  "failure_modes": [
+    "用具体实现参数替代结构性反驳目标。",
+    "发布建议依赖未验证的旧版本行为。"
+  ],
+  "notes": "角色判断：四个模型中最均衡，适合作为 Rebuttal 主审。能够独立挑战共识并保持误报意识；仍需限制具体参数和旧版本行为假设。",
+  "suggested_roles": [
+    "rebuttal"
+  ],
+  "unsuitable_roles": []
+}

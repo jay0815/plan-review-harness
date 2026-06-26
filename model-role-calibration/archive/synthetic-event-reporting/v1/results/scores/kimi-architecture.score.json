@@ -1,0 +1,84 @@
+{
+  "case_id": "synthetic/event-reporting",
+  "model": "kimi",
+  "probe": "architecture",
+  "score": {
+    "hit_rate": 3,
+    "contract_closure": 3,
+    "actionability": 3,
+    "evidence_discipline": 2,
+    "false_positive_cost": 2
+  },
+  "total": 13,
+  "dimension_assessments": {
+    "hit_rate": {
+      "score": 3,
+      "rationale": "识别了非阻塞、发布耦合和幂等问题，但遗漏了字段写入与读取层级错位以及观测回滚缺口。",
+      "evidence": [
+        "正确指出支付成功页不应等待上报网络结果。",
+        "正确指出三端同步发布与线上多版本现实冲突。",
+        "没有指出 payload.is_realtime 与事件顶层 is_realtime 不一致。"
+      ]
+    },
+    "contract_closure": {
+      "score": 3,
+      "rationale": "具备 event_id 全生命周期保持意识，但没有闭合 is_realtime 的唯一 wire shape。",
+      "evidence": [
+        "提出事件生成时分配稳定 event_id，并在实时、重试和批量链路复用。",
+        "将字段问题描述为业务 payload 污染，没有识别当前协议根本无法触发实时分支。"
+      ]
+    },
+    "actionability": {
+      "score": 3,
+      "rationale": "给出了非阻塞、兼容发布和幂等方向，但部分建议偏离移动端上下文，且缺少观测和回滚闭环。",
+      "evidence": [
+        "提出三端独立灰度和服务端兼容新旧协议。",
+        "引入 beforeunload，不符合当前移动端场景。",
+        "未给出兼容矩阵、指标和回滚要求。"
+      ]
+    },
+    "evidence_discipline": {
+      "score": 2,
+      "rationale": "存在多项输入未支持的事实推断，并把合理的批量降级机制判为架构失效。",
+      "evidence": [
+        "声称批量队列延迟可能长达数分钟，输入未提供该事实。",
+        "引入页面 beforeunload 生命周期。",
+        "将实时失败后回落批量队列本身判断为核心需求失效。"
+      ]
+    },
+    "false_positive_cost": {
+      "score": 2,
+      "rationale": "核心问题基本有效，但错误否定批量降级并扩展出额外持久化和重试机制，增加了不必要成本。",
+      "evidence": [
+        "建议新增本地持久化和指数退避重试。",
+        "没有区分尽快上报与保证实时链路永不降级。"
+      ]
+    }
+  },
+  "matched_known_issues": [
+    "await reportEvent 阻塞支付成功页。",
+    "实时重试与批量回落存在 event_id 去重风险。",
+    "三端同窗口发布缺少跨版本兼容顺序。"
+  ],
+  "missed_known_issues": [
+    "is_realtime 写入 payload 但原生桥读取事件顶层，实时分支无法触发。",
+    "验收缺少完整兼容矩阵、指标和回滚方式。"
+  ],
+  "valuable_new_findings": [
+    "明确指出稳定 event_id 必须贯穿事件的实时、重试和批量生命周期。"
+  ],
+  "false_positives": [
+    "将实时失败后回落批量队列判为核心需求失效。",
+    "引入不符合移动端上下文的 beforeunload。",
+    "无依据断言批量队列会延迟数分钟。"
+  ],
+  "failure_modes": [
+    "把传输降级机制误判为架构缺陷。",
+    "通过未确认的运行环境和实现机制补全方案。"
+  ],
+  "notes": "具备基本架构审查能力，但协议精确性和证据纪律不足。适合辅助审查，不宜独立完成跨层协议定稿。",
+  "suggested_roles": [
+    "architecture"
+  ],
+  "unsuitable_roles": []
+}
