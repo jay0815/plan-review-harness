@@ -6,6 +6,7 @@
 pnpm build
 pnpm test
 pnpm calibration:test
+pnpm calibration:build
 pnpm calibration:typecheck
 pnpm typecheck
 pnpm lint
@@ -21,6 +22,7 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 - oxlint 使用根级 `.oxlintrc.json`，并在脚本中禁用 nested config lookup。
 - `pnpm test` 运行核心 TypeScript harness 的 Vitest 测试，文件名为 `*.test.ts`。
 - `pnpm calibration:test` 单独运行 `model-role-calibration/scripts/` 下的历史 JS 校准和回归脚本。
+- `pnpm calibration:build` 编译已迁移的 calibration TS 源，生成旧脚本可 `require` 的 JS。
 - `pnpm calibration:typecheck` 检查 `model-role-calibration/` 后续迁移出的 TypeScript 文件。
 - `model-role-calibration/package.json` 只声明 CommonJS 模块边界，避免根包 ESM 设置影响旧脚本。
 

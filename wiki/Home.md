@@ -14,7 +14,7 @@ Plan Review Harness 是一个用于验证 plan review workflow 的 TypeScript ru
 
 当前 CLI 支持 `plan-review start`，并要求传入 requirement 文件和 initial plan 文件。可运行路径使用 fixture 驱动的 mock workers。Runtime 中已有 resume 行为，但尚未提供 CLI resume 命令。
 
-`model-role-calibration/` 是历史 CommonJS 校准工具链，和根 TypeScript ESM harness 分开维护。后续迁移出的 TS 文件由 `pnpm calibration:typecheck` 检查。
+`model-role-calibration/` 是历史 CommonJS 校准工具链，和根 TypeScript ESM harness 分开维护。后续迁移出的 TS 文件由 `pnpm calibration:typecheck` 检查，并由 `pnpm calibration:build` 生成兼容 JS。
 
 ## 维护原则
 
