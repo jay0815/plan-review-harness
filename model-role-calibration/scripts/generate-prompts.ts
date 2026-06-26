@@ -8,6 +8,7 @@ import {
   assertProbe,
   assertSafeCaseId,
   ensureDir,
+  isMainScript,
   loadCaseInput,
   parseArgs,
   readText,
@@ -94,6 +95,6 @@ function main(): void {
   console.log(`Generated prompts: ${path.relative(path.resolve(ROOT, '..'), generated.promptDir)}`)
 }
 
-if (require.main === module) {
+if (isMainScript(__filename)) {
   main()
 }

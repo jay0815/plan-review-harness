@@ -92,6 +92,6 @@ function main() {
     console.log(`Run ID: ${run}`);
     console.log(`Generated prompts: ${path.relative(path.resolve(lib_js_1.ROOT, '..'), generated.promptDir)}`);
 }
-if (require.main === module) {
+if ((0, lib_js_1.isMainScript)(__filename)) {
     main();
 }
