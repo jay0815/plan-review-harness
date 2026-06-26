@@ -1,16 +1,10 @@
 #!/usr/bin/env node
-
-const path = require("path");
-const {
-  ROOT,
-  parseArgs,
-  requireArg,
-  writeFileNew,
-  ensureDir
-} = require("./lib");
-
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const path = require("node:path");
+const { ROOT, parseArgs, requireArg, writeFileNew, ensureDir } = require('./lib');
 const FILES = {
-  "inputs/planner.md": `# 需求背景
+    'inputs/planner.md': `# 需求背景
 
 待填写。
 
@@ -22,7 +16,7 @@ const FILES = {
 
 待填写。
 `,
-  "inputs/review.md": `# 需求背景
+    'inputs/review.md': `# 需求背景
 
 待填写。
 
@@ -30,7 +24,7 @@ const FILES = {
 
 待填写。
 `,
-  "inputs/synthesis.md": `# 需求背景
+    'inputs/synthesis.md': `# 需求背景
 
 待填写。
 
@@ -50,7 +44,7 @@ const FILES = {
 
 合并重复问题，识别真正分歧，降权误报，并给出修订指令。
 `,
-  "rubric.md": `# 评分口径
+    'rubric.md': `# 评分口径
 
 ## 确定问题
 
@@ -73,25 +67,21 @@ const FILES = {
 - \`false_positive_cost\`：
 
 每项 0 到 5 分，总分 25 分。
-`
+`,
 };
-
 function main() {
-  const args = parseArgs(process.argv);
-  const group = requireArg(args, "group");
-  const id = requireArg(args, "id");
-  if (!/^[A-Za-z0-9_-]+$/.test(group) || !/^[A-Za-z0-9_-]+$/.test(id)) {
-    throw new Error("--group and --id may only contain letters, numbers, underscore, and dash");
-  }
-
-  const caseDir = path.join(ROOT, "cases", group, id);
-  ensureDir(caseDir);
-  for (const [file, content] of Object.entries(FILES)) {
-    writeFileNew(path.join(caseDir, file), content);
-  }
-
-  console.log(`Created case: ${group}/${id}`);
-  console.log(caseDir);
+    const args = parseArgs(process.argv);
+    const group = requireArg(args, 'group');
+    const id = requireArg(args, 'id');
+    if (!/^[A-Za-z0-9_-]+$/.test(group) || !/^[A-Za-z0-9_-]+$/.test(id)) {
+        throw new Error('--group and --id may only contain letters, numbers, underscore, and dash');
+    }
+    const caseDir = path.join(ROOT, 'cases', group, id);
+    ensureDir(caseDir);
+    for (const [file, content] of Object.entries(FILES)) {
+        writeFileNew(path.join(caseDir, file), content);
+    }
+    console.log(`Created case: ${group}/${id}`);
+    console.log(caseDir);
 }
-
 main();
