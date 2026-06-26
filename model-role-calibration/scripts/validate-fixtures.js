@@ -1,10 +1,44 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const fs = require("node:fs");
-const path = require("node:path");
-const { ROOT, PROBES, loadCaseInput, parseJsonFile, loadConfig, schemaForProbe, slug } = require('./lib');
-const { validateJsonText } = require('./json-validator-mcp');
+const fs = __importStar(require("node:fs"));
+const path = __importStar(require("node:path"));
+const lib_js_1 = require("./lib.js");
+const json_validator_mcp_js_1 = require("./json-validator-mcp.js");
+const validateJsonText = json_validator_mcp_js_1.validateJsonText;
 const SYNTHESIS_SOURCE_BY_PROBE = {
     risk: 'Risk Reviewer',
     architecture: 'Architecture Reviewer',
@@ -38,7 +72,7 @@ function jsonCodeBlocks(markdown, caseId) {
     return blocks;
 }
 function assertSchema(value, schemaFile, label) {
-    const validation = validateJsonText(JSON.stringify(value), parseJsonFile(schemaFile));
+    const validation = validateJsonText(JSON.stringify(value), (0, lib_js_1.parseJsonFile)(schemaFile));
     if (!validation.valid) {
         const details = (validation.errors || [])
             .slice(0, 5)
@@ -58,13 +92,13 @@ function validateSynthesisFixture(caseId, input) {
         throw new Error(`Missing Fact Check JSON block in ${caseId} synthesis input`);
     }
     for (const output of reviewerOutputs) {
-        assertSchema(output, schemaForProbe(output.probe), `${caseId}/${output.probe}`);
+        assertSchema(output, (0, lib_js_1.schemaForProbe)(output.probe), `${caseId}/${output.probe}`);
     }
-    assertSchema(factCheck, path.join(ROOT, 'schemas', 'fact-check-output.schema.json'), `${caseId}/fact_check`);
+    assertSchema(factCheck, path.join(lib_js_1.ROOT, 'schemas', 'fact-check-output.schema.json'), `${caseId}/fact_check`);
     const expectedIssues = reviewerOutputs.flatMap((output) => {
         const source = SYNTHESIS_SOURCE_BY_PROBE[output.probe];
         return (output.issues || []).map((issue, index) => ({
-            issue_id: `${slug(source)}-${String(index + 1).padStart(3, '0')}`,
+            issue_id: `${(0, lib_js_1.slug)(source)}-${String(index + 1).padStart(3, '0')}`,
             source,
             issue_title: issue.title,
         }));
@@ -100,15 +134,15 @@ function validateSynthesisFixture(caseId, input) {
     }
 }
 function main() {
-    const schemaDir = path.join(ROOT, 'schemas');
+    const schemaDir = path.join(lib_js_1.ROOT, 'schemas');
     const schemaFiles = fs
         .readdirSync(schemaDir)
         .filter((file) => file.endsWith('.json'))
         .sort();
     for (const file of schemaFiles) {
-        parseJsonFile(path.join(schemaDir, file));
+        (0, lib_js_1.parseJsonFile)(path.join(schemaDir, file));
     }
-    const syntheticDir = path.join(ROOT, 'cases', 'synthetic');
+    const syntheticDir = path.join(lib_js_1.ROOT, 'cases', 'synthetic');
     const cases = listDirectories(syntheticDir);
     if (!cases.length) {
         throw new Error('No synthetic calibration cases found');
@@ -119,8 +153,8 @@ function main() {
         if (!fs.existsSync(rubric)) {
             throw new Error(`Missing case rubric: ${rubric}`);
         }
-        for (const probe of PROBES) {
-            const input = loadCaseInput(caseId, probe);
+        for (const probe of lib_js_1.PROBES) {
+            const input = (0, lib_js_1.loadCaseInput)(caseId, probe);
             if (!input.trim()) {
                 throw new Error(`Empty ${probe} input for ${caseId}`);
             }
@@ -129,8 +163,8 @@ function main() {
             }
         }
     }
-    const config = loadConfig();
-    const defaultRoutes = parseJsonFile(path.join(ROOT, 'default-role-routes.json'));
+    const config = (0, lib_js_1.loadConfig)();
+    const defaultRoutes = (0, lib_js_1.parseJsonFile)(path.join(lib_js_1.ROOT, 'default-role-routes.json'));
     if (defaultRoutes.version !== 1) {
         throw new Error('default-role-routes.json must use version 1');
     }
@@ -144,7 +178,7 @@ function main() {
         }
     }
     for (const caseId of config.primary_cases) {
-        if (!fs.existsSync(path.join(ROOT, 'cases', caseId))) {
+        if (!fs.existsSync(path.join(lib_js_1.ROOT, 'cases', caseId))) {
             throw new Error(`Missing configured primary case: ${caseId}`);
         }
     }
@@ -171,7 +205,7 @@ function main() {
         throw new Error('probe_concurrency_overrides must be an object');
     }
     for (const [probe, value] of Object.entries(config.probe_concurrency_overrides || {})) {
-        if (!PROBES.includes(probe)) {
+        if (!lib_js_1.PROBES.includes(probe)) {
             throw new Error(`probe_concurrency_overrides.${probe} is not a known probe`);
         }
         if (!Number.isInteger(value) || value <= 0) {

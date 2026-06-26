@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
-import fs = require('node:fs')
-import path = require('node:path')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
+import { PROBES, ROOT, loadCaseInput, loadConfig, parseJsonFile, schemaForProbe, slug } from './lib.js'
+import { validateJsonText as validateJsonTextUntyped } from './json-validator-mcp.js'
 
 type JsonObject = Record<string, any>
 
@@ -30,19 +33,7 @@ interface ValidationResult {
   errors?: ValidationError[]
 }
 
-const { ROOT, PROBES, loadCaseInput, parseJsonFile, loadConfig, schemaForProbe, slug } = require('./lib') as {
-  ROOT: string
-  PROBES: string[]
-  loadCaseInput(caseId: string, probe: string): string
-  parseJsonFile<T = unknown>(file: string): T
-  loadConfig(): CalibrationConfig
-  schemaForProbe(probe: string): string
-  slug(value: string): string
-}
-
-const { validateJsonText } = require('./json-validator-mcp') as {
-  validateJsonText(candidateText: string, schema?: unknown): ValidationResult
-}
+const validateJsonText = validateJsonTextUntyped as (candidateText: string, schema?: unknown) => ValidationResult
 
 const SYNTHESIS_SOURCE_BY_PROBE: Record<string, string> = {
   risk: 'Risk Reviewer',
@@ -183,7 +174,7 @@ function main(): void {
     }
   }
 
-  const config = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const defaultRoutes = parseJsonFile<JsonObject>(path.join(ROOT, 'default-role-routes.json'))
   if (defaultRoutes.version !== 1) {
     throw new Error('default-role-routes.json must use version 1')
