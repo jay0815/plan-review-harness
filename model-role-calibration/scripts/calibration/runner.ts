@@ -1,4 +1,4 @@
-import path = require('node:path')
+import * as path from 'node:path'
 
 import { positiveInteger, runWithConcurrency, writeGenerated } from './core'
 
