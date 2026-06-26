@@ -454,7 +454,14 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
   --run-id <run-id>
 ```
 
-需要机器读取时加 `--json`。脚本默认读取
+生成聚合诊断和下一步建议：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
+  --run-id <run-id>
+```
+
+需要机器读取 doctor 输出时加 `--json`。脚本默认读取
 `~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>`。退出码 `0` 表示已完成且通过，`1` 表示已完成但检查失败或 run failed，`2` 表示 queued/running 尚未完成。
 只有评审产物被移动到非默认目录时，才使用 `--run-dir /path/to/workspace-runs/<run-id>`。
 

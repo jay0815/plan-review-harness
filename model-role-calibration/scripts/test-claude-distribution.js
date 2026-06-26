@@ -39,6 +39,7 @@ function main() {
     assert(installDoc.includes("带参数模式会始终将参数解释为计划文件路径"));
     assert(installDoc.includes("## 七、标准验证流程"));
     assert(installDoc.includes("--run-id <run-id>"));
+    assert(installDoc.includes("doctor-workspace-review-run.js"));
     assert(installDoc.includes("project_root"));
     assert(installDoc.includes("NOT_READY"));
     assert(installDoc.includes("outcome"));
@@ -57,6 +58,9 @@ function main() {
     ));
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "verify-workspace-review-run.js")
+    ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "doctor-workspace-review-run.js")
     ));
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "retry-workspace-review-stage.js")
@@ -109,6 +113,7 @@ function main() {
     assert(packagedReadme.includes("## 标准验证流程"));
     assert(packagedReadme.includes("inspect-workspace-run.js"));
     assert(packagedReadme.includes("verify-workspace-review-run.js"));
+    assert(packagedReadme.includes("doctor-workspace-review-run.js"));
     assert(packagedReadme.includes("--run-id <run-id>"));
     assert(packagedReadme.includes("state.json"));
     assert(packagedReadme.includes("project_root"));

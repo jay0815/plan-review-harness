@@ -5,6 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { resolveRunDir, verifyRun } = require("./verify-workspace-review-run");
+const { doctorWorkspaceReviewRun } = require("./doctor-workspace-review-run");
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -153,6 +154,9 @@ function main() {
     assert(running.counts.pending >= 1);
     assert(!running.checks.some((item) => item.id === "fact_check.present"));
     assert(!running.checks.some((item) => item.id === "synthesis.present"));
+    const runningDoctor = doctorWorkspaceReviewRun(runningRunDir);
+    assert.equal(runningDoctor.health, "pending");
+    assert(runningDoctor.next_actions.some((item) => item.kind === "wait_for_completion"));
 
     const failedRunDir = path.join(tempDir, "workspace-review-failed");
     fs.mkdirSync(path.join(failedRunDir, "roles"), { recursive: true });
@@ -178,6 +182,13 @@ function main() {
     assert.equal(failedInfra.valid, false);
     assert.equal(failedInfra.infra_errors[0].role, "rebuttal");
     assert.equal(failedInfra.infra_errors[0].type, "invalid_output");
+    const failedDoctor = doctorWorkspaceReviewRun(failedRunDir);
+    assert.equal(failedDoctor.health, "fail");
+    assert(failedDoctor.next_actions.some((item) => (
+      item.kind === "retry_stage" &&
+      item.stage === "reviewers" &&
+      item.command.includes("retry-workspace-review-stage.js")
+    )));
 
     writeJson(path.join(runDir, "state.json"), {
       run_id: "workspace-review-test",
@@ -277,6 +288,35 @@ function main() {
         }
       }
     });
+    writeJson(path.join(runDir, "plan-authoring-lint.json"), {
+      valid: true,
+      errors: [],
+      warnings: ["fixture warning"],
+      metrics: {
+        existing_code_ref_count: 2,
+        structured_existing_code_ref_count: 1,
+        inline_existing_code_ref_count: 1
+      }
+    });
+    writeJson(path.join(runDir, "review-plan-refs.json"), {
+      version: 1,
+      format_status: {
+        refs_scoped_to_existing_code_refs_section: true
+      },
+      existing_code_refs: [{
+        path: "src/index.ts",
+        line_ref: null,
+        original_ref: "src/index.ts"
+      }],
+      existing_code_ref_dirs: [{
+        path: "src",
+        line_ref: null,
+        original_ref: "src"
+      }],
+      proposed_code_artifacts: [],
+      blocked_refs: [],
+      skipped_refs: ["missing.ts"]
+    });
 
     const result = verifyRun(runDir);
     assert.equal(result.valid, true);
@@ -285,6 +325,69 @@ function main() {
     assert.equal(result.counts.fail, 0);
     assert(result.counts.warn >= 1);
     assert(result.checks.some((item) => item.id === "fact_check.strictness_signal" && item.status === "warn"));
+    const doctor = doctorWorkspaceReviewRun(runDir);
+    assert.equal(doctor.health, "warn");
+    assert.equal(doctor.action_level, "P2");
+    assert.equal(doctor.plan_outcome.status, "plan_ready");
+    assert.equal(doctor.plan_authoring_lint.existing_code_ref_count, 2);
+    assert.equal(doctor.review_plan_refs.existing_file_ref_count, 1);
+    assert.equal(doctor.review_plan_refs.existing_dir_ref_count, 1);
+    assert.equal(doctor.review_plan_refs.skipped_ref_count, 1);
+    assert.equal(doctor.fact_check.strictness_signal, "all_verified");
+    assert.equal(doctor.synthesis.revision_instruction_count, 0);
+    assert(doctor.next_actions.some((item) => item.kind === "record_regression_sample"));
+
+    writeJson(path.join(runDir, "report.json"), {
+      run_id: "workspace-review-test",
+      outcome: {
+        status: "needs_revision",
+        message: "Plan 结构检查存在错误；必须先修订计划再执行。"
+      },
+      infra_errors: [],
+      fact_check: {
+        summary: {
+          total_checked: 1
+        }
+      }
+    });
+    writeJson(path.join(runDir, "plan-authoring-lint.json"), {
+      valid: false,
+      errors: ["missing section"],
+      warnings: [],
+      metrics: {
+        existing_code_ref_count: 2,
+        structured_existing_code_ref_count: 1,
+        inline_existing_code_ref_count: 1
+      }
+    });
+    const needsRevisionDoctor = doctorWorkspaceReviewRun(runDir);
+    assert.equal(needsRevisionDoctor.health, "warn");
+    assert.equal(needsRevisionDoctor.action_level, "P0");
+    assert.equal(needsRevisionDoctor.plan_outcome.status, "needs_revision");
+    assert(needsRevisionDoctor.next_actions.some((item) => item.kind === "revise_plan_authoring_errors"));
+    writeJson(path.join(runDir, "plan-authoring-lint.json"), {
+      valid: true,
+      errors: [],
+      warnings: ["fixture warning"],
+      metrics: {
+        existing_code_ref_count: 2,
+        structured_existing_code_ref_count: 1,
+        inline_existing_code_ref_count: 1
+      }
+    });
+    writeJson(path.join(runDir, "report.json"), {
+      run_id: "workspace-review-test",
+      outcome: {
+        status: "plan_ready",
+        message: "test"
+      },
+      infra_errors: [],
+      fact_check: {
+        summary: {
+          total_checked: 1
+        }
+      }
+    });
 
     writeJson(path.join(runDir, "report.json"), {
       run_id: "workspace-review-test",

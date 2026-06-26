@@ -252,6 +252,12 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
 ```
 
 这一步不会调用模型，只读取本机已归档的运行产物并输出标准化检查报告。
+如果你只想看“本次是否健康、接下来该做什么”，使用聚合诊断：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
+  --run-id <run-id>
+```
 
 ## 八、运行过程
 
@@ -306,10 +312,17 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
   --run-id <run-id>
 ```
 
+聚合诊断和下一步建议使用：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
+  --run-id <run-id>
+```
+
 如果需要机器可读输出：
 
 ```bash
-node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
   --run-id <run-id> \
   --json
 ```

@@ -18,6 +18,7 @@ const RUNTIME_FILES = [
   "scripts/plan-review-mcp.js",
   "scripts/inspect-workspace-run.js",
   "scripts/verify-workspace-review-run.js",
+  "scripts/doctor-workspace-review-run.js",
   "default-role-routes.json",
   "claude-plan-authoring.md",
   "prompts/probe-risk.md",
@@ -318,10 +319,17 @@ node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
   --run-id <run-id>
 \`\`\`
 
+生成聚合诊断和下一步建议：
+
+\`\`\`bash
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \\
+  --run-id <run-id>
+\`\`\`
+
 机器可读 JSON：
 
 \`\`\`bash
-node ~/.claude/plan-review-harness/mcp/scripts/verify-workspace-review-run.js \\
+node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \\
   --run-id <run-id> \\
   --json
 \`\`\`
