@@ -14,7 +14,7 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 
 根包是 TypeScript ESM harness。CLI 当前只暴露 `start`；`LangGraphWorkflowRuntime` 中已有 resume 行为，但尚未提供 CLI resume 命令。当前可运行路径使用 `MockAgentWorkerAdapter` 和 `fixtures/mock/` 下的 fixture；其他非 mock worker kind 仍是类型层面的预留能力，尚未实现适配器。
 
-`model-role-calibration/` 是历史 CommonJS 校准工具链，使用子目录 `package.json` 与根包的 `"type": "module"` 隔离。默认 `pnpm test` 只运行核心 Vitest 测试；历史 JS 脚本通过 `pnpm calibration:test` 单独验证。
+`model-role-calibration/` 是历史 CommonJS 校准工具链，使用子目录 `package.json` 与根包的 `"type": "module"` 隔离。默认 `pnpm test` 只运行核心 Vitest 测试；历史 JS 脚本通过 `pnpm calibration:test` 单独验证，后续迁移出的 TS 文件通过 `pnpm calibration:typecheck` 检查。
 
 ## 事实来源
 

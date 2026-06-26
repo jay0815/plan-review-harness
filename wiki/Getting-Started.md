@@ -13,7 +13,7 @@
    pnpm typecheck
    ```
 
-   修改 `model-role-calibration/` 时，额外运行 `pnpm calibration:test`。
+   修改 `model-role-calibration/` 时，额外运行 `pnpm calibration:test`；新增或迁移 TS 文件时，同时运行 `pnpm calibration:typecheck`。
 
 3. 运行 mock review：
 

@@ -20,7 +20,7 @@ pnpm typecheck
 - `pnpm test`：运行核心 TypeScript harness 的 Vitest 测试套件。
 - `pnpm typecheck`：执行 `tsc --noEmit`。
 
-修改 `model-role-calibration/` 时，额外运行 `pnpm calibration:test` 验证历史 JS 校准脚本。
+修改 `model-role-calibration/` 时，额外运行 `pnpm calibration:test` 验证历史 JS 校准脚本；新增或迁移 TS 文件时，同时运行 `pnpm calibration:typecheck`。
 
 ## 运行 Mock Review
 

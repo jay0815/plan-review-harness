@@ -40,6 +40,7 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 pnpm build
 pnpm test
 pnpm calibration:test
+pnpm calibration:typecheck
 pnpm typecheck
 pnpm lint
 pnpm fmt:check
@@ -50,6 +51,7 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 TypeScript 生成声明文件。
 - `pnpm test`：运行核心 TypeScript harness 的 Vitest 测试套件。
 - `pnpm calibration:test`：运行 `model-role-calibration/scripts/` 下的历史 JS 校准和回归脚本。
+- `pnpm calibration:typecheck`：检查 `model-role-calibration/` 后续迁移出的 TypeScript 文件。
 - `pnpm typecheck`：执行 `tsc --noEmit`。
 - `pnpm lint`：使用根级 `.oxlintrc.json` 检查 `src/`、`tests/` 和配置文件，禁用 nested config lookup。
 - `pnpm fmt:check`：使用 oxfmt 检查源文件、文档、fixtures 和配置格式。
