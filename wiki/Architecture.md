@@ -1,15 +1,31 @@
 # 架构说明
 
-核心编排入口是 `LangGraphWorkflowRuntime`。它负责创建 run、复制输入、调用 worker、写入 ledger、处理 resume、执行 revision/regression，并持久化 state。
+## Runtime 概览
 
-主要模块：
+`src/graph/LangGraphWorkflowRuntime.ts` 是主要编排边界。它创建 run、复制输入文件、调用 worker、写入 ledger artifact、处理人工决策 resume 数据、评估 convergence，并持久化 `state.json`。
 
-- `src/cli/`：CLI 入口。
-- `src/graph/`：workflow 编排和阶段迁移。
-- `src/workers/`：worker adapter 与 registry。
-- `src/schemas/`：artifact、state 和 worker 输出契约。
-- `src/artifacts/`、`src/state/`：路径与持久化。
+## 模块职责
 
-当前可运行 worker 是 `MockAgentWorkerAdapter`，它只读取 fixture 并写入标准 worker artifact。
+- `src/cli/`：`plan-review start` 的 CLI 入口、参数解析和用户可见输出。
+- `src/graph/`：workflow runtime、节点状态 patch 和阶段迁移。
+- `src/graph/nodes/`：workflow 节点，例如 blind review。
+- `src/workers/`：worker adapter 接口、registry 和 mock adapter。
+- `src/schemas/`：state、artifact、worker、issue、decision、ledger、revision、regression 的 Zod schema。
+- `src/artifacts/`：artifact 路径构造和相关工具。
+- `src/state/`：基于文件的 state 持久化。
+- `src/utils/`：文件系统工具，例如原子写 JSON 和文本。
+- `model-role-calibration/`：历史 CommonJS 校准工具链，保留独立 `package.json` 作为模块类型边界。
 
-详细说明见 [docs/architecture.md](../docs/architecture.md)。
+## Worker 边界
+
+Worker 实现 `AgentWorkerAdapter<I, O>`，接收 `AgentWorkerTask` 和 `AgentWorkerContext`。context 提供 run、round、role、worker 目录、输出目录和日志路径。
+
+当前可运行 adapter 是 `MockAgentWorkerAdapter`。它读取 fixture JSON，按 role schema 校验输出，并写入 task metadata、result JSON、日志和 adapter metadata。mock worker 不应访问网络，也不应依赖真实 API key。
+
+## Schema 边界
+
+Schema 模块是 runtime、fixture、测试和生成 artifact 之间的契约。不要只修改 runtime 就改变 artifact 结构；必须同步更新对应 Zod schema，并补充测试证明合法与非法数据路径都符合预期。
+
+## 当前限制
+
+CLI 需要同时传入 `--requirement` 和 `--plan`。虽然类型定义中存在 planner 和多种 worker kind，当前 CLI 路径只注册 architecture、execution、risk、reviser 和 regression 这几类 mock worker。

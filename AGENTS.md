@@ -17,6 +17,7 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 - `src/artifacts/`、`src/state/`：artifact 路径、哈希、状态读写和持久化规则。
 - `fixtures/`：示例需求、计划和 mock worker 输出。
 - `tests/unit/`：模块级行为测试；`tests/integration/`：CLI、workflow 和 artifact 合同测试。
+- `model-role-calibration/`：历史 CommonJS 校准工具链，使用子目录 `package.json` 与根 ESM 包隔离。
 - `runs/`：生成的运行产物。除非用户明确要求更新样例输出，不要手动编辑其中 artifact。
 
 ## 不可突破的规则
@@ -38,6 +39,7 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 ```bash
 pnpm build
 pnpm test
+pnpm calibration:test
 pnpm typecheck
 pnpm lint
 pnpm fmt:check
@@ -46,7 +48,8 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 ```
 
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 TypeScript 生成声明文件。
-- `pnpm test`：运行 Vitest 测试套件。
+- `pnpm test`：运行核心 TypeScript harness 的 Vitest 测试套件。
+- `pnpm calibration:test`：运行 `model-role-calibration/scripts/` 下的历史 JS 校准和回归脚本。
 - `pnpm typecheck`：执行 `tsc --noEmit`。
 - `pnpm lint`：使用根级 `.oxlintrc.json` 检查 `src/`、`tests/` 和配置文件，禁用 nested config lookup。
 - `pnpm fmt:check`：使用 oxfmt 检查源文件、文档、fixtures 和配置格式。

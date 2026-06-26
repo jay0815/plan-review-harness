@@ -14,6 +14,7 @@
 - `src/artifacts/`：artifact 路径构造和相关工具。
 - `src/state/`：基于文件的 state 持久化。
 - `src/utils/`：文件系统工具，例如原子写 JSON 和文本。
+- `model-role-calibration/`：历史 CommonJS 校准工具链，保留独立 `package.json` 作为模块类型边界。
 
 ## Worker 边界
 

@@ -13,6 +13,8 @@
    pnpm typecheck
    ```
 
+   修改 `model-role-calibration/` 时，额外运行 `pnpm calibration:test`。
+
 3. 运行 mock review：
 
    ```bash

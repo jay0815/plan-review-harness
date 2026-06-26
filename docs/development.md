@@ -5,6 +5,7 @@
 ```bash
 pnpm build
 pnpm test
+pnpm calibration:test
 pnpm typecheck
 pnpm lint
 pnpm lint:fix
@@ -14,6 +15,8 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 ```
 
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 `tsc -p tsconfig.build.json --emitDeclarationOnly` 生成声明文件。
+- `pnpm test`：运行核心 TypeScript harness 的 Vitest 测试套件。
+- `pnpm calibration:test`：运行 `model-role-calibration/scripts/` 下的历史 JS 校准和回归脚本。
 - `pnpm lint` / `pnpm lint:fix`：使用根级 `.oxlintrc.json` 检查或修复 `src/`、`tests/` 和配置文件。
 - `pnpm fmt` / `pnpm fmt:check`：使用 oxfmt 格式化或检查源文件、文档、fixtures 和配置。
 - `pnpm plan-review -- start ...`：使用 mock workers 执行一次本地 review run。
@@ -26,7 +29,11 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 
 ## 测试
 
-Vitest 测试位于 `tests/unit/` 和 `tests/integration/`，文件名使用 `*.test.ts`。单元测试覆盖模块行为，集成测试覆盖 CLI、workflow 阶段、artifact 目录结构、schema 兼容性和持久化契约。
+Vitest 测试位于 `tests/unit/` 和 `tests/integration/`，文件名使用 `*.test.ts`，通过 `pnpm test` 运行。单元测试覆盖模块行为，集成测试覆盖 CLI、workflow 阶段、artifact 目录结构、schema 兼容性和持久化契约。
+
+`model-role-calibration/scripts/*.js` 属于历史校准工具链，通过 `pnpm calibration:test` 单独验证。只有修改 `model-role-calibration/` 或相关 package scripts 时，才需要把它纳入本轮验证。
+
+`model-role-calibration/package.json` 只用于声明 CommonJS 模块边界，避免根包 `"type": "module"` 改变旧脚本语义。
 
 生成文件的测试应使用 `mkdtemp` 创建临时目录，并在 `finally` 中清理。不要让测试依赖仓库现有 `runs/` 内容。
 
