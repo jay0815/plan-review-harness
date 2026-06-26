@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 
-import path = require('node:path')
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  optionalSlugArg,
+  parseArgs,
+  requireArg,
+  slug,
+  writeFileNew,
+} from './lib.js'
 
 interface ScoreTemplate {
   case_id: string
@@ -27,18 +35,6 @@ interface ScoreTemplate {
   suggested_roles: unknown[]
   unsuitable_roles: unknown[]
 }
-
-const { ROOT, parseArgs, requireArg, assertSafeCaseId, assertProbe, writeFileNew, slug, optionalSlugArg } =
-  require('./lib') as {
-    ROOT: string
-    parseArgs(argv: string[]): ParsedArgs
-    requireArg(args: ParsedArgs, name: string): string
-    assertSafeCaseId(caseId: string): void
-    assertProbe(probe: string): void
-    writeFileNew(file: string, content: string): void
-    slug(value: string): string
-    optionalSlugArg(args: ParsedArgs, name: string): string | null
-  }
 
 function main(): void {
   const args = parseArgs(process.argv)

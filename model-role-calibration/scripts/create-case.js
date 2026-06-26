@@ -1,8 +1,41 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const path = require("node:path");
-const { ROOT, parseArgs, requireArg, writeFileNew, ensureDir } = require('./lib');
+const path = __importStar(require("node:path"));
+const lib_js_1 = require("./lib.js");
 const FILES = {
     'inputs/planner.md': `# 需求背景
 
@@ -70,16 +103,16 @@ const FILES = {
 `,
 };
 function main() {
-    const args = parseArgs(process.argv);
-    const group = requireArg(args, 'group');
-    const id = requireArg(args, 'id');
+    const args = (0, lib_js_1.parseArgs)(process.argv);
+    const group = (0, lib_js_1.requireArg)(args, 'group');
+    const id = (0, lib_js_1.requireArg)(args, 'id');
     if (!/^[A-Za-z0-9_-]+$/.test(group) || !/^[A-Za-z0-9_-]+$/.test(id)) {
         throw new Error('--group and --id may only contain letters, numbers, underscore, and dash');
     }
-    const caseDir = path.join(ROOT, 'cases', group, id);
-    ensureDir(caseDir);
+    const caseDir = path.join(lib_js_1.ROOT, 'cases', group, id);
+    (0, lib_js_1.ensureDir)(caseDir);
     for (const [file, content] of Object.entries(FILES)) {
-        writeFileNew(path.join(caseDir, file), content);
+        (0, lib_js_1.writeFileNew)(path.join(caseDir, file), content);
     }
     console.log(`Created case: ${group}/${id}`);
     console.log(caseDir);

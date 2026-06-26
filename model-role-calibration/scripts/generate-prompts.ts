@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 
-import fs = require('node:fs')
-import path = require('node:path')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import {
+  ROOT,
+  assertProbe,
+  assertSafeCaseId,
+  ensureDir,
+  loadCaseInput,
+  parseArgs,
+  readText,
+  requireArg,
+  timestamp,
+  writeFileNew,
+  writeGenerated,
+} from './lib.js'
 
 interface GeneratePromptsOptions {
   run: string
@@ -21,32 +32,6 @@ interface GeneratedPrompt {
 interface GeneratePromptsResult {
   promptDir: string
   prompts: GeneratedPrompt[]
-}
-
-const {
-  ROOT,
-  parseArgs,
-  requireArg,
-  assertSafeCaseId,
-  assertProbe,
-  ensureDir,
-  readText,
-  writeFileNew,
-  writeGenerated,
-  loadCaseInput,
-  timestamp,
-} = require('./lib') as {
-  ROOT: string
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-  assertSafeCaseId(caseId: string): void
-  assertProbe(probe: string): void
-  ensureDir(dir: string): void
-  readText(file: string): string
-  writeFileNew(file: string, content: string): void
-  writeGenerated(file: string, content: string): void
-  loadCaseInput(caseId: string, probe: string): string
-  timestamp(): string
 }
 
 export function uniqueRunId(base: string): string {

@@ -1,17 +1,8 @@
 #!/usr/bin/env node
 
-import path = require('node:path')
+import * as path from 'node:path'
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
-
-const { ROOT, parseArgs, requireArg, writeFileNew, ensureDir } = require('./lib') as {
-  ROOT: string
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-  writeFileNew(file: string, content: string): void
-  ensureDir(dir: string): void
-}
+import { ROOT, ensureDir, parseArgs, requireArg, writeFileNew } from './lib.js'
 
 const FILES: Record<string, string> = {
   'inputs/planner.md': `# 需求背景
