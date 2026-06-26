@@ -1,7 +1,12 @@
 import { copyFile, readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { ArtifactPathBuilder } from '../artifacts/paths.js'
-import { DecisionQueueSchema, UserDecisionsSchema, type DecisionQueue } from '../schemas/decision.js'
+import {
+  DecisionQueueSchema,
+  UserDecisionsSchema,
+  type DecisionQueue,
+  type UserDecisions,
+} from '../schemas/decision.js'
 import { ConvergenceReportSchema, RegressionReportSchema, type ConvergenceReport } from '../schemas/regression.js'
 import { RevisionResultSchema, type ReviewResult } from '../schemas/worker.js'
 import { type PlanReviewState } from '../schemas/state.js'
@@ -104,10 +109,7 @@ export class LangGraphWorkflowRuntime {
     }
     const queue = DecisionQueueSchema.parse(JSON.parse(await readFile(state.artifacts.decisionQueue.path, 'utf8')))
     const userDecisions = UserDecisionsSchema.parse(JSON.parse(await readFile(input.decisionsPath, 'utf8')))
-    const itemIds = new Set(queue.items.map((item) => item.id))
-    for (const decision of userDecisions.decisions) {
-      if (!itemIds.has(decision.itemId)) throw new Error(`Decision item not found: ${decision.itemId}`)
-    }
+    this.validateUserDecisions(runId, state.round, queue, userDecisions)
 
     const userDecisionPath = this.paths.getUserDecisionsPath(runId, state.round)
     await atomicWriteJson(userDecisionPath, {
@@ -136,6 +138,37 @@ export class LangGraphWorkflowRuntime {
     state = await this.runRevisionRegressionFinal(state)
     await this.states.save(state)
     return this.handle(state)
+  }
+
+  private validateUserDecisions(
+    runId: string,
+    round: number,
+    queue: DecisionQueue,
+    userDecisions: UserDecisions,
+  ): void {
+    if (userDecisions.runId !== undefined && userDecisions.runId !== runId) {
+      throw new Error(`User decisions runId mismatch: expected ${runId}, received ${userDecisions.runId}`)
+    }
+    if (userDecisions.round !== undefined && userDecisions.round !== round) {
+      throw new Error(`User decisions round mismatch: expected ${round}, received ${userDecisions.round}`)
+    }
+
+    const itemsById = new Map(queue.items.map((item) => [item.id, item]))
+    const seenItemIds = new Set<string>()
+    for (const decision of userDecisions.decisions) {
+      const item = itemsById.get(decision.itemId)
+      if (!item) throw new Error(`Decision item not found: ${decision.itemId}`)
+      if (seenItemIds.has(decision.itemId)) throw new Error(`Duplicate decision for item: ${decision.itemId}`)
+      if (!item.options.some((option) => option.key === decision.chosenKey)) {
+        throw new Error(`Invalid decision option for item ${decision.itemId}: ${decision.chosenKey}`)
+      }
+      seenItemIds.add(decision.itemId)
+    }
+
+    const missingItemIds = queue.items.filter((item) => !seenItemIds.has(item.id)).map((item) => item.id)
+    if (missingItemIds.length > 0) {
+      throw new Error(`Missing decision for item(s): ${missingItemIds.join(', ')}`)
+    }
   }
 
   private async synthesizeAndMaybePause(state: PlanReviewState): Promise<PlanReviewState> {

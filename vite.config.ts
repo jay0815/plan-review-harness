@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 
-const externalPackages = ['@langchain/langgraph', 'commander', 'zod']
+const externalPackages = ['commander', 'zod']
 
 export default defineConfig({
   build: {

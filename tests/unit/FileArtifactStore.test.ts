@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { ArtifactPathBuilder } from '../../src/artifacts/paths.js'
 import { FileArtifactStore } from '../../src/artifacts/FileArtifactStore.js'
+import { stableJsonHash } from '../../src/artifacts/hash.js'
 import { ArtifactSchema, type Artifact } from '../../src/schemas/index.js'
 
 const createdAt = '2026-01-01T00:00:00.000Z'
@@ -19,6 +20,12 @@ async function cleanup(dir: string): Promise<void> {
 }
 
 describe('FileArtifactStore', () => {
+  it('hashes semantically identical JSON with canonical key ordering', () => {
+    expect(stableJsonHash({ outer: { b: 2, a: 1 }, list: [{ y: true, x: false }] })).toBe(
+      stableJsonHash({ list: [{ x: false, y: true }], outer: { a: 1, b: 2 } }),
+    )
+  })
+
   it('writeJson and loadByPath round-trip through schema validation', async () => {
     const root = await tempRunRoot()
     try {

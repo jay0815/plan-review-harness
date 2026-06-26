@@ -2,6 +2,7 @@ import path from 'node:path'
 import { ReviewResultSchema } from '../../schemas/worker.js'
 import type { ArtifactRef } from '../../schemas/artifact.js'
 import type { AgentWorkerRole } from '../../workers/AgentWorkerAdapter.js'
+import { atomicWriteJson } from '../../utils/fs.js'
 import type { NodeContext, PlanReviewStatePatch } from '../state.js'
 import type { PlanReviewState } from '../../schemas/state.js'
 
@@ -55,13 +56,24 @@ export async function blindReview(ctx: NodeContext, state: PlanReviewState): Pro
         },
       )
 
-      ReviewResultSchema.parse(result)
+      const parsedResult = ReviewResultSchema.parse(result)
+      const resultPath = path.join(outputDir, 'result.json')
+      await atomicWriteJson(resultPath, {
+        meta: {
+          runId: state.runId,
+          round: state.round,
+          role,
+          producedBy: role,
+          createdAt: state.updatedAt,
+        },
+        result: parsedResult,
+      })
       const ref: ArtifactRef = {
         id: `review-${role}-round-${state.round}`,
         type: 'review',
         runId: state.runId,
         round: state.round,
-        path: path.join(outputDir, 'result.json'),
+        path: resultPath,
         producedBy: role,
       }
       return [role, ref] as const

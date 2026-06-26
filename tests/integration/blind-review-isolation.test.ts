@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,8 +8,15 @@ import { WorkerRegistry } from '../../src/workers/WorkerRegistry.js'
 import { MockAgentWorkerAdapter } from '../../src/workers/MockAgentWorkerAdapter.js'
 import { blindReview } from '../../src/graph/nodes/blindReview.js'
 import type { PlanReviewState } from '../../src/schemas/index.js'
+import type {
+  AgentWorkerAdapter,
+  AgentWorkerContext,
+  AgentWorkerRole,
+  AgentWorkerTask,
+} from '../../src/workers/AgentWorkerAdapter.js'
 
 const createdAt = '2026-01-01T00:00:00.000Z'
+type ReviewerRole = 'architecture-reviewer' | 'execution-reviewer' | 'risk-reviewer'
 
 async function tempRoot(prefix: string): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), prefix))
@@ -86,6 +94,23 @@ function state(runRoot: string): PlanReviewState {
   }
 }
 
+class ReturningReviewWorker implements AgentWorkerAdapter<unknown, unknown> {
+  readonly kind = 'manual'
+
+  constructor(
+    readonly role: ReviewerRole,
+    private readonly dimension: 'architecture' | 'execution' | 'risk',
+  ) {}
+
+  async execute(_task: AgentWorkerTask<unknown>, _context: AgentWorkerContext): Promise<unknown> {
+    return {
+      reviewerId: this.role,
+      dimension: this.dimension,
+      issues: [],
+    }
+  }
+}
+
 describe('blind review isolation', () => {
   it('passes only requirement/currentPlan/context to each reviewer', async () => {
     const runRoot = await tempRoot('blind-run-')
@@ -131,6 +156,29 @@ describe('blind review isolation', () => {
     } finally {
       await cleanup(runRoot)
       await cleanup(fixtureDir)
+    }
+  })
+
+  it('persists review results returned by workers that do not write output files', async () => {
+    const runRoot = await tempRoot('blind-run-')
+    try {
+      const registry = new WorkerRegistry()
+      registry.register(new ReturningReviewWorker('architecture-reviewer', 'architecture'))
+      registry.register(new ReturningReviewWorker('execution-reviewer', 'execution'))
+      registry.register(new ReturningReviewWorker('risk-reviewer', 'risk'))
+
+      const paths = new ArtifactPathBuilder(runRoot)
+      const result = await blindReview({ paths, workers: registry }, state(runRoot))
+
+      for (const [role, ref] of Object.entries(result.artifacts?.reviews ?? {}) as Array<
+        [AgentWorkerRole, { path: string }]
+      >) {
+        expect(existsSync(ref.path)).toBe(true)
+        const payload = JSON.parse(await readFile(ref.path, 'utf8')) as { result: { reviewerId: string } }
+        expect(payload.result.reviewerId).toBe(role)
+      }
+    } finally {
+      await cleanup(runRoot)
     }
   })
 })

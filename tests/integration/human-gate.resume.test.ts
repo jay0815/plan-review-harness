@@ -144,4 +144,65 @@ describe('human gate resume', () => {
       await cleanup(inputDir)
     }
   })
+
+  it('rejects incomplete, duplicate, or invalid human decisions', async () => {
+    const runRoot = await tempRoot('human-gate-run-')
+    const fixtureDir = await tempRoot('human-gate-fixtures-')
+    const inputDir = await tempRoot('human-gate-input-')
+    try {
+      await writeHumanGateFixtures(fixtureDir)
+      const requirementPath = path.join(inputDir, 'requirement.md')
+      const planPath = path.join(inputDir, 'plan.md')
+      await writeFile(requirementPath, '# Requirement\n')
+      await writeFile(planPath, '# Initial plan\n')
+
+      const runtime = new LangGraphWorkflowRuntime({
+        runDir: runRoot,
+        maxRounds: 2,
+        workers: [
+          new MockAgentWorkerAdapter({ role: 'architecture-reviewer', fixtureName: 'architecture.json', fixtureDir }),
+          new MockAgentWorkerAdapter({ role: 'execution-reviewer', fixtureName: 'execution.json', fixtureDir }),
+          new MockAgentWorkerAdapter({ role: 'risk-reviewer', fixtureName: 'risk.json', fixtureDir }),
+          new MockAgentWorkerAdapter({ role: 'reviser', fixtureName: 'revision.json', fixtureDir }),
+          new MockAgentWorkerAdapter({ role: 'regression', fixtureName: 'regression.round1.json', fixtureDir }),
+        ],
+      })
+
+      const paused = await runtime.start({ requirementPath, initialPlanPath: planPath, maxRounds: 2 })
+      const queue = DecisionQueueSchema.parse(
+        JSON.parse(
+          await import('node:fs/promises').then(({ readFile }) =>
+            readFile(paused.state.artifacts.decisionQueue!.path, 'utf8'),
+          ),
+        ),
+      )
+      const decisionItemId = queue.items[0]!.id
+      const decisionsPath = path.join(inputDir, 'user-decisions.json')
+      const validDecision = {
+        decisionId: 'DECISION-ANSWER-1',
+        itemId: decisionItemId,
+        chosenKey: 'adopt',
+        rationale: 'Rollback is required for release safety.',
+        decidedAt: createdAt,
+        decidedBy: 'test',
+      }
+
+      await writeFixture(decisionsPath, { decisions: [] })
+      await expect(runtime.resume(paused.runId, { decisionsPath })).rejects.toThrow(/Missing decision/)
+
+      await writeFixture(decisionsPath, {
+        decisions: [validDecision, { ...validDecision, decisionId: 'DECISION-ANSWER-2' }],
+      })
+      await expect(runtime.resume(paused.runId, { decisionsPath })).rejects.toThrow(/Duplicate decision/)
+
+      await writeFixture(decisionsPath, { decisions: [{ ...validDecision, chosenKey: 'defer' }] })
+      await expect(runtime.resume(paused.runId, { decisionsPath })).rejects.toThrow(/Invalid decision option/)
+
+      expect(existsSync(path.join(runRoot, paused.runId, 'final', 'final-report.json'))).toBe(false)
+    } finally {
+      await cleanup(runRoot)
+      await cleanup(fixtureDir)
+      await cleanup(inputDir)
+    }
+  })
 })
