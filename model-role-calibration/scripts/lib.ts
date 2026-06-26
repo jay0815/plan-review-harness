@@ -120,6 +120,11 @@ export function timestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
+export function isMainScript(filename: string, argv: string[] = process.argv): boolean {
+  const script = argv[1]
+  return typeof script === 'string' && path.resolve(script) === filename
+}
+
 function loadLegacyCaseInput(caseDir: string): string {
   const inputFile = path.join(caseDir, 'input.md')
   const contextFile = path.join(caseDir, 'context.md')

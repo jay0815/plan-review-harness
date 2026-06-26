@@ -46,6 +46,7 @@ exports.assertProbe = assertProbe;
 exports.slug = slug;
 exports.optionalSlugArg = optionalSlugArg;
 exports.timestamp = timestamp;
+exports.isMainScript = isMainScript;
 exports.loadCaseInput = loadCaseInput;
 exports.parseJsonFile = parseJsonFile;
 exports.loadConfig = loadConfig;
@@ -151,6 +152,10 @@ function optionalSlugArg(args, name) {
 }
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, '-');
+}
+function isMainScript(filename, argv = process.argv) {
+    const script = argv[1];
+    return typeof script === 'string' && path.resolve(script) === filename;
 }
 function loadLegacyCaseInput(caseDir) {
     const inputFile = path.join(caseDir, 'input.md');
