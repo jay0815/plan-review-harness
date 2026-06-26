@@ -1,21 +1,14 @@
 #!/usr/bin/env node
 
-type ArgValue = string | true | undefined
-type ParsedArgs = Record<string, ArgValue>
+import { summarizeRun as summarizeRunUntyped } from './fact-check-calibration-lib.js'
+import { parseArgs, requireArg } from './lib.js'
 
 interface FactCheckSummary {
   scores: unknown[]
   recommendation?: string
 }
 
-const { parseArgs, requireArg } = require('./lib') as {
-  parseArgs(argv: string[]): ParsedArgs
-  requireArg(args: ParsedArgs, name: string): string
-}
-
-const { summarizeRun } = require('./fact-check-calibration-lib') as {
-  summarizeRun(run: string): FactCheckSummary
-}
+const summarizeRun = summarizeRunUntyped as (run: string) => FactCheckSummary
 
 function main(): void {
   const summary = summarizeRun(requireArg(parseArgs(process.argv), 'run'))
