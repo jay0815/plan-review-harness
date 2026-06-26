@@ -59,6 +59,17 @@ function roleByName(inspectSummary) {
   return Object.fromEntries(inspectSummary.roles.map((role) => [role.role, role]));
 }
 
+function expectedExecutionRoles(state) {
+  const reviewers = Array.isArray(state?.roles) && state.roles.length
+    ? state.roles
+    : REVIEWER_ROLES;
+  return [...new Set([...reviewers, "fact_check", "synthesis"])];
+}
+
+function metadataStatus(runDir, role) {
+  return readJsonIfExists(path.join(runDir, "roles", role, "metadata.json"))?.status || null;
+}
+
 function check(results, id, status, message, details = null) {
   results.push({
     id,
@@ -166,6 +177,7 @@ function verifyRun(runDir) {
   const state = readJsonIfExists(path.join(absoluteRunDir, "state.json"));
   const report = readJsonIfExists(path.join(absoluteRunDir, "report.json"));
   const compaction = readJsonIfExists(path.join(absoluteRunDir, "plan-compaction.json"));
+  const manifest = readJsonIfExists(path.join(absoluteRunDir, "run-manifest.json"));
   const executionLog = readTextIfExists(path.join(absoluteRunDir, "execution.log"));
   const inspected = inspectIfReady(absoluteRunDir);
   const roles = roleByName(inspected);
@@ -195,6 +207,62 @@ function verifyRun(runDir) {
     pending(results, "timing.total_elapsed", "run 尚未完成，暂时没有 finished_at，无法计算总耗时");
   } else {
     warn(results, "timing.total_elapsed", "缺少 started_at 或 finished_at，无法计算总耗时");
+  }
+
+  if (manifest?.version === 1 && manifest.run_id === path.basename(absoluteRunDir)) {
+    pass(results, "manifest.present", "run-manifest.json 存在且 run_id 匹配", {
+      status: manifest.status,
+      declared_runtime_present: Boolean(manifest.declared_runtime),
+      resolved_execution_roles: Object.keys(manifest.resolved_execution || {})
+    });
+    if (ready && manifest.status === "completed") {
+      pass(results, "manifest.completed", "run-manifest.json 状态为 completed");
+    } else if (ready) {
+      fail(results, "manifest.completed", "run 已 completed，但 run-manifest.json 状态未完成", {
+        manifest_status: manifest.status
+      });
+    }
+    if (
+      manifest.declared_runtime?.route_profile &&
+      manifest.declared_runtime?.prompt_set_hash &&
+      manifest.declared_runtime?.schema_set_hash
+    ) {
+      pass(results, "manifest.declared_runtime", "manifest 包含 declared runtime hash");
+    } else {
+      fail(results, "manifest.declared_runtime", "manifest 缺少 declared runtime hash");
+    }
+    if (ready) {
+      const resolvedExecution = manifest.resolved_execution || {};
+      const expectedRoles = expectedExecutionRoles(state);
+      const missingRoles = expectedRoles.filter((role) => !resolvedExecution[role]);
+      const emptyAttempts = expectedRoles.filter((role) => {
+        const attempts = resolvedExecution[role]?.attempt_history;
+        return resolvedExecution[role] && (!Array.isArray(attempts) || attempts.length === 0);
+      });
+      const statusMismatches = expectedRoles
+        .map((role) => ({
+          role,
+          manifest_status: resolvedExecution[role]?.latest_status || null,
+          metadata_status: metadataStatus(absoluteRunDir, role)
+        }))
+        .filter((item) => item.manifest_status !== item.metadata_status);
+      if (missingRoles.length || emptyAttempts.length || statusMismatches.length) {
+        fail(results, "manifest.resolved_execution", "manifest resolved execution 与角色产物不一致", {
+          expected_roles: expectedRoles,
+          missing_roles: missingRoles,
+          empty_attempt_history_roles: emptyAttempts,
+          status_mismatches: statusMismatches
+        });
+      } else {
+        pass(results, "manifest.resolved_execution", "manifest 包含所有执行角色且状态与 metadata 一致", {
+          roles: expectedRoles
+        });
+      }
+    }
+  } else {
+    fail(results, "manifest.present", "缺少 run-manifest.json 或 run_id 不匹配", {
+      manifest_run_id: manifest?.run_id || null
+    });
   }
 
   if (compaction && Number.isInteger(compaction.original_chars) && Number.isInteger(compaction.compacted_chars)) {

@@ -13,6 +13,7 @@ const RUNTIME_FILES = [
   "scripts/json-validator-mcp.js",
   "scripts/plan-authoring-lint.js",
   "scripts/workspace-review-lib.js",
+  "scripts/workspace-review-manifest.js",
   "scripts/run-workspace-review.js",
   "scripts/retry-workspace-review-stage.js",
   "scripts/plan-review-mcp.js",
@@ -362,11 +363,14 @@ Fact Check 会额外生成 \`roles/fact_check/fact-check-summary.json\`，其中
 每次运行会生成：
 
 \`\`\`text
+run-manifest.json
 review-plan.md
 plan-compaction.json
 \`\`\`
 
-原始计划保存在 \`request.json\`。Reviewer、Fact Check 和 Synthesizer 使用 \`review-plan.md\`。
+\`run-manifest.json\` 记录 declared runtime、workspace/input snapshot 和 resolved execution，
+用于复查“基于什么执行”和“实际发生了什么”。原始计划保存在 \`request.json\`。
+Reviewer、Fact Check 和 Synthesizer 使用 \`review-plan.md\`。
 长代码块会被压缩为 \`pseudo\` 摘要，减少模型读取成本；命令和 Mermaid
 代码块默认保留。
 

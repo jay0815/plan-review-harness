@@ -26,6 +26,10 @@ const {
   validateWorkspaceOutput
 } = require("./run-workspace-review");
 const {
+  createRunManifest,
+  recordResolvedExecution
+} = require("./workspace-review-manifest");
+const {
   toolList,
   resolvePlanInput,
   retryPlanReviewStage,
@@ -36,6 +40,12 @@ const {
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+function recordAttemptIfManifest(runDir, metadata) {
+  if (fs.existsSync(path.join(runDir, "run-manifest.json"))) {
+    recordResolvedExecution(runDir, metadata);
+  }
 }
 
 function settings(baseUrl, model) {
@@ -136,11 +146,13 @@ function writeReviewerAttempt(runDir, role, model, status = "completed") {
     };
   }
   writeJson(path.join(roleDir, "output.json"), output);
-  writeJson(path.join(roleDir, "metadata.json"), {
+  const metadata = {
     role,
     model,
     status
-  });
+  };
+  writeJson(path.join(roleDir, "metadata.json"), metadata);
+  recordAttemptIfManifest(runDir, metadata);
 }
 
 function writeFactCheckAttempt(runDir, model, status = "completed") {
@@ -155,11 +167,13 @@ function writeFactCheckAttempt(runDir, model, status = "completed") {
     total_checked: 0,
     challenged_count: 0
   });
-  writeJson(path.join(roleDir, "metadata.json"), {
+  const metadata = {
     role: "fact_check",
     model,
     status
-  });
+  };
+  writeJson(path.join(roleDir, "metadata.json"), metadata);
+  recordAttemptIfManifest(runDir, metadata);
 }
 
 function writeSynthesisAttempt(runDir, model, status = "completed") {
@@ -184,11 +198,13 @@ function writeSynthesisAttempt(runDir, model, status = "completed") {
     likely_false_positives: [],
     revision_instructions: []
   });
-  writeJson(path.join(roleDir, "metadata.json"), {
+  const metadata = {
     role: "synthesis",
     model,
     status
-  });
+  };
+  writeJson(path.join(roleDir, "metadata.json"), metadata);
+  recordAttemptIfManifest(runDir, metadata);
 }
 
 function createRetryRun(config, tempDir, runId, roles, retryCounts = {}) {
@@ -196,18 +212,24 @@ function createRetryRun(config, tempDir, runId, roles, retryCounts = {}) {
   const runDir = path.join(tempDir, `${runId}-run`);
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.mkdirSync(runDir, { recursive: true });
-  writeJson(path.join(runDir, "request.json"), {
+  const request = {
     run_id: runId,
+    created_at: "2026-06-16T00:00:00.000Z",
     project_root: projectRoot,
     plan: "# Test plan",
+    context: "",
     roles
-  });
+  };
+  writeJson(path.join(runDir, "request.json"), request);
   writeJson(path.join(runDir, "state.json"), {
     run_id: runId,
     project_root: projectRoot,
     roles,
     status: "failed",
     retry_counts: retryCounts
+  });
+  createRunManifest(config, request, runDir, {
+    createdAt: request.created_at
   });
   return {
     runDir,
@@ -1490,6 +1512,23 @@ async function main() {
     assert.equal(
       JSON.parse(fs.readFileSync(path.join(reviewerRetry.runDir, "state.json"))).status,
       "completed"
+    );
+    const reviewerRetryManifest = JSON.parse(fs.readFileSync(
+      path.join(reviewerRetry.runDir, "run-manifest.json"),
+      "utf8"
+    ));
+    const architectureHistory = reviewerRetryManifest
+      .resolved_execution
+      .architecture
+      .attempt_history;
+    assert.equal(architectureHistory.length, 2);
+    assert.match(
+      architectureHistory[0].metadata_file,
+      /^roles\/architecture-attempts\/[^/]+\/metadata\.json$/
+    );
+    assert.equal(
+      architectureHistory[1].metadata_file,
+      "roles/architecture/metadata.json"
     );
 
     const factCheckRetry = createRetryRun(

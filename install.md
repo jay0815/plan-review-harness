@@ -388,11 +388,13 @@ roles/fact_check/fact-check-summary.json
 ```text
 ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>/review-plan.md
 ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>/plan-compaction.json
+~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>/run-manifest.json
 ```
 
 规则：
 
 - 原始计划仍保存在 `request.json`。
+- `run-manifest.json` 记录 declared runtime、workspace/input snapshot 和 resolved execution，用于复查“基于什么执行”和“实际发生了什么”。
 - 传给 Reviewer、Fact Check 和 Synthesizer 的是 `review-plan.md`。
 - 长代码块会压缩为 `pseudo` 摘要，保留接口、测试意图、关键流程和显式 TODO。
 - `bash`、`sh`、`zsh`、`shell`、`mermaid` 代码块默认保留。

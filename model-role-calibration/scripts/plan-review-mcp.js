@@ -22,6 +22,10 @@ const {
   redactedSettingsWarnings,
   withoutAnthropicApiKey
 } = require("./workspace-review-lib");
+const {
+  createRunManifest,
+  markManifestFinished
+} = require("./workspace-review-manifest");
 
 const DEFAULT_WAIT_MS = 60000;
 const MAX_WAIT_MS = 300000;
@@ -299,6 +303,9 @@ function startPlanReview(config, input) {
     execution_log: executionLogPath(runDir),
     error: null
   }, null, 2) + "\n");
+  createRunManifest(config, request, runDir, {
+    createdAt: request.created_at
+  });
   appendExecutionLog(runDir, "run_queued", {
     run_id: runId,
     roles
@@ -322,10 +329,14 @@ function startPlanReview(config, input) {
     appendExecutionLog(runDir, "runner_start_failed", {
       run_id: runId
     });
+    const message = `Unable to start workspace review runner: ${error.message}`;
     updateState(runDir, {
       status: "failed",
       finished_at: new Date().toISOString(),
-      error: `Unable to start workspace review runner: ${error.message}`
+      error: message
+    });
+    markManifestFinished(runDir, "failed", {
+      error: message
     });
   });
   child.unref();
@@ -458,10 +469,15 @@ function retryPlanReviewStage(config, input) {
     appendExecutionLog(runDir, "stage_retry_start_failed", {
       stage: input.stage
     });
+    const message = `Unable to start workspace review stage retry: ${error.message}`;
     updateState(runDir, {
       status: "failed",
       finished_at: new Date().toISOString(),
-      error: `Unable to start workspace review stage retry: ${error.message}`
+      error: message
+    });
+    markManifestFinished(runDir, "failed", {
+      retry_stage: null,
+      error: message
     });
   });
   child.unref();

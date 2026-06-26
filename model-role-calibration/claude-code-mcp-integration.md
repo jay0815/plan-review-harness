@@ -422,6 +422,7 @@ model-role-calibration/workspace-runs/<run-id>/
 
 ```text
 request.json
+run-manifest.json
 review-plan.md
 plan-compaction.json
 state.json
@@ -436,7 +437,7 @@ roles/<role>/metadata.json
 roles/fact_check/fact-check-summary.json
 ```
 
-`request.json` 包含计划全文，可能涉及内部信息。`workspace-runs/` 已被 Git 忽略，不要手工提交。
+`request.json` 包含计划全文，可能涉及内部信息。`run-manifest.json` 记录本次运行的 declared runtime、workspace/input snapshot 和 resolved execution，用于复查“基于什么执行”和“实际发生了什么”。`workspace-runs/` 已被 Git 忽略，不要手工提交。
 
 `review-plan.md` 是实际传给 Reviewer、Fact Check 和 Synthesizer 的审查版计划。runner 会把长代码块压缩为 `pseudo` 摘要，保留接口、测试意图、关键流程和显式 TODO。`plan-compaction.json` 记录压缩前后字符数、压缩代码块数量和节省字符数。原始计划仍保存在 `request.json`。
 

@@ -36,6 +36,14 @@ const {
   updateState,
   withoutAnthropicApiKey
 } = require("./workspace-review-lib");
+const {
+  requireRunManifest,
+  updateRunManifest,
+  markManifestRunning,
+  markManifestFinished,
+  recordResolvedExecution,
+  archiveResolvedExecutionAttempt
+} = require("./workspace-review-manifest");
 
 const SOURCE_NAME_BY_ROLE = {
   risk: "Risk Reviewer",
@@ -80,6 +88,15 @@ const EXECUTION_REQUIRED_BOUNDARIES = Object.freeze([
 
 function writeJson(file, value) {
   writeGenerated(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+function writeRoleMetadata(runDir, roleDir, metadata) {
+  const metadataFile = path.join(roleDir, "metadata.json");
+  writeJson(metadataFile, metadata);
+  recordResolvedExecution(runDir, metadata, {
+    status: metadata.status,
+    metadata_file: path.relative(runDir, metadataFile)
+  });
 }
 
 function reviewerSeverityByIssueId(reviewerOutputs = {}) {
@@ -807,6 +824,33 @@ async function runRole(config, request, role, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
+    writeRoleMetadata(runDir, roleDir, {
+      role,
+      model,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      timed_out: /timed out/i.test(error.message || ""),
+      exit_code: null,
+      signal: null,
+      error: error.message,
+      prompt_file: path.relative(runDir, promptFile),
+      settings_file: config.models[model].settings_file,
+      allowed_tools: ["Read", "Glob", "Grep"],
+      json_validator_enabled: true,
+      validator_tool: JSON_VALIDATOR_TOOL,
+      validator_log_file: path.relative(runDir, validatorLogFile),
+      schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
+      project_root: request.project_root,
+      read_boundary: {
+        mode: readBoundary.boundary.mode,
+        source_root: readBoundary.boundary.source_root,
+        exposed_root: readBoundary.boundary.exposed_root,
+        file_count: readBoundary.boundary.files.length,
+        proposed_artifacts: readBoundary.boundary.proposed_artifacts || [],
+        read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
+      },
+      status: "failed"
+    });
     throw error;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -847,7 +891,7 @@ async function runRole(config, request, role, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed"
     });
@@ -867,7 +911,7 @@ async function runRole(config, request, role, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed",
       error: error.message,
@@ -877,7 +921,7 @@ async function runRole(config, request, role, runDir) {
     throw new Error(`${role}/${model} returned invalid output: ${error.message}`);
   }
   writeJson(path.join(roleDir, "output.json"), parsed.output);
-  writeJson(path.join(roleDir, "metadata.json"), {
+  writeRoleMetadata(runDir, roleDir, {
     ...metadata,
     status: "completed",
     error: null
@@ -963,6 +1007,33 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
+    writeRoleMetadata(runDir, roleDir, {
+      role,
+      model,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      timed_out: /timed out/i.test(error.message || ""),
+      exit_code: null,
+      signal: null,
+      error: error.message,
+      prompt_file: path.relative(runDir, promptFile),
+      settings_file: config.models[model].settings_file,
+      allowed_tools: ["Read"],
+      json_validator_enabled: true,
+      validator_tool: JSON_VALIDATOR_TOOL,
+      validator_log_file: path.relative(runDir, validatorLogFile),
+      schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
+      project_root: request.project_root,
+      read_boundary: {
+        mode: readBoundary.boundary.mode,
+        source_root: readBoundary.boundary.source_root,
+        exposed_root: readBoundary.boundary.exposed_root,
+        file_count: readBoundary.boundary.files.length,
+        proposed_artifacts: readBoundary.boundary.proposed_artifacts || [],
+        read_scope_file: path.relative(runDir, path.join(roleDir, "read-scope.json"))
+      },
+      status: "failed"
+    });
     throw error;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -1003,7 +1074,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed"
     });
@@ -1022,7 +1093,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed",
       error: error.message
@@ -1032,7 +1103,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
   writeJson(path.join(roleDir, "output.json"), parsed.output);
   const factCheckSummary = summarizeFactCheckOutput(parsed.output);
   writeJson(path.join(roleDir, "fact-check-summary.json"), factCheckSummary);
-  writeJson(path.join(roleDir, "metadata.json"), {
+  writeRoleMetadata(runDir, roleDir, {
     ...metadata,
     fact_check_summary_file: path.relative(runDir, path.join(roleDir, "fact-check-summary.json")),
     status: "completed",
@@ -1148,6 +1219,25 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
       model,
       elapsed_ms: Date.now() - startedMs
     });
+    writeRoleMetadata(runDir, roleDir, {
+      role,
+      model,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      timed_out: /timed out/i.test(error.message || ""),
+      exit_code: null,
+      signal: null,
+      error: error.message,
+      prompt_file: path.relative(runDir, promptFile),
+      settings_file: config.models[model].settings_file,
+      allowed_tools: [],
+      json_validator_enabled: true,
+      validator_tool: JSON_VALIDATOR_TOOL,
+      validator_log_file: path.relative(runDir, validatorLogFile),
+      schema_file: path.relative(ROOT, workspaceSchemaForRole(role)),
+      project_root: null,
+      status: "failed"
+    });
     throw error;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -1179,7 +1269,7 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed"
     });
@@ -1200,7 +1290,7 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
       model,
       elapsed_ms: Date.now() - startedMs
     });
-    writeJson(path.join(roleDir, "metadata.json"), {
+    writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: "failed",
       error: error.message
@@ -1208,7 +1298,7 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
     throw new Error(`synthesis/${model} returned invalid output: ${error.message}`);
   }
   writeJson(path.join(roleDir, "output.json"), parsed.output);
-  writeJson(path.join(roleDir, "metadata.json"), {
+  writeRoleMetadata(runDir, roleDir, {
     ...metadata,
     status: "completed",
     error: null
@@ -1241,7 +1331,9 @@ function archiveRoleAttempt(runDir, role) {
     index += 1;
   }
   fs.renameSync(roleDir, target);
-  return path.relative(runDir, target);
+  const archivedRoleDir = path.relative(runDir, target);
+  archiveResolvedExecutionAttempt(runDir, role, archivedRoleDir);
+  return archivedRoleDir;
 }
 
 function normalizedRetryCounts(state) {
@@ -1278,6 +1370,14 @@ function consumeExecutorRetries(runDir, retryCounts, executors) {
   });
 }
 
+function updateRunRetryManifest(runDir, stage, retryRoles) {
+  updateRunManifest(runDir, {
+    retry_stage: stage,
+    retry_roles: retryRoles,
+    retry_started_at: new Date().toISOString()
+  });
+}
+
 async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
   if (!["reviewers", FACT_CHECK_ROLE, "synthesis"].includes(stage)) {
     throw new Error(
@@ -1290,6 +1390,7 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
     throw new Error("Cannot retry while run status is running. Use force only if the previous process is known to be dead.");
   }
   const { request, roles } = loadRequestForRun(config, absoluteRunDir);
+  requireRunManifest(absoluteRunDir);
   const runRoleStage = options.runRole || runRole;
   const runFactCheckStage = options.runFactCheck || runFactCheck;
   const runSynthesisStage = options.runSynthesis || runSynthesis;
@@ -1338,6 +1439,8 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
     error: null,
     report_file: null
   });
+  markManifestRunning(absoluteRunDir, request);
+  updateRunRetryManifest(absoluteRunDir, stage, retryRoles);
   appendExecutionLog(absoluteRunDir, "stage_retry_started", {
     stage,
     retry_roles: retryRoles,
@@ -1421,6 +1524,10 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
       retry_stage: null,
       infra_errors: []
     });
+    markManifestFinished(absoluteRunDir, "completed", {
+      retry_stage: null,
+      infra_errors: []
+    });
     appendExecutionLog(absoluteRunDir, "stage_retry_completed", {
       stage
     });
@@ -1453,6 +1560,10 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
       error: error.stack || error.message,
       retry_stage: null
     });
+    markManifestFinished(absoluteRunDir, "failed", {
+      retry_stage: null,
+      error: error.stack || error.message
+    });
     throw error;
   }
 }
@@ -1462,6 +1573,7 @@ async function main() {
   const runDir = path.resolve(requireArg(args, "run-dir"));
   const config = loadWorkspaceReviewFromArgs(args);
   const { request, roles } = loadRequestForRun(config, runDir);
+  requireRunManifest(runDir);
   const reviewPlan = config.execution.compact_plan
     ? compactPlanForReview(request.plan)
     : {
@@ -1490,6 +1602,7 @@ async function main() {
     artifacts: request.proposed_artifacts
   });
   writeJson(path.join(runDir, "review-plan-refs.json"), request.review_plan_refs);
+  markManifestRunning(runDir, request);
 
   updateState(runDir, {
     status: "running",
@@ -1531,6 +1644,9 @@ async function main() {
       error: null,
       infra_errors: infraErrors
     });
+    markManifestFinished(runDir, "completed", {
+      infra_errors: infraErrors
+    });
     appendExecutionLog(runDir, "run_completed", {
       run_id: request.run_id,
       reviewer_count: reviewerResults.length,
@@ -1543,6 +1659,9 @@ async function main() {
     updateState(runDir, {
       status: "failed",
       finished_at: new Date().toISOString(),
+      error: error.stack || error.message
+    });
+    markManifestFinished(runDir, "failed", {
       error: error.stack || error.message
     });
     throw error;

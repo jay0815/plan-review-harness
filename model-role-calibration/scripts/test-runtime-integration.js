@@ -7,6 +7,8 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const { ROOT, agentOutputPaths, parseJsonFile } = require("./lib");
 
+const FAKE_CONCURRENCY_DELAY_MS = "250";
+
 function runNode(script, args, env = {}) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: path.resolve(ROOT, ".."),
@@ -199,7 +201,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     ], {
       ...baseEnv,
       FAKE_POOL_LOG: poolLog,
-      FAKE_MODEL_DELAY_MS: "100"
+      FAKE_MODEL_DELAY_MS: FAKE_CONCURRENCY_DELAY_MS
     });
     requireSuccess(result, "first pool batch");
     assert.equal(maxConcurrency(poolLog), 3);
@@ -257,7 +259,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     ], {
       ...baseEnv,
       FAKE_POOL_LOG: partialRetryLog,
-      FAKE_MODEL_DELAY_MS: "100"
+      FAKE_MODEL_DELAY_MS: FAKE_CONCURRENCY_DELAY_MS
     });
     requireSuccess(result, "partial pool retry");
     assert.equal(maxConcurrency(partialRetryLog), 2);
@@ -290,7 +292,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     ], {
       ...baseEnv,
       FAKE_POOL_LOG: workflowLog,
-      FAKE_MODEL_DELAY_MS: "100"
+      FAKE_MODEL_DELAY_MS: FAKE_CONCURRENCY_DELAY_MS
     });
     requireSuccess(result, "full workflow");
     assert.equal(maxConcurrency(workflowLog), 3);
@@ -339,7 +341,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     ], {
       ...baseEnv,
       FAKE_POOL_LOG: forceLog,
-      FAKE_MODEL_DELAY_MS: "100"
+      FAKE_MODEL_DELAY_MS: FAKE_CONCURRENCY_DELAY_MS
     });
     requireSuccess(result, "forced workflow refresh");
     workflowBatch = parseJsonFile(path.join(ROOT, "runs", workflowRun, "batch.json"));
@@ -373,7 +375,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     ], {
       ...baseEnv,
       FAKE_POOL_LOG: synthesisStageLog,
-      FAKE_MODEL_DELAY_MS: "100"
+      FAKE_MODEL_DELAY_MS: FAKE_CONCURRENCY_DELAY_MS
     });
     requireSuccess(result, "synthesis stage concurrency override");
     const synthesisStageBatch = parseJsonFile(path.join(ROOT, "runs", synthesisStageRun, "batch.json"));

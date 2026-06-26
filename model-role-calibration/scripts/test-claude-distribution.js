@@ -40,6 +40,7 @@ function main() {
     assert(installDoc.includes("## 七、标准验证流程"));
     assert(installDoc.includes("--run-id <run-id>"));
     assert(installDoc.includes("doctor-workspace-review-run.js"));
+    assert(installDoc.includes("run-manifest.json"));
     assert(installDoc.includes("project_root"));
     assert(installDoc.includes("NOT_READY"));
     assert(installDoc.includes("outcome"));
@@ -81,6 +82,9 @@ function main() {
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "plan-authoring-lint.js")
     ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "workspace-review-manifest.js")
+    ));
     assert(fs.statSync(
       path.join(result.packageDir, "skill", "plan-review", "SKILL.md")
     ).isFile());
@@ -120,6 +124,7 @@ function main() {
     assert(packagedReadme.includes("NOT_READY"));
     assert(packagedReadme.includes("report.json.outcome"));
     assert(packagedReadme.includes("plan-compaction.json"));
+    assert(packagedReadme.includes("run-manifest.json"));
     assert(packagedReadme.includes("Fact Check"));
     assert(packagedReadme.includes("Synthesizer 最后只读取计划、Reviewer JSON"));
     assert(packagedReadme.includes("scoped mirror"));

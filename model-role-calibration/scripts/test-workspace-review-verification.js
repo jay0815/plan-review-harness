@@ -6,6 +6,13 @@ const os = require("os");
 const path = require("path");
 const { resolveRunDir, verifyRun } = require("./verify-workspace-review-run");
 const { doctorWorkspaceReviewRun } = require("./doctor-workspace-review-run");
+const {
+  createRunManifest,
+  markManifestRunning,
+  markManifestFinished,
+  recordResolvedExecution,
+  hashFileIfExists
+} = require("./workspace-review-manifest");
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -15,6 +22,64 @@ function writeJson(file, value) {
 function writeJsonl(file, events) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, events.map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+}
+
+function writeRunManifest(runDir, runId, status, roles = []) {
+  writeJson(path.join(runDir, "run-manifest.json"), {
+    version: 1,
+    run_id: runId,
+    status,
+    created_at: "2026-06-16T00:00:00.000Z",
+    updated_at: "2026-06-16T00:00:00.000Z",
+    workspace: {
+      project_root: "/tmp/project",
+      git_available: false,
+      git_head: null,
+      dirty: null,
+      dirty_files: [],
+      dirty_patch_hash: null
+    },
+    inputs: {
+      plan: {
+        path: null,
+        hash: "sha256:test-plan"
+      },
+      context_hash: null,
+      review_plan: {
+        path: "review-plan.md",
+        hash: "sha256:test-review-plan"
+      },
+      review_plan_refs_hash: "sha256:test-review-plan-refs"
+    },
+    declared_runtime: {
+      route_profile: {
+        path: "model-role-calibration/default-role-routes.json",
+        hash: "sha256:test-routes",
+        effective_roles: {}
+      },
+      prompt_set_hash: "sha256:test-prompts",
+      schema_set_hash: "sha256:test-schemas"
+    },
+    resolved_execution: Object.fromEntries(roles.map((role) => [
+      role,
+      {
+        adapter: "claude-code",
+        provider: "claude-code-wrapper",
+        model: "test-model",
+        attempts: 1,
+        latest_status: "completed",
+        attempt_history: [{
+          attempt_index: 1,
+          status: "completed",
+          metadata_file: `roles/${role}/metadata.json`
+        }]
+      }
+    ])),
+    artifacts: {
+      request: "request.json",
+      state: "state.json"
+    }
+  });
 }
 
 function roleEvents({ tools = ["Read"], reads = [] } = {}) {
@@ -130,6 +195,99 @@ function main() {
     assert.throws(() => resolveRunDir({}), /--run-id or --run-dir/);
     assert.throws(() => resolveRunDir({ "run-id": "x", "run-dir": runDir }), /either --run-id or --run-dir/);
 
+    const manifestRunDir = path.join(tempDir, "workspace-review-manifest");
+    fs.mkdirSync(manifestRunDir, { recursive: true });
+    const manifestConfig = {
+      config_file: null,
+      roles: {
+        risk: "kimi",
+        architecture: "kimi",
+        execution: "kimi",
+        rebuttal: "glm",
+        fact_check: "glm",
+        synthesis: "glm",
+        planner: "kimi"
+      },
+      execution: {
+        max_concurrency: 4,
+        timeout_ms: 900000,
+        max_buffer_bytes: 1024,
+        max_turns: 24,
+        compact_plan: true,
+        isolate_reviewers: true,
+        read_scope_max_files: 80
+      },
+      claude_bin: "claude",
+      claude_version: "Claude Code test"
+    };
+    const manifestRequest = {
+      run_id: "workspace-review-manifest",
+      created_at: "2026-06-16T00:00:00.000Z",
+      project_root: tempDir,
+      plan: "# Manifest Plan\n",
+      plan_file: null,
+      context: "",
+      roles: ["risk"]
+    };
+    const createdManifest = createRunManifest(manifestConfig, manifestRequest, manifestRunDir);
+    assert.equal(createdManifest.status, "created");
+    assert.equal(createdManifest.inputs.plan.hash.startsWith("sha256:"), true);
+    assert.equal(createdManifest.declared_runtime.route_profile.effective_roles.risk, "kimi");
+    manifestRequest.review_plan = "# Manifest Review Plan\n";
+    manifestRequest.review_plan_refs = {
+      existing_code_refs: [{ path: "src/index.ts" }],
+      existing_code_ref_dirs: [],
+      skipped_refs: []
+    };
+    fs.writeFileSync(path.join(manifestRunDir, "review-plan.md"), manifestRequest.review_plan, "utf8");
+    markManifestRunning(manifestRunDir, manifestRequest);
+    const manifestRoleDir = path.join(manifestRunDir, "roles", "risk");
+    fs.mkdirSync(manifestRoleDir, { recursive: true });
+    fs.writeFileSync(path.join(manifestRoleDir, "prompt.md"), "prompt\n", "utf8");
+    writeJson(path.join(manifestRoleDir, "read-scope.json"), {
+      files: ["src/index.ts"]
+    });
+    writeJson(path.join(manifestRoleDir, "output.json"), {
+      probe: "risk",
+      issues: [],
+      missing_questions: [],
+      false_positive_risks: []
+    });
+    recordResolvedExecution(manifestRunDir, {
+      role: "risk",
+      model: "kimi",
+      status: "completed",
+      started_at: "2026-06-16T00:00:01.000Z",
+      finished_at: "2026-06-16T00:00:02.000Z",
+      timed_out: false,
+      exit_code: 0,
+      signal: null,
+      error: null,
+      prompt_file: "roles/risk/prompt.md",
+      settings_file: "/tmp/kimi.json",
+      allowed_tools: ["Read", "Glob", "Grep"],
+      schema_file: "schemas/risk-output.schema.json",
+      read_boundary: {
+        read_scope_file: "roles/risk/read-scope.json"
+      }
+    });
+    markManifestFinished(manifestRunDir, "completed");
+    const completedManifest = JSON.parse(fs.readFileSync(
+      path.join(manifestRunDir, "run-manifest.json"),
+      "utf8"
+    ));
+    assert.equal(completedManifest.status, "completed");
+    assert.equal(
+      completedManifest.inputs.review_plan.hash,
+      hashFileIfExists(path.join(manifestRunDir, "review-plan.md"))
+    );
+    assert.equal(completedManifest.inputs.review_plan_refs_hash.startsWith("sha256:"), true);
+    assert.equal(completedManifest.resolved_execution.risk.attempts, 1);
+    assert.equal(completedManifest.resolved_execution.risk.latest_status, "completed");
+    assert.equal(completedManifest.resolved_execution.risk.prompt_hash.startsWith("sha256:"), true);
+    assert.equal(completedManifest.resolved_execution.risk.schema_hash.startsWith("sha256:"), true);
+    assert.equal(completedManifest.resolved_execution.risk.output_hash.startsWith("sha256:"), true);
+
     const runningRunDir = path.join(tempDir, "workspace-review-running");
     fs.mkdirSync(runningRunDir, { recursive: true });
     writeJson(path.join(runningRunDir, "state.json"), {
@@ -147,6 +305,7 @@ function main() {
       compacted_blocks: 1,
       preserved_blocks: 1
     });
+    writeRunManifest(runningRunDir, "workspace-review-running", "running");
     const running = verifyRun(runningRunDir);
     assert.equal(running.ready, false);
     assert.equal(running.valid, null);
@@ -177,6 +336,7 @@ function main() {
       compacted_blocks: 1,
       preserved_blocks: 1
     });
+    writeRunManifest(failedRunDir, "workspace-review-failed", "failed");
     const failedInfra = verifyRun(failedRunDir);
     assert.equal(failedInfra.ready, true);
     assert.equal(failedInfra.valid, false);
@@ -206,6 +366,14 @@ function main() {
       compacted_blocks: 1,
       preserved_blocks: 1
     });
+    writeRunManifest(runDir, "workspace-review-test", "completed", [
+      "risk",
+      "architecture",
+      "execution",
+      "rebuttal",
+      "fact_check",
+      "synthesis"
+    ]);
     fs.writeFileSync(path.join(runDir, "execution.log"), [
       "[2026-06-16T00:00:00.000Z] read_scope_prepared role=\"risk\" files=2",
       "[2026-06-16T00:05:00.000Z] fact_check_summary total_checked=1",

@@ -220,7 +220,7 @@ created -> running -> completed / failed / aborted
       "path": "review-plan.md",
       "hash": "sha256:..."
     },
-    "read_scope_hash": "sha256:..."
+    "review_plan_refs_hash": "sha256:..."
   },
   "declared_runtime": {
     "policy": {
@@ -596,4 +596,3 @@ P2-A：引入最小 Policy Pack，并让关键规则由 runtime 实际执行。
 P2-B：定义薄 Model Command Adapter 边界。
 P3：等边界稳定后，再考虑 apps/packages/configs/evals 的目录重组。
 ```
-
