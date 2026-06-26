@@ -1,0 +1,62 @@
+model-role-calibration/scripts/workspace-review-manifest.js
+  f9008e9b5f25e362 1-531
+model-role-calibration/scripts/run-workspace-review.js
+  d9ce568044257a34 39-46,93-101,827-852,894,914,924,1010-1035,1077,1096,1106,1222-1240,1272,1293,1301,1334-1336,1373-1377,1393,1442-1443,1527,1563-1566,1576,1605,1647-1649,1664
+model-role-calibration/claude-code-mcp-integration.md
+  d9ce568044257a34 425,440
+install.md
+  d9ce568044257a34 391,397
+model-role-calibration/scripts/plan-review-mcp.js
+  d9ce568044257a34 25-28,306-308,332,336,338-339,472,476-480
+model-role-calibration/scripts/test-claude-distribution.js
+  d9ce568044257a34 43,85-87,127
+model-role-calibration/scripts/verify-workspace-review-run.js
+  d9ce568044257a34 62-72,180,212-265
+package.json
+  d9ce568044257a34 30
+model-role-calibration/scripts/test-plan-review-mcp.js
+  d9ce568044257a34 29-31,45-50,149,153-155,170,174-176,201,205-207,215,217,220,222-223,231-232,1516-1531
+model-role-calibration/scripts/package-claude-distribution.js
+  d9ce568044257a34 16,366,371-373
+model-role-calibration/docs/workflow-map.md
+  d9ce568044257a34 223
+model-role-calibration/scripts/test-workspace-review-verification.js
+  d9ce568044257a34 9-15,27-84,198-289,308,339,369-376
+model-role-calibration/scripts/test-runtime-integration.js
+  d9ce568044257a34 10-11,204,262,295,344,378
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "8af758d9f5a434aef9c60e6f8d7f91ef285e5aa2",
+  "prompts": {
+    "d9ce568044257a34": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f01f8-f66f-7fd1-b826-2553105bd0ef",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 453,
+      "total_deletions": 30,
+      "accepted_lines": 453,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/ba68037e83a6452e891e5c517a0958d03f60ac88d82026b63848dc0baaaa3cbc"
+    },
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 552,
+      "total_deletions": 21,
+      "accepted_lines": 531,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/3508979c66a9fd96295ad614e20eaf973c93e097134a8a34cdc6a6cb86597565"
+    }
+  }
+}
