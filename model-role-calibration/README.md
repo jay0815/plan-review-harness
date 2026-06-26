@@ -8,6 +8,12 @@
 model-role-calibration/claude-code-mcp-integration.md
 ```
 
+当前工程功能关系和主要流程图见：
+
+```text
+model-role-calibration/docs/workflow-map.md
+```
+
 生成不依赖 marketplace 的 MCP + Skill 分发包：
 
 ```bash
