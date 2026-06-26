@@ -1,0 +1,68 @@
+model-role-calibration/scripts/test-claude-distribution.js
+  9c4bfa9ef80d8a12 43,68-69,125
+model-role-calibration/claude-code-mcp-integration.md
+  9c4bfa9ef80d8a12 469-475
+model-role-calibration/scripts/run-workspace-review.js
+  9c4bfa9ef80d8a12 1172-1190,1456,1460-1461,1632,1635-1637,1658-1665,1686,1688-1689,1694-1695,1698-1699,1716
+model-role-calibration/scripts/doctor-workspace-review-run.js
+  9c4bfa9ef80d8a12 174-183
+model-role-calibration/scripts/test-plan-review-mcp.js
+  9c4bfa9ef80d8a12 25,1098-1116
+model-role-calibration/scripts/package-claude-distribution.js
+  9c4bfa9ef80d8a12 23,339-343
+model-role-calibration/scripts/test-workspace-review-verification.js
+  9c4bfa9ef80d8a12 14,111-177,359-487,706-722
+model-role-calibration/scripts/verify-workspace-review-run.js
+  9c4bfa9ef80d8a12 106-107,144-164,286-287,366-368,421-423
+package.json
+  9c4bfa9ef80d8a12 30
+model-role-calibration/scripts/workspace-review-manifest.js
+  54bc23aae45adb05 237-396,687
+model-role-calibration/scripts/test-plan-authoring-lint.js
+  9c4bfa9ef80d8a12 319-365
+model-role-calibration/scripts/backfill-workspace-run-manifest.js
+  9c4bfa9ef80d8a12 1-61
+model-role-calibration/scripts/inspect-workspace-run.js
+  9c4bfa9ef80d8a12 59,69-111,126,131,133-144,148-156,171-174,176,232-234
+model-role-calibration/scripts/plan-review-mcp.js
+  9c4bfa9ef80d8a12 443,445-446
+model-role-calibration/scripts/plan-authoring-lint.js
+  9c4bfa9ef80d8a12 95-113,674,685
+install.md
+  9c4bfa9ef80d8a12 330-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "955da0e3af07817939cd031c0034ff51390e2427",
+  "prompts": {
+    "54bc23aae45adb05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f02d1-3201-75b1-b07f-a0934730fcf9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 161,
+      "total_deletions": 0,
+      "accepted_lines": 161,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/d568e603ed2205765b415038c28ac0034c24e5a0612e77255fc076da130b680d"
+    },
+    "9c4bfa9ef80d8a12": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4eb87c77-b3d6-4561-8aea-f7800264cddc",
+        "model": "mimo-v2.5-pro"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 562,
+      "total_deletions": 32,
+      "accepted_lines": 562,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/a9c2eedab1b3a182cfcae16530677888c9336c73a8f943f41b400a24fcdb71a4"
+    }
+  }
+}
