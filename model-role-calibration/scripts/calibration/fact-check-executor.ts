@@ -1,9 +1,28 @@
-import fs = require('node:fs')
-import os = require('node:os')
-import path = require('node:path')
-import crypto = require('node:crypto')
+import * as crypto from 'node:crypto'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 
-import { ensureDir, parseJsonFile, positiveInteger, readText, slug, writeFileNew, writeGenerated } from './core'
+import {
+  FACT_CHECK_ROOT as FACT_CHECK_ROOT_UNTYPED,
+  assertFactCheckCaseId as assertFactCheckCaseIdUntyped,
+  ingestOutput as ingestOutputUntyped,
+  loadCase as loadCaseUntyped,
+  renderFactCheckPrompt as renderFactCheckPromptUntyped,
+  scoreOutput as scoreOutputUntyped,
+  summarizeRun as summarizeFactCheckRunUntyped,
+} from '../fact-check-calibration-lib.js'
+import {
+  buildCliArgs as buildCliArgsUntyped,
+  parseAssistantOutput as parseAssistantOutputUntyped,
+  resolveWrapperCommand as resolveWrapperCommandUntyped,
+  runCommand as runCommandUntyped,
+} from '../run-model.js'
+import {
+  buildFactCheckReadScope as buildFactCheckReadScopeUntyped,
+  copyScopedWorkspace as copyScopedWorkspaceUntyped,
+} from '../workspace-review-lib.js'
+import { ensureDir, parseJsonFile, positiveInteger, readText, slug, writeFileNew, writeGenerated } from './core.js'
 
 type JsonObject = Record<string, any>
 
@@ -105,65 +124,61 @@ interface PromptInfo {
   }>
 }
 
-const {
-  FACT_CHECK_ROOT,
-  assertFactCheckCaseId,
-  ingestOutput,
-  loadCase,
-  renderFactCheckPrompt,
-  scoreOutput,
-  summarizeRun: summarizeFactCheckRun,
-} = require('../fact-check-calibration-lib') as {
-  FACT_CHECK_ROOT: string
-  assertFactCheckCaseId(caseId: string): void
-  ingestOutput(options: { run: string; caseId: string; model: string; file: string }): unknown
-  loadCase(caseId: string): JsonObject
-  renderFactCheckPrompt(fixture: JsonObject): string
-  scoreOutput(options: { run: string; caseId: string; model: string }): ScoreResult
-  summarizeRun(run: string): object
-}
+const FACT_CHECK_ROOT = FACT_CHECK_ROOT_UNTYPED as string
+const assertFactCheckCaseId = assertFactCheckCaseIdUntyped as (caseId: string) => void
+const ingestOutput = ingestOutputUntyped as (options: {
+  run: string
+  caseId: string
+  model: string
+  file: string
+}) => unknown
+const loadCase = loadCaseUntyped as (caseId: string) => JsonObject
+const renderFactCheckPrompt = renderFactCheckPromptUntyped as (fixture: JsonObject) => string
+const scoreOutput = scoreOutputUntyped as (options: { run: string; caseId: string; model: string }) => ScoreResult
+const summarizeFactCheckRun = summarizeFactCheckRunUntyped as (run: string) => object
 
-const { buildFactCheckReadScope, copyScopedWorkspace } = require('../workspace-review-lib') as {
-  buildFactCheckReadScope: (...args: any[]) => unknown
-  copyScopedWorkspace: (...args: any[]) => unknown
-}
+const buildFactCheckReadScope = buildFactCheckReadScopeUntyped as (...args: any[]) => unknown
+const copyScopedWorkspace = copyScopedWorkspaceUntyped as (...args: any[]) => unknown
 void buildFactCheckReadScope
 void copyScopedWorkspace
 
-const { buildCliArgs, parseAssistantOutput, resolveWrapperCommand, runCommand } = require('../run-model') as {
-  buildCliArgs(
-    wrapperArgs: string[],
-    schema: unknown,
-    options: {
-      persistSession: boolean
-      jsonValidator: boolean
-      run: string
-      model: string
-      probe: string
-      schemaFile: string
-      validatorLogFile: string
-      attemptLabel: string
-      tools: string
-      permissionMode: string
-      addDir: string | null
-    },
-  ): string[]
-  parseAssistantOutput(stdout: string, probe: string): ParsedAssistantOutput
-  resolveWrapperCommand(shell: string, model: string, timeoutMs: number, maxBuffer: number): WrapperCommand
-  runCommand(
-    command: string,
-    args: string[],
-    options: {
-      cwd: string
-      input: string
-      timeoutMs: number
-      killSignal: NodeJS.Signals
-      maxBuffer: number
-      validatorLogFile: string | null
-      env: NodeJS.ProcessEnv
-    },
-  ): Promise<RunCommandResult>
-}
+const buildCliArgs = buildCliArgsUntyped as (
+  wrapperArgs: string[],
+  schema: unknown,
+  options: {
+    persistSession: boolean
+    jsonValidator: boolean
+    run: string
+    model: string
+    probe: string
+    schemaFile: string
+    validatorLogFile: string
+    attemptLabel: string
+    tools: string
+    permissionMode: string
+    addDir: string | null
+  },
+) => string[]
+const parseAssistantOutput = parseAssistantOutputUntyped as (stdout: string, probe: string) => ParsedAssistantOutput
+const resolveWrapperCommand = resolveWrapperCommandUntyped as (
+  shell: string,
+  model: string,
+  timeoutMs: number,
+  maxBuffer: number,
+) => WrapperCommand
+const runCommand = runCommandUntyped as (
+  command: string,
+  args: string[],
+  options: {
+    cwd: string
+    input: string
+    timeoutMs: number
+    killSignal: NodeJS.Signals
+    maxBuffer: number
+    validatorLogFile: string | null
+    env: NodeJS.ProcessEnv
+  },
+) => Promise<RunCommandResult>
 
 export const CALIBRATION_PROBE = 'fact_check'
 export const DEFAULT_CONCURRENCY = 2
