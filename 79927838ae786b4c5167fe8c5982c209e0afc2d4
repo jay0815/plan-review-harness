@@ -1,0 +1,26 @@
+model-role-calibration/README.md
+  f9008e9b5f25e362 11-16
+model-role-calibration/docs/workflow-map.md
+  f9008e9b5f25e362 1-599
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "79927838ae786b4c5167fe8c5982c209e0afc2d4",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 605,
+      "total_deletions": 0,
+      "accepted_lines": 605,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/398b9be551122a1089ee5bdbf95df70517936dd0828165d93de01537cf8615d6"
+    }
+  }
+}
