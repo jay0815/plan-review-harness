@@ -1,0 +1,24 @@
+docs/backlog.md
+  54bc23aae45adb05 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "a9666e3f259be7fd771dc0cbea5d356659741b31",
+  "prompts": {
+    "54bc23aae45adb05": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f02d1-3201-75b1-b07f-a0934730fcf9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/1eb4ff9d21825f4bb1bd1f8efed6e69cf29493a0ed8c58c08a3e974bf39d72c5"
+    }
+  }
+}
