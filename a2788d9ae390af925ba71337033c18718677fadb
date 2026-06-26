@@ -1,0 +1,36 @@
+model-role-calibration/scripts/package-claude-distribution.js
+  f9008e9b5f25e362 21,322-328,332
+install.md
+  f9008e9b5f25e362 255,257-260,315-318,325
+package.json
+  f9008e9b5f25e362 21,30
+model-role-calibration/scripts/test-workspace-review-verification.js
+  f9008e9b5f25e362 8,157-159,185-191,291-319,328-390
+model-role-calibration/scripts/doctor-workspace-review-run.js
+  f9008e9b5f25e362 1-402
+model-role-calibration/scripts/test-claude-distribution.js
+  f9008e9b5f25e362 42,63-64,116
+model-role-calibration/claude-code-mcp-integration.md
+  f9008e9b5f25e362 457-464
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "a2788d9ae390af925ba71337033c18718677fadb",
+  "prompts": {
+    "f9008e9b5f25e362": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef235-2dcd-78f1-9db8-db496685a46a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 550,
+      "total_deletions": 11,
+      "accepted_lines": 543,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/d6be27467fd7d29c5373e1c1b8d167e9b68528ed4cba5570a9ec6ba5d852f073"
+    }
+  }
+}
