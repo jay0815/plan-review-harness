@@ -1,5 +1,5 @@
-import fs = require('node:fs')
-import path = require('node:path')
+import * as fs from 'node:fs'
+import * as path from 'node:path'
 
 export type ListOptionValue = string | true | undefined
 export type PositiveIntegerValue = string | number | true | undefined
