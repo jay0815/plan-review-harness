@@ -101,7 +101,7 @@ function main() {
     const runDir = path.join(lib_js_1.ROOT, 'runs', run);
     const outputDir = path.join(runDir, caseId, 'agent-outputs');
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'evaluation-test-'));
-    const fakeCodex = path.join(tempDir, 'fake-codex.js');
+    const fakeCodex = path.join(tempDir, 'fake-codex.mjs');
     const invocationFile = path.join(tempDir, 'invocation.json');
     const runEvaluation = path.join(lib_js_1.ROOT, 'scripts', 'run-evaluation.js');
     const promoteEvaluation = path.join(lib_js_1.ROOT, 'scripts', 'promote-evaluation.js');
@@ -157,7 +157,8 @@ function main() {
         (0, node_assert_1.default)(fs.existsSync(paths.promptFile));
         (0, node_assert_1.default)(!fs.existsSync(paths.draftFile));
         fs.writeFileSync(fakeCodex, `#!/usr/bin/env node
-const fs = require("fs");
+import * as fs from "node:fs";
+
 const args = process.argv.slice(2);
 const outputFile = args[args.indexOf("--output-last-message") + 1];
 const prompt = fs.readFileSync(0, "utf8");
