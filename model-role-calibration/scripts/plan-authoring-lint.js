@@ -92,6 +92,25 @@ function sectionMatches(section, patterns) {
   return patterns.some((pattern) => pattern.test(section.title));
 }
 
+function explicitSectionMappings(plan) {
+  const mappings = new Set();
+  const allowed = new Set(REQUIRED_SECTION_GROUPS.map((group) => group.name));
+  const pattern = /^\s*([a-z][a-z0-9_]+)\s*:\s*(?:§\s*)?(\d+(?:\.\d+)*)\b.*$/gmi;
+  let match;
+  while ((match = pattern.exec(String(plan))) !== null) {
+    const name = match[1];
+    if (allowed.has(name)) {
+      mappings.add(name);
+    }
+  }
+  return mappings;
+}
+
+function hasRequiredSection(sections, explicitMappings, group) {
+  return explicitMappings.has(group.name) ||
+    sections.some((section) => sectionMatches(section, group.patterns));
+}
+
 function parseExplicitComplexity(plan, sections) {
   const jsonMatch = String(plan).match(
     /"plan_complexity"\s*:\s*\{[\s\S]{0,300}?"level"\s*:\s*"(single_file|feature|cross_feature|architecture)"/i
@@ -652,6 +671,7 @@ function validateExistingCodeRefs(refs, projectRoot, errors) {
 function lintPlan({ plan, projectRoot }) {
   const text = String(plan);
   const sections = parseSections(text);
+  const explicitMappings = explicitSectionMappings(text);
   const refs = parseExistingCodeRefs(sections, projectRoot);
   const complexity = parseExplicitComplexity(text, sections) || inferComplexity(text, refs);
   const totalLines = text.split("\n").length;
@@ -662,7 +682,7 @@ function lintPlan({ plan, projectRoot }) {
   const warnings = [];
 
   for (const group of REQUIRED_SECTION_GROUPS) {
-    if (!sections.some((section) => sectionMatches(section, group.patterns))) {
+    if (!hasRequiredSection(sections, explicitMappings, group)) {
       errors.push(issue(
         "required_section_missing",
         `缺少计划必备内容：${group.name}`,

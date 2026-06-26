@@ -11,6 +11,7 @@ const {
   markManifestRunning,
   markManifestFinished,
   recordResolvedExecution,
+  backfillRunManifest,
   hashFileIfExists
 } = require("./workspace-review-manifest");
 
@@ -105,6 +106,73 @@ function roleEvents({ tools = ["Read"], reads = [] } = {}) {
       }
     }))
   ];
+}
+
+function roleEventsWithReadResults({ tools = ["Read"], reads = [], failedReads = [] } = {}) {
+  const events = [{
+    type: "system",
+    subtype: "init",
+    session_id: "00000000-0000-4000-8000-000000000000",
+    model: "test-model",
+    tools
+  }];
+  let index = 0;
+  for (const file of reads) {
+    const id = `tool-ok-${index}`;
+    index += 1;
+    events.push({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          id,
+          name: "Read",
+          input: {
+            file_path: file
+          }
+        }]
+      }
+    });
+    events.push({
+      type: "user",
+      message: {
+        content: [{
+          type: "tool_result",
+          tool_use_id: id,
+          content: "1\tok"
+        }]
+      }
+    });
+  }
+  for (const file of failedReads) {
+    const id = `tool-failed-${index}`;
+    index += 1;
+    events.push({
+      type: "assistant",
+      message: {
+        content: [{
+          type: "tool_use",
+          id,
+          name: "Read",
+          input: {
+            file_path: file
+          }
+        }]
+      }
+    });
+    events.push({
+      type: "user",
+      message: {
+        content: [{
+          type: "tool_result",
+          tool_use_id: id,
+          is_error: true,
+          content: "File does not exist"
+        }]
+      }
+    });
+  }
+  return events;
 }
 
 const EXECUTION_BOUNDARIES = [
@@ -287,6 +355,136 @@ function main() {
     assert.equal(completedManifest.resolved_execution.risk.prompt_hash.startsWith("sha256:"), true);
     assert.equal(completedManifest.resolved_execution.risk.schema_hash.startsWith("sha256:"), true);
     assert.equal(completedManifest.resolved_execution.risk.output_hash.startsWith("sha256:"), true);
+
+    const legacyRunDir = path.join(tempDir, "workspace-review-legacy");
+    fs.mkdirSync(legacyRunDir, { recursive: true });
+    writeJson(path.join(legacyRunDir, "request.json"), {
+      run_id: "workspace-review-legacy",
+      created_at: "2026-06-16T00:00:00.000Z",
+      project_root: tempDir,
+      plan: "# Legacy Plan\n",
+      plan_file: null,
+      context: "",
+      roles: ["risk", "architecture", "execution", "rebuttal"]
+    });
+    writeJson(path.join(legacyRunDir, "state.json"), {
+      run_id: "workspace-review-legacy",
+      status: "completed",
+      created_at: "2026-06-16T00:00:00.000Z",
+      updated_at: "2026-06-16T00:10:00.000Z",
+      project_root: tempDir,
+      started_at: "2026-06-16T00:00:01.000Z",
+      finished_at: "2026-06-16T00:10:00.000Z",
+      roles: ["risk", "architecture", "execution", "rebuttal"],
+      infra_errors: []
+    });
+    fs.writeFileSync(path.join(legacyRunDir, "review-plan.md"), "# Legacy Review Plan\n", "utf8");
+    writeJson(path.join(legacyRunDir, "plan-compaction.json"), {
+      original_chars: 1000,
+      compacted_chars: 900,
+      saved_chars: 100,
+      code_blocks: 1,
+      compacted_blocks: 1,
+      preserved_blocks: 0
+    });
+    writeJson(path.join(legacyRunDir, "review-plan-refs.json"), {
+      version: 1,
+      format_status: {
+        refs_scoped_to_existing_code_refs_section: true
+      },
+      existing_code_refs: [],
+      existing_code_ref_dirs: [],
+      proposed_code_artifacts: [],
+      blocked_refs: [],
+      skipped_refs: []
+    });
+    writeJson(path.join(legacyRunDir, "plan-authoring-lint.json"), {
+      valid: true,
+      errors: [],
+      warnings: [],
+      metrics: {
+        existing_code_ref_count: 1,
+        structured_existing_code_ref_count: 1,
+        inline_existing_code_ref_count: 0
+      }
+    });
+    fs.writeFileSync(path.join(legacyRunDir, "execution.log"), [
+      "[2026-06-16T00:00:01.000Z] run_started run_id=\"workspace-review-legacy\" pid=123 roles=[\"risk\",\"architecture\",\"execution\",\"rebuttal\"] max_concurrency=4",
+      "[2026-06-16T00:01:00.000Z] read_scope_prepared role=\"risk\" files=2",
+      "[2026-06-16T00:09:00.000Z] fact_check_summary total_checked=0",
+      "[2026-06-16T00:10:00.000Z] run_completed run_id=\"workspace-review-legacy\" reviewer_count=4 infra_error_count=0",
+      ""
+    ].join("\n"), "utf8");
+    for (const role of ["risk", "architecture", "execution", "rebuttal"]) {
+      createRole(legacyRunDir, role);
+    }
+    createRole(legacyRunDir, "fact_check", {
+      model: "glm",
+      output: {
+        probe: "fact_check",
+        checked_issues: [],
+        source_summaries: [],
+        limits: []
+      }
+    });
+    writeJson(path.join(legacyRunDir, "roles", "fact_check", "fact-check-summary.json"), {
+      total_checked: 0,
+      status_counts: {},
+      evidence_status_counts: {},
+      claim_support_counts: {},
+      verified_ratio: 0,
+      challenged_count: 0,
+      strictness_signal: "no_issues_checked",
+      limits_count: 0
+    });
+    createRole(legacyRunDir, "synthesis", {
+      model: "glm",
+      tools: [],
+      reads: [],
+      read_boundary: false,
+      output: {
+        probe: "synthesis",
+        process_map: {
+          title: "legacy",
+          mermaid: "flowchart TD\n  A[A]",
+          nodes: []
+        },
+        consensus_issues: [],
+        disagreements: [],
+        likely_false_positives: [],
+        revision_instructions: []
+      }
+    });
+    writeJson(path.join(legacyRunDir, "report.json"), {
+      run_id: "workspace-review-legacy",
+      outcome: {
+        status: "plan_ready",
+        message: "legacy"
+      },
+      infra_errors: [],
+      fact_check: {
+        summary: {
+          total_checked: 0
+        }
+      }
+    });
+    const missingManifest = verifyRun(legacyRunDir);
+    assert.equal(missingManifest.valid, false);
+    assert(missingManifest.checks.some((item) => (
+      item.id === "manifest.present" &&
+      item.status === "fail" &&
+      item.details.backfill_command.includes("backfill-workspace-run-manifest.js")
+    )));
+    const legacyDoctor = doctorWorkspaceReviewRun(legacyRunDir);
+    assert(legacyDoctor.next_actions.some((item) => item.kind === "backfill_run_manifest"));
+    const backfilled = backfillRunManifest(legacyRunDir);
+    assert.equal(backfilled.status, "completed");
+    assert.equal(backfilled.artifacts.backfilled_from, "legacy-run-artifacts");
+    assert.equal(backfilled.resolved_execution.risk.latest_status, "completed");
+    assert.equal(backfilled.resolved_execution.fact_check.model, "glm");
+    assert.equal(backfilled.resolved_execution.synthesis.output_hash.startsWith("sha256:"), true);
+    const backfilledVerification = verifyRun(legacyRunDir);
+    assert(!backfilledVerification.checks.some((item) => item.id === "manifest.present" && item.status === "fail"));
 
     const runningRunDir = path.join(tempDir, "workspace-review-running");
     fs.mkdirSync(runningRunDir, { recursive: true });
@@ -504,6 +702,24 @@ function main() {
     assert.equal(doctor.fact_check.strictness_signal, "all_verified");
     assert.equal(doctor.synthesis.revision_instruction_count, 0);
     assert(doctor.next_actions.some((item) => item.kind === "record_regression_sample"));
+
+    writeJsonl(path.join(runDir, "roles", "risk", "stdout.jsonl"), roleEventsWithReadResults({
+      reads: [path.join(runDir, "scoped", "risk", "project", "package.json")],
+      failedReads: [path.join(runDir, "other", "missing.ts")]
+    }));
+    const failedOutOfBoundaryAttempt = verifyRun(runDir);
+    assert.equal(failedOutOfBoundaryAttempt.valid, true);
+    assert(failedOutOfBoundaryAttempt.checks.some((item) => (
+      item.id === "reviewer.risk.no_out_of_boundary_reads" &&
+      item.status === "pass"
+    )));
+    assert(failedOutOfBoundaryAttempt.checks.some((item) => (
+      item.id === "reviewer.risk.failed_out_of_boundary_read_attempts" &&
+      item.status === "warn"
+    )));
+    writeJsonl(path.join(runDir, "roles", "risk", "stdout.jsonl"), roleEvents({
+      reads: [path.join(runDir, "scoped", "risk", "project", "package.json")]
+    }));
 
     writeJson(path.join(runDir, "report.json"), {
       run_id: "workspace-review-test",

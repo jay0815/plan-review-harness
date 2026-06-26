@@ -20,6 +20,7 @@ const RUNTIME_FILES = [
   "scripts/inspect-workspace-run.js",
   "scripts/verify-workspace-review-run.js",
   "scripts/doctor-workspace-review-run.js",
+  "scripts/backfill-workspace-run-manifest.js",
   "default-role-routes.json",
   "claude-plan-authoring.md",
   "prompts/probe-risk.md",
@@ -333,6 +334,13 @@ node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \\
 node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \\
   --run-id <run-id> \\
   --json
+\`\`\`
+
+旧版 runner 生成的历史 run 如果缺少 \`run-manifest.json\`，先显式补写 manifest：
+
+\`\`\`bash
+node ~/.claude/plan-review-harness/mcp/scripts/backfill-workspace-run-manifest.js \\
+  --run-id <run-id>
 \`\`\`
 
 默认日志和运行产物在 \`~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>\`。

@@ -103,7 +103,8 @@ function summarizeRoles(inspected) {
       elapsed_ms: role.elapsed_ms,
       max_input_tokens: role.usage?.max_input_tokens ?? null,
       read_count: role.read_files.length,
-      out_of_boundary_read_count: role.out_of_boundary_read_files.length
+      out_of_boundary_read_count: role.out_of_boundary_read_files.length,
+      failed_out_of_boundary_read_count: role.failed_out_of_boundary_read_files?.length || 0
     }
   ]));
 }
@@ -138,6 +139,27 @@ function infraErrorsFrom(report, state) {
     }];
   }
   return [];
+}
+
+function shellQuote(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:-]+$/.test(text)) {
+    return text;
+  }
+  return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
+function shellCommand(parts) {
+  return parts.map(shellQuote).join(" ");
+}
+
+function backfillManifestCommand(runDir) {
+  return shellCommand([
+    "node",
+    path.join(__dirname, "backfill-workspace-run-manifest.js"),
+    "--run-dir",
+    runDir
+  ]);
 }
 
 function buildResult({ absoluteRunDir, state, report, inspected, compaction, totalElapsedMs, results, ready }) {
@@ -261,7 +283,8 @@ function verifyRun(runDir) {
     }
   } else {
     fail(results, "manifest.present", "缺少 run-manifest.json 或 run_id 不匹配", {
-      manifest_run_id: manifest?.run_id || null
+      manifest_run_id: manifest?.run_id || null,
+      backfill_command: backfillManifestCommand(absoluteRunDir)
     });
   }
 
@@ -340,6 +363,11 @@ function verifyRun(runDir) {
         out_of_boundary_read_files: item.out_of_boundary_read_files
       });
     }
+    if ((item.failed_out_of_boundary_read_files || []).length) {
+      warn(results, `reviewer.${role}.failed_out_of_boundary_read_attempts`, `${role} 存在失败的越界读取尝试，但未读取到文件内容`, {
+        failed_out_of_boundary_read_files: item.failed_out_of_boundary_read_files
+      });
+    }
   }
 
   const factCheck = roles.fact_check;
@@ -388,6 +416,11 @@ function verifyRun(runDir) {
     } else {
       fail(results, "fact_check.no_out_of_boundary_reads", "Fact Check 存在越界读取", {
         out_of_boundary_read_files: factCheck.out_of_boundary_read_files
+      });
+    }
+    if ((factCheck.failed_out_of_boundary_read_files || []).length) {
+      warn(results, "fact_check.failed_out_of_boundary_read_attempts", "Fact Check 存在失败的越界读取尝试，但未读取到文件内容", {
+        failed_out_of_boundary_read_files: factCheck.failed_out_of_boundary_read_files
       });
     }
     if (factCheck.fact_check_summary) {

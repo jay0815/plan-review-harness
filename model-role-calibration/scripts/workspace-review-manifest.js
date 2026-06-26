@@ -234,6 +234,166 @@ function declaredRuntime(config, roles) {
   };
 }
 
+function parseExecutionLogFields(text) {
+  const details = {};
+  const fieldPattern = /(\w+)=("(?:\\.|[^"])*"|\[[^\]]*\]|\{[^}]*\}|[^\s]+)/g;
+  let field;
+  while ((field = fieldPattern.exec(text || "")) !== null) {
+    try {
+      details[field[1]] = JSON.parse(field[2]);
+    } catch {
+      details[field[1]] = field[2];
+    }
+  }
+  return details;
+}
+
+function executionLogEvents(runDir) {
+  const file = path.join(runDir, "execution.log");
+  if (!fs.existsSync(file)) {
+    return [];
+  }
+  return fs.readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const match = /^\[([^\]]+)\]\s+(\S+)(?:\s+(.*))?$/.exec(line);
+      if (!match) {
+        return null;
+      }
+      return {
+        at: match[1],
+        event: match[2],
+        details: parseExecutionLogFields(match[3] || "")
+      };
+    })
+    .filter(Boolean);
+}
+
+function existingArtifact(runDir, file) {
+  if (!file || !fs.existsSync(path.join(runDir, file))) {
+    return null;
+  }
+  return file;
+}
+
+function activeRunRoles(request, state) {
+  const reviewers = Array.isArray(request?.roles) && request.roles.length
+    ? request.roles
+    : Array.isArray(state?.roles) && state.roles.length
+      ? state.roles
+      : ["risk", "architecture", "execution", "rebuttal"];
+  return [...new Set([...reviewers, "fact_check", "synthesis"])]
+    .filter((role) => WORKSPACE_REVIEW_ROLES.includes(role));
+}
+
+function roleMetadata(runDir, role) {
+  return readJsonIfExists(path.join(runDir, "roles", role, "metadata.json"));
+}
+
+function inferredRoleRoutes(runDir, roles) {
+  const defaultRoute = readJsonIfExists(DEFAULT_ROUTE_FILE);
+  const routes = {
+    ...(defaultRoute?.routes || {})
+  };
+  for (const role of roles) {
+    const metadata = roleMetadata(runDir, role);
+    if (metadata?.model) {
+      routes[role] = metadata.model;
+    }
+  }
+  return routes;
+}
+
+function inferredExecution(runDir) {
+  const started = executionLogEvents(runDir).find((item) => item.event === "run_started");
+  return {
+    max_concurrency: started?.details?.max_concurrency ?? null,
+    timeout_ms: null,
+    max_buffer_bytes: null,
+    max_turns: null,
+    compact_plan: fs.existsSync(path.join(runDir, "plan-compaction.json")) ? true : null,
+    isolate_reviewers: null,
+    read_scope_max_files: null,
+    backfilled_from: "legacy-run-artifacts"
+  };
+}
+
+function backfillConfig(runDir, roles) {
+  return {
+    config_file: null,
+    roles: inferredRoleRoutes(runDir, roles),
+    execution: inferredExecution(runDir),
+    claude_bin: null,
+    claude_version: null
+  };
+}
+
+function backfillRunManifest(runDir, options = {}) {
+  const absoluteRunDir = path.resolve(runDir);
+  const file = manifestPath(absoluteRunDir);
+  if (fs.existsSync(file) && !options.force) {
+    throw new Error(`Refusing to overwrite existing run manifest: ${file}`);
+  }
+  const request = readJsonIfExists(path.join(absoluteRunDir, "request.json"));
+  const state = readJsonIfExists(path.join(absoluteRunDir, "state.json"));
+  if (!request || !state) {
+    throw new Error(`Cannot backfill run manifest without request.json and state.json: ${absoluteRunDir}`);
+  }
+  const roles = activeRunRoles(request, state);
+  const createdAt = request.created_at || state.created_at || new Date().toISOString();
+  const updatedAt = state.finished_at || state.updated_at || createdAt;
+  const status = state.status || "created";
+  const config = backfillConfig(absoluteRunDir, roles);
+  const reviewPlanRefs = readJsonIfExists(path.join(absoluteRunDir, "review-plan-refs.json"));
+  const manifest = {
+    version: 1,
+    run_id: request.run_id || state.run_id || path.basename(absoluteRunDir),
+    status,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    ...(state.finished_at ? { finished_at: state.finished_at } : {}),
+    workspace: workspaceSnapshot(request.project_root || state.project_root || absoluteRunDir),
+    inputs: {
+      plan: {
+        path: request.plan_file || null,
+        hash: hashText(request.plan || "")
+      },
+      context_hash: request.context ? hashText(request.context) : null,
+      review_plan: existingArtifact(absoluteRunDir, "review-plan.md")
+        ? {
+          path: "review-plan.md",
+          hash: hashFileIfExists(path.join(absoluteRunDir, "review-plan.md"))
+        }
+        : null,
+      review_plan_refs_hash: reviewPlanRefs ? hashJson(reviewPlanRefs) : null
+    },
+    declared_runtime: declaredRuntime(config, roles),
+    resolved_execution: {},
+    artifacts: {
+      request: existingArtifact(absoluteRunDir, "request.json"),
+      state: existingArtifact(absoluteRunDir, "state.json"),
+      review_plan: existingArtifact(absoluteRunDir, "review-plan.md"),
+      plan_compaction: existingArtifact(absoluteRunDir, "plan-compaction.json"),
+      review_plan_refs: existingArtifact(absoluteRunDir, "review-plan-refs.json"),
+      plan_authoring_lint: existingArtifact(absoluteRunDir, "plan-authoring-lint.json"),
+      report: existingArtifact(absoluteRunDir, "report.json"),
+      backfilled_from: "legacy-run-artifacts"
+    }
+  };
+  writeJson(file, manifest);
+  for (const role of roles) {
+    const metadata = roleMetadata(absoluteRunDir, role);
+    if (metadata) {
+      recordResolvedExecution(absoluteRunDir, metadata, {
+        status: metadata.status,
+        metadata_file: path.join("roles", role, "metadata.json")
+      });
+    }
+  }
+  return requireRunManifest(absoluteRunDir);
+}
+
 function createRunManifest(config, request, runDir, options = {}) {
   const file = manifestPath(runDir);
   if (fs.existsSync(file)) {
@@ -524,6 +684,7 @@ module.exports = {
   markManifestFinished,
   recordResolvedExecution,
   archiveResolvedExecutionAttempt,
+  backfillRunManifest,
   hashText,
   hashJson,
   hashFileIfExists,

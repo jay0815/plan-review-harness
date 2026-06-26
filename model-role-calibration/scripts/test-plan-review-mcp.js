@@ -22,6 +22,7 @@ const {
 } = require("./workspace-review-lib");
 const {
   summarizeReviewOutcome,
+  reviewerStageError,
   retryWorkspaceReviewStage,
   validateWorkspaceOutput
 } = require("./run-workspace-review");
@@ -1093,6 +1094,26 @@ async function main() {
       }]
     );
     assert.equal(infraOutcome.status, "review_completed_with_infra_errors");
+
+    const reviewerFailure = reviewerStageError(
+      [{
+        role: "risk",
+        output: {
+          issues: []
+        }
+      }],
+      [{
+        role: "execution",
+        model: "kimi",
+        type: "agent_failed",
+        message: "timed out after 900000ms"
+      }]
+    );
+    assert(reviewerFailure);
+    assert(reviewerFailure.message.includes("before fact_check"));
+    assert.deepEqual(reviewerFailure.completedReviewerRoles, ["risk"]);
+    assert.deepEqual(reviewerFailure.failedReviewerRoles, ["execution"]);
+    assert.equal(reviewerFailure.infraErrors.length, 1);
 
     let apiKeyRead = false;
     const inheritedEnv = {

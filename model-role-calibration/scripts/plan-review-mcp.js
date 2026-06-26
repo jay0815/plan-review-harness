@@ -440,7 +440,10 @@ function retryPlanReviewStage(config, input) {
     status: "queued",
     retry_stage: input.stage,
     retry_queued_at: new Date().toISOString(),
+    finished_at: undefined,
     error: null,
+    report_file: null,
+    infra_errors: [],
     retry_limit: MAX_EXECUTOR_RETRIES
   });
   appendExecutionLog(runDir, "stage_retry_queued", {

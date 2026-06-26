@@ -1169,6 +1169,25 @@ async function runReviewers(config, request, roles, runDir) {
   };
 }
 
+function reviewerStageError(reviewerResults, infraErrors) {
+  if (!infraErrors.length) {
+    return null;
+  }
+  const completedRoles = reviewerResults.map((item) => item.role).filter(Boolean);
+  const failedRoles = infraErrors.map((item) => item.role).filter(Boolean);
+  const detail = infraErrors.map((item) => {
+    const roleModel = [item.role, item.model].filter(Boolean).join("/");
+    return `${roleModel || "reviewer"}: ${item.message || item.type || "failed"}`;
+  }).join("; ");
+  const error = new Error(
+    `Reviewer stage failed before fact_check; retry reviewers first: ${detail}`
+  );
+  error.infraErrors = infraErrors;
+  error.completedReviewerRoles = completedRoles;
+  error.failedReviewerRoles = failedRoles;
+  return error;
+}
+
 async function runSynthesis(config, request, reviewerResults, factCheckResult, runDir) {
   const role = "synthesis";
   const model = config.roles.synthesis;
@@ -1434,10 +1453,12 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options = {}) {
     pid: process.pid,
     retry_stage: stage,
     retry_started_at: new Date().toISOString(),
+    finished_at: undefined,
     project_root: request.project_root,
     roles,
     error: null,
-    report_file: null
+    report_file: null,
+    infra_errors: []
   });
   markManifestRunning(absoluteRunDir, request);
   updateRunRetryManifest(absoluteRunDir, stage, retryRoles);
@@ -1608,9 +1629,12 @@ async function main() {
     status: "running",
     pid: process.pid,
     started_at: new Date().toISOString(),
+    finished_at: undefined,
     roles,
     project_root: request.project_root,
-    error: null
+    error: null,
+    report_file: null,
+    infra_errors: []
   });
   appendExecutionLog(runDir, "run_started", {
     run_id: request.run_id,
@@ -1631,8 +1655,14 @@ async function main() {
 
   try {
     const { reviewerResults, infraErrors } = await runReviewers(config, request, roles, runDir);
-    if (!reviewerResults.length) {
-      throw new Error("All reviewers failed before producing valid JSON output");
+    const reviewerFailure = reviewerStageError(reviewerResults, infraErrors);
+    if (reviewerFailure) {
+      appendExecutionLog(runDir, "reviewers_failed", {
+        completed_roles: reviewerFailure.completedReviewerRoles,
+        failed_roles: reviewerFailure.failedReviewerRoles,
+        infra_error_count: infraErrors.length
+      });
+      throw reviewerFailure;
     }
     const factCheck = await runFactCheck(config, request, reviewerResults, runDir);
     const synthesis = await runSynthesis(config, request, reviewerResults, factCheck, runDir);
@@ -1653,16 +1683,20 @@ async function main() {
       infra_error_count: infraErrors.length
     });
   } catch (error) {
+    const infraErrors = Array.isArray(error.infraErrors) ? error.infraErrors : [];
     appendExecutionLog(runDir, "run_failed", {
-      run_id: request.run_id
+      run_id: request.run_id,
+      infra_error_count: infraErrors.length
     });
     updateState(runDir, {
       status: "failed",
       finished_at: new Date().toISOString(),
-      error: error.stack || error.message
+      error: error.stack || error.message,
+      infra_errors: infraErrors
     });
     markManifestFinished(runDir, "failed", {
-      error: error.stack || error.message
+      error: error.stack || error.message,
+      infra_errors: infraErrors
     });
     throw error;
   }
@@ -1679,6 +1713,7 @@ module.exports = {
   runRole,
   runWithConcurrency,
   summarizeReviewOutcome,
+  reviewerStageError,
   runSynthesis,
   retryWorkspaceReviewStage,
   completedReviewerResult,

@@ -171,6 +171,16 @@ function buildActions({ runDir, verification, lint, refs, synthesis }) {
     return actions;
   }
 
+  const manifestCheck = verification.checks.find((item) => item.id === "manifest.present");
+  if (manifestCheck?.status === "fail" && manifestCheck.details?.backfill_command) {
+    addAction(actions, {
+      priority: "P0",
+      kind: "backfill_run_manifest",
+      reason: "该 run 由旧版 workspace-review runner 生成，缺少 run-manifest.json；先显式补写 manifest，再重新验证。",
+      command: manifestCheck.details.backfill_command
+    });
+  }
+
   if (verification.infra_errors.length) {
     const stages = [...new Set(verification.infra_errors
       .map(retryStageForInfraError)

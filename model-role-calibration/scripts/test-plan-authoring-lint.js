@@ -316,6 +316,53 @@ function main() {
       ref.path === "src/screens/credit/ocr/index.tsx" && ref.lines === "1"
     )));
 
+    const mappedChineseRequiredPlan = [
+      "# 中文计划",
+      "",
+      "<!-- 章节映射（供 linter 识别）",
+      "scope_non_goals: §1 需求范围与边界",
+      "requirements_mapping: §2 关键假设",
+      "existing_code_refs: §3 现有代码映射",
+      "contract_decisions: §7 接口契约",
+      "blocking_decisions: §14 待确认项",
+      "implementation_discretion: §4 OTP 组件复用决策 + §8 关键设计决策",
+      "tasks_dependencies: §15 实施顺序",
+      "tests_acceptance: §16 验收",
+      "-->",
+      "",
+      "## 1. 需求范围与边界",
+      "- 范围明确。",
+      "",
+      "## 2. 关键假设",
+      "- 需求映射到任务。",
+      "",
+      "## 3. 现有代码映射",
+      "`src/example.ts:1`：示例引用。",
+      "",
+      "## 4. OTP 组件复用决策",
+      "- 本地实现细节按既有约定。",
+      "",
+      "## 7. 接口契约",
+      "- 契约已定。",
+      "",
+      "## 14. 待确认项",
+      "None",
+      "",
+      "## 15. 实施顺序",
+      "- Implement the decided contract.",
+      "",
+      "## 16. 验收",
+      "- Verify the requirement.",
+      "",
+      "## 17. 风险",
+      "None"
+    ].join("\n");
+    const mappedChineseRequired = lintPlan({
+      plan: mappedChineseRequiredPlan,
+      projectRoot
+    });
+    assert(!codes(mappedChineseRequired).errors.includes("required_section_missing"));
+
     // Complete arrow function (content-based, not length-based) should be rejected
     const arrowPlan = requiredPlan({
       appendix: [

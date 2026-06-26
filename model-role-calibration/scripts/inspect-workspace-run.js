@@ -56,6 +56,7 @@ function extractToolUses(events) {
     for (const block of content) {
       if (block?.type === "tool_use") {
         calls.push({
+          id: block.id || null,
           name: block.name,
           input: block.input || {}
         });
@@ -63,6 +64,49 @@ function extractToolUses(events) {
     }
   }
   return calls;
+}
+
+function extractToolResults(events) {
+  const results = new Map();
+  for (const event of events) {
+    const content = event.message?.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const block of content) {
+      if (block?.type !== "tool_result" || !block.tool_use_id) {
+        continue;
+      }
+      results.set(block.tool_use_id, {
+        is_error: Boolean(block.is_error),
+        content: block.content || null
+      });
+    }
+  }
+  return results;
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function isOutOfBoundary(file, exposedRoot) {
+  if (!exposedRoot) {
+    return false;
+  }
+  const relative = path.relative(exposedRoot, path.resolve(file));
+  return relative.startsWith("..") || path.isAbsolute(relative);
+}
+
+function mapReadFile(file, exposedRoot, sourceRoot) {
+  if (!exposedRoot || !sourceRoot) {
+    return file;
+  }
+  if (isOutOfBoundary(file, exposedRoot)) {
+    return file;
+  }
+  const relative = path.relative(exposedRoot, path.resolve(file));
+  return path.join(sourceRoot, relative);
 }
 
 function summarizeRole(roleDir) {
@@ -79,33 +123,37 @@ function summarizeRole(roleDir) {
   const events = parseJsonLines(stdoutFile);
   const init = events.find((event) => event.type === "system" && event.subtype === "init") || {};
   const toolUses = extractToolUses(events);
+  const toolResults = extractToolResults(events);
   const toolCounts = {};
   for (const call of toolUses) {
     toolCounts[call.name] = (toolCounts[call.name] || 0) + 1;
   }
-  const readFiles = [...new Set(toolUses
+  const readAttempts = toolUses
     .filter((call) => call.name === "Read" && call.input.file_path)
-    .map((call) => call.input.file_path)
-  )];
+    .map((call) => ({
+      id: call.id,
+      file: call.input.file_path,
+      result: call.id ? toolResults.get(call.id) : null
+    }));
+  const readAttemptFiles = unique(readAttempts.map((attempt) => attempt.file));
+  const successfulReadFiles = unique(readAttempts
+    .filter((attempt) => attempt.result?.is_error !== true)
+    .map((attempt) => attempt.file));
+  const failedReadFiles = unique(readAttempts
+    .filter((attempt) => attempt.result?.is_error === true)
+    .map((attempt) => attempt.file));
   const readBoundary = metadata.read_boundary || null;
   const exposedRoot = readBoundary?.exposed_root ? path.resolve(readBoundary.exposed_root) : null;
   const sourceRoot = readBoundary?.source_root ? path.resolve(readBoundary.source_root) : null;
-  const outOfBoundaryReadFiles = exposedRoot
-    ? readFiles.filter((file) => {
-      const relative = path.relative(exposedRoot, path.resolve(file));
-      return relative.startsWith("..") || path.isAbsolute(relative);
-    })
-    : [];
-  const mappedReadFiles = readFiles.map((file) => {
-    if (!exposedRoot || !sourceRoot) {
-      return file;
-    }
-    const relative = path.relative(exposedRoot, path.resolve(file));
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      return file;
-    }
-    return path.join(sourceRoot, relative);
-  });
+  const outOfBoundaryReadFiles = successfulReadFiles.filter((file) => (
+    isOutOfBoundary(file, exposedRoot)
+  ));
+  const failedOutOfBoundaryReadFiles = failedReadFiles.filter((file) => (
+    isOutOfBoundary(file, exposedRoot)
+  ));
+  const mappedReadFiles = successfulReadFiles.map((file) => (
+    mapReadFile(file, exposedRoot, sourceRoot)
+  ));
   return {
     role,
     model: metadata.model || init.model || null,
@@ -120,9 +168,12 @@ function summarizeRole(roleDir) {
     event_count: events.length,
     tools: init.tools || [],
     tool_counts: toolCounts,
-    read_files: readFiles,
-    mapped_read_files: [...new Set(mappedReadFiles)],
+    read_files: successfulReadFiles,
+    read_attempt_files: readAttemptFiles,
+    failed_read_files: failedReadFiles,
+    mapped_read_files: unique(mappedReadFiles),
     out_of_boundary_read_files: outOfBoundaryReadFiles,
+    failed_out_of_boundary_read_files: failedOutOfBoundaryReadFiles,
     read_boundary: readBoundary,
     fact_check_summary: factCheckSummary,
     usage: usageSummary(events)
@@ -175,6 +226,12 @@ function printText(summary) {
       if (role.out_of_boundary_read_files.length) {
         console.log("out_of_boundary_read_files:");
         for (const file of role.out_of_boundary_read_files) {
+          console.log(`- ${file}`);
+        }
+      }
+      if ((role.failed_out_of_boundary_read_files || []).length) {
+        console.log("failed_out_of_boundary_read_files:");
+        for (const file of role.failed_out_of_boundary_read_files) {
           console.log(`- ${file}`);
         }
       }

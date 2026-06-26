@@ -327,6 +327,13 @@ node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
   --json
 ```
 
+旧版 runner 生成的历史 run 如果缺少 `run-manifest.json`，先显式补写 manifest：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/backfill-workspace-run-manifest.js \
+  --run-id <run-id>
+```
+
 如果评审产物被移动到了其他目录，才使用 `--run-dir`：
 
 ```bash

@@ -40,6 +40,7 @@ function main() {
     assert(installDoc.includes("## 七、标准验证流程"));
     assert(installDoc.includes("--run-id <run-id>"));
     assert(installDoc.includes("doctor-workspace-review-run.js"));
+    assert(installDoc.includes("backfill-workspace-run-manifest.js"));
     assert(installDoc.includes("run-manifest.json"));
     assert(installDoc.includes("project_root"));
     assert(installDoc.includes("NOT_READY"));
@@ -62,6 +63,9 @@ function main() {
     ));
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "doctor-workspace-review-run.js")
+    ));
+    assert(fs.existsSync(
+      path.join(result.packageDir, "mcp", "scripts", "backfill-workspace-run-manifest.js")
     ));
     assert(fs.existsSync(
       path.join(result.packageDir, "mcp", "scripts", "retry-workspace-review-stage.js")
@@ -118,6 +122,7 @@ function main() {
     assert(packagedReadme.includes("inspect-workspace-run.js"));
     assert(packagedReadme.includes("verify-workspace-review-run.js"));
     assert(packagedReadme.includes("doctor-workspace-review-run.js"));
+    assert(packagedReadme.includes("backfill-workspace-run-manifest.js"));
     assert(packagedReadme.includes("--run-id <run-id>"));
     assert(packagedReadme.includes("state.json"));
     assert(packagedReadme.includes("project_root"));

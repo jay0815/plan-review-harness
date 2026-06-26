@@ -466,6 +466,13 @@ node ~/.claude/plan-review-harness/mcp/scripts/doctor-workspace-review-run.js \
 `~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>`。退出码 `0` 表示已完成且通过，`1` 表示已完成但检查失败或 run failed，`2` 表示 queued/running 尚未完成。
 只有评审产物被移动到非默认目录时，才使用 `--run-dir /path/to/workspace-runs/<run-id>`。
 
+旧版 runner 生成的历史 run 如果缺少 `run-manifest.json`，先显式补写 manifest：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/backfill-workspace-run-manifest.js \
+  --run-id <run-id>
+```
+
 `workspace-runs/<run-id>/state.json` 会记录启动评审时 CC 所在项目的
 `project_root`，所以标准验证流程只需要 `run_id`。做跨项目效果分析时，可以额外记录项目路径，方便人工解释业务上下文。
 
