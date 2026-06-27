@@ -5,7 +5,48 @@ import * as path from 'node:path'
 
 import { type JsonValue, ROOT, writeGenerated } from './lib.js'
 
-type MutableJsonObject = Record<string, any>
+type MutableJsonObject = Record<string, unknown>
+
+interface ExecutionLogEvent {
+  at: string
+  event: string
+  details: MutableJsonObject
+}
+
+interface SkippedHashFile {
+  path: string
+  reason: string
+  size_bytes: number
+}
+
+interface DeclaredRuntime extends MutableJsonObject {
+  route_profile: MutableJsonObject & {
+    effective_roles: Record<string, unknown>
+  }
+}
+
+interface ResolvedExecutionRecord extends MutableJsonObject {
+  model?: string | null
+  latest_status?: string | null
+  output_hash: string
+}
+
+interface RunManifest extends MutableJsonObject {
+  run_id: string
+  status: string
+  inputs: MutableJsonObject
+  declared_runtime: DeclaredRuntime
+  resolved_execution: Record<string, ResolvedExecutionRecord>
+  artifacts: MutableJsonObject
+}
+
+function objectValue(value: unknown): MutableJsonObject {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as MutableJsonObject) : {}
+}
+
+function stringValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback
+}
 
 interface ManifestOptions {
   createdAt?: string
@@ -113,12 +154,12 @@ function manifestPath(runDir: string): string {
   return path.join(runDir, MANIFEST_FILE)
 }
 
-function requireRunManifest(runDir: string): MutableJsonObject {
+function requireRunManifest(runDir: string): RunManifest {
   const file = manifestPath(runDir)
   if (!fs.existsSync(file)) {
     throw new Error(`Missing required run manifest: ${file}`)
   }
-  return JSON.parse(fs.readFileSync(file, 'utf8')) as MutableJsonObject
+  return JSON.parse(fs.readFileSync(file, 'utf8')) as RunManifest
 }
 
 function git(projectRoot: string, args: string[], options: { trim?: boolean } = {}): string | null {
@@ -145,7 +186,7 @@ function hashUntrackedFiles(projectRoot: string) {
     }
   }
   const hashes: Record<string, string | null> = {}
-  const skipped: any[] = []
+  const skipped: SkippedHashFile[] = []
   const relativePaths = output.split('\0').filter(Boolean).sort()
   for (const relativePath of relativePaths) {
     const absolute = path.join(projectRoot, relativePath)
@@ -209,7 +250,11 @@ function workspaceSnapshot(projectRoot: string) {
     untracked_file_hash_skipped: untracked.skipped,
     untracked_file_hash_limits: untracked.limits,
     dirty_patch_hash: dirtyEntries.length
-      ? sha256([statusText, diffText, stableJson(untracked as JsonValue)].join('\n--- dirty patch components ---\n'))
+      ? sha256(
+          [statusText, diffText, stableJson(untracked as unknown as JsonValue)].join(
+            '\n--- dirty patch components ---\n',
+          ),
+        )
       : null,
   }
 }
@@ -240,20 +285,20 @@ function hashFilesByRole(roles: string[], resolver: (role: string) => string) {
   }
 }
 
-function declaredRuntime(config: MutableJsonObject, roles: string[]) {
-  const runtimeRoles = [...new Set([...roles, 'fact_check', 'synthesis'])].filter((role: any) =>
+function declaredRuntime(config: MutableJsonObject, roles: string[]): DeclaredRuntime {
+  const runtimeRoles = [...new Set([...roles, 'fact_check', 'synthesis'])].filter((role) =>
     WORKSPACE_REVIEW_ROLES.includes(role),
   )
   const promptSet = hashFilesByRole(runtimeRoles, workspacePromptFile)
   const schemaSet = hashFilesByRole(runtimeRoles, workspaceSchemaFile)
-  const routePath = config.config_file || DEFAULT_ROUTE_FILE
-  const routeProfile: MutableJsonObject = {
+  const routePath = stringValue(config.config_file, DEFAULT_ROUTE_FILE)
+  const routeProfile: DeclaredRuntime['route_profile'] = {
     path: path.relative(ROOT, routePath),
-    hash: hashJson(config.roles),
+    hash: hashJson(config.roles as JsonValue),
     source_file_hash: hashFileIfExists(routePath),
-    effective_roles: config.roles,
+    effective_roles: objectValue(config.roles),
   }
-  const defaultRoute = readJsonIfExists(DEFAULT_ROUTE_FILE)
+  const defaultRoute = readJsonIfExists<{ source?: unknown }>(DEFAULT_ROUTE_FILE)
   if (!config.config_file && defaultRoute?.source) {
     routeProfile.approval_ref = defaultRoute.source
   }
@@ -284,7 +329,7 @@ function parseExecutionLogFields(text: string) {
   return details
 }
 
-function executionLogEvents(runDir: string) {
+function executionLogEvents(runDir: string): ExecutionLogEvent[] {
   const file = path.join(runDir, 'execution.log')
   if (!fs.existsSync(file)) {
     return []
@@ -304,7 +349,7 @@ function executionLogEvents(runDir: string) {
         details: parseExecutionLogFields(match[3] || ''),
       }
     })
-    .filter(Boolean)
+    .filter((event): event is ExecutionLogEvent => Boolean(event))
 }
 
 function existingArtifact(runDir: string, file: string): string | null {
@@ -317,9 +362,9 @@ function existingArtifact(runDir: string, file: string): string | null {
 function activeRunRoles(request: MutableJsonObject, state: MutableJsonObject): string[] {
   const reviewers =
     Array.isArray(request?.roles) && request.roles.length
-      ? request.roles
+      ? request.roles.filter((role): role is string => typeof role === 'string')
       : Array.isArray(state?.roles) && state.roles.length
-        ? state.roles
+        ? state.roles.filter((role): role is string => typeof role === 'string')
         : ['risk', 'architecture', 'execution', 'rebuttal']
   return [...new Set<string>([...reviewers, 'fact_check', 'synthesis'])].filter((role) =>
     WORKSPACE_REVIEW_ROLES.includes(role),
@@ -331,8 +376,8 @@ function roleMetadata(runDir: string, role: string): ExecutionMetadata | null {
 }
 
 function inferredRoleRoutes(runDir: string, roles: string[]) {
-  const defaultRoute = readJsonIfExists(DEFAULT_ROUTE_FILE)
-  const routes = {
+  const defaultRoute = readJsonIfExists<{ routes?: Record<string, string> }>(DEFAULT_ROUTE_FILE)
+  const routes: Record<string, string> = {
     ...(defaultRoute?.routes || {}),
   }
   for (const role of roles) {
@@ -345,7 +390,7 @@ function inferredRoleRoutes(runDir: string, roles: string[]) {
 }
 
 function inferredExecution(runDir: string) {
-  const started: any = executionLogEvents(runDir).find((item: any) => item?.event === 'run_started')
+  const started = executionLogEvents(runDir).find((item) => item.event === 'run_started')
   return {
     max_concurrency: started?.details?.max_concurrency ?? null,
     timeout_ms: null,
@@ -392,7 +437,7 @@ function backfillRunManifest(runDir: string, options: ManifestOptions = {}) {
     created_at: createdAt,
     updated_at: updatedAt,
     ...(state.finished_at ? { finished_at: state.finished_at } : {}),
-    workspace: workspaceSnapshot(request.project_root || state.project_root || absoluteRunDir),
+    workspace: workspaceSnapshot(stringValue(request.project_root || state.project_root, absoluteRunDir)),
     inputs: {
       plan: {
         path: request.plan_file || null,
@@ -405,7 +450,7 @@ function backfillRunManifest(runDir: string, options: ManifestOptions = {}) {
             hash: hashFileIfExists(path.join(absoluteRunDir, 'review-plan.md')),
           }
         : null,
-      review_plan_refs_hash: reviewPlanRefs ? hashJson(reviewPlanRefs) : null,
+      review_plan_refs_hash: reviewPlanRefs ? hashJson(reviewPlanRefs as unknown as JsonValue) : null,
     },
     declared_runtime: declaredRuntime(config, roles),
     resolved_execution: {},
@@ -454,7 +499,7 @@ function createRunManifest(
     status: 'created',
     created_at: createdAt,
     updated_at: createdAt,
-    workspace: workspaceSnapshot(request.project_root),
+    workspace: workspaceSnapshot(stringValue(request.project_root, runDir)),
     inputs: {
       plan: {
         path: request.plan_file || null,
@@ -477,8 +522,8 @@ function createRunManifest(
 
 function updateRunManifest(
   runDir: string,
-  updater: MutableJsonObject | ((current: MutableJsonObject) => MutableJsonObject),
-) {
+  updater: MutableJsonObject | ((current: RunManifest) => MutableJsonObject),
+): RunManifest {
   const file = manifestPath(runDir)
   const current = requireRunManifest(runDir)
   const patch = typeof updater === 'function' ? updater(current) : updater
@@ -488,31 +533,35 @@ function updateRunManifest(
     updated_at: new Date().toISOString(),
   }
   writeJson(file, next)
-  return next
+  return next as RunManifest
 }
 
 function markManifestRunning(runDir: string, request: MutableJsonObject) {
   const reviewPlanFile = path.join(runDir, 'review-plan.md')
-  return updateRunManifest(runDir, (current: any) => ({
-    status: 'running',
-    inputs: {
-      ...current.inputs,
-      review_plan: {
-        path: 'review-plan.md',
-        hash: hashFileIfExists(reviewPlanFile) || hashText(request.review_plan || request.plan),
+  return updateRunManifest(runDir, (current) => {
+    const inputs = objectValue(current.inputs)
+    const artifacts = objectValue(current.artifacts)
+    return {
+      status: 'running',
+      inputs: {
+        ...inputs,
+        review_plan: {
+          path: 'review-plan.md',
+          hash: hashFileIfExists(reviewPlanFile) || hashText(request.review_plan || request.plan),
+        },
+        review_plan_refs_hash: request.review_plan_refs
+          ? hashJson(request.review_plan_refs as JsonValue)
+          : inputs.review_plan_refs_hash,
       },
-      review_plan_refs_hash: request.review_plan_refs
-        ? hashJson(request.review_plan_refs)
-        : current.inputs.review_plan_refs_hash,
-    },
-    artifacts: {
-      ...current.artifacts,
-      review_plan: 'review-plan.md',
-      plan_compaction: 'plan-compaction.json',
-      review_plan_refs: 'review-plan-refs.json',
-      plan_authoring_lint: 'plan-authoring-lint.json',
-    },
-  }))
+      artifacts: {
+        ...artifacts,
+        review_plan: 'review-plan.md',
+        plan_compaction: 'plan-compaction.json',
+        review_plan_refs: 'review-plan-refs.json',
+        plan_authoring_lint: 'plan-authoring-lint.json',
+      },
+    }
+  })
 }
 
 function relativeFromRun(runDir: string, file: string | null | undefined): string | null {
@@ -603,7 +652,8 @@ function relocateAttemptArtifacts(attempt: MutableJsonObject, role: string, arch
     archived_as: archivedRoleDir,
   }
   for (const field of ATTEMPT_ARTIFACT_FIELDS) {
-    next[field] = relocateRolePath(next[field], role, archivedRoleDir)
+    const value = next[field]
+    next[field] = relocateRolePath(typeof value === 'string' ? value : null, role, archivedRoleDir)
   }
   return next
 }
@@ -613,9 +663,10 @@ function recordResolvedExecution(runDir: string, metadata: ExecutionMetadata, ex
   if (!role) {
     throw new Error('Cannot record resolved execution without role')
   }
-  return updateRunManifest(runDir, (current: any) => {
-    const previous = current.resolved_execution?.[role] || {}
-    const history = Array.isArray(previous.attempt_history) ? previous.attempt_history : []
+  return updateRunManifest(runDir, (current) => {
+    const resolvedExecution = objectValue(current.resolved_execution)
+    const previous = objectValue(resolvedExecution[role])
+    const history = Array.isArray(previous.attempt_history) ? previous.attempt_history.filter(objectValue) : []
     const artifactPaths = attemptArtifactPaths(runDir, metadata, role, extra)
     const attempt = {
       attempt_index: history.length + 1,
@@ -643,7 +694,7 @@ function recordResolvedExecution(runDir: string, metadata: ExecutionMetadata, ex
     const nextHistory = [...history, attempt]
     return {
       resolved_execution: {
-        ...current.resolved_execution,
+        ...resolvedExecution,
         [role]: {
           adapter: attempt.adapter,
           provider: attempt.provider,
@@ -677,18 +728,21 @@ function archiveResolvedExecutionAttempt(runDir: string, role: string, archivedR
   if (!archivedRoleDir) {
     return null
   }
-  return updateRunManifest(runDir, (current: any) => {
-    const roleExecution = current.resolved_execution?.[role]
-    if (!roleExecution) {
+  return updateRunManifest(runDir, (current) => {
+    const resolvedExecution = objectValue(current.resolved_execution)
+    const roleExecution = objectValue(resolvedExecution[role])
+    if (!Object.keys(roleExecution).length) {
       return {}
     }
-    const history = Array.isArray(roleExecution.attempt_history) ? roleExecution.attempt_history : []
+    const history = Array.isArray(roleExecution.attempt_history)
+      ? roleExecution.attempt_history.filter(objectValue)
+      : []
     if (!history.length) {
       return {}
     }
     const latestIndex = history.length - 1
     const relocatedLatest = relocateAttemptArtifacts(history[latestIndex], role, archivedRoleDir)
-    const nextHistory = history.map((attempt: any, index: any) => (index === latestIndex ? relocatedLatest : attempt))
+    const nextHistory = history.map((attempt, index) => (index === latestIndex ? relocatedLatest : attempt))
     const nextRoleExecution: MutableJsonObject = {
       ...roleExecution,
       archived_as: archivedRoleDir,
@@ -699,7 +753,7 @@ function archiveResolvedExecutionAttempt(runDir: string, role: string, archivedR
     }
     return {
       resolved_execution: {
-        ...current.resolved_execution,
+        ...resolvedExecution,
         [role]: nextRoleExecution,
       },
     }
@@ -707,15 +761,18 @@ function archiveResolvedExecutionAttempt(runDir: string, role: string, archivedR
 }
 
 function markManifestFinished(runDir: string, status: string, patch: MutableJsonObject = {}) {
-  return updateRunManifest(runDir, (current: any) => ({
-    ...patch,
-    status,
-    finished_at: new Date().toISOString(),
-    artifacts: {
-      ...current.artifacts,
-      report: fs.existsSync(path.join(runDir, 'report.json')) ? 'report.json' : current.artifacts?.report,
-    },
-  }))
+  return updateRunManifest(runDir, (current) => {
+    const artifacts = objectValue(current.artifacts)
+    return {
+      ...patch,
+      status,
+      finished_at: new Date().toISOString(),
+      artifacts: {
+        ...artifacts,
+        report: fs.existsSync(path.join(runDir, 'report.json')) ? 'report.json' : artifacts.report,
+      },
+    }
+  })
 }
 
 export {
