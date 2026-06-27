@@ -5,6 +5,9 @@ import * as path from 'node:path'
 
 export type ArgValue = string | true | undefined
 export type ParsedArgs = Record<string, ArgValue>
+export type JsonPrimitive = string | number | boolean | null
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
+export type JsonObject = { [key: string]: JsonValue }
 
 export interface AgentOutputPaths {
   outputDir: string
