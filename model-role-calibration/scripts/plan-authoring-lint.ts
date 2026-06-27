@@ -88,7 +88,7 @@ interface ExistingCodeRef {
 
 interface ManifestCodeRef {
   path: string
-  line_ref: string
+  line_ref: string | null
   lines?: string
   original_ref: string
 }
