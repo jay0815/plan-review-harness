@@ -31,18 +31,122 @@ import {
 import { createRunManifest, recordResolvedExecution } from './workspace-review-manifest.js'
 import { toolList, resolvePlanInput, retryPlanReviewStage, progressSnapshot, getPlanReview } from './plan-review-mcp.js'
 
-function writeJson(file: any, value: any) {
+type JsonRecord = Record<string, unknown>
+type RoleName = 'risk' | 'architecture' | 'execution' | 'rebuttal' | 'fact_check' | 'synthesis'
+
+interface SettingsFixture {
+  env: Record<string, string>
+}
+
+interface WorkspaceConfigLike extends JsonRecord {
+  execution: JsonRecord
+  roles: Record<string, string>
+}
+
+interface WorkspaceRequestLike extends JsonRecord {
+  run_id: string
+  created_at: string
+  project_root: string
+  plan: string
+  context: string
+  roles: string[]
+}
+
+interface ExecutionCoverageOverride {
+  boundary?: string
+  status?: string
+  evidence_basis?: string
+  notes?: string
+}
+
+interface RetryCalls {
+  reviewers: string[]
+  fact_check: number
+  synthesis: number
+  fact_check_reviewers?: string[]
+  synthesis_reviewers?: string[]
+  synthesis_fact_check_probe?: string
+}
+
+interface ReviewerResultLike {
+  role: string
+  model: string
+  output: JsonRecord & { probe: string }
+  output_file: string
+}
+
+interface FactCheckResultLike extends ReviewerResultLike {
+  summary: JsonRecord
+  summary_file: string
+}
+
+interface ProposedArtifactLike {
+  relative_path: string
+  content: string
+  [key: string]: unknown
+}
+
+interface ExistingRefLike {
+  path: string
+  line_ref?: string | null
+}
+
+interface ToolDefinitionLike {
+  name: string
+  description: string
+  inputSchema: {
+    oneOf?: unknown[]
+    properties: Record<string, { description?: string; enum?: string[]; default?: unknown } | undefined>
+  }
+  annotations?: {
+    readOnlyHint?: boolean
+  }
+}
+
+interface ProgressEventLike {
+  message: string
+}
+
+interface RpcMessageLike {
+  id?: number
+  method?: string
+  params?: {
+    progressToken?: string
+    message?: string
+  }
+  result?: {
+    serverInfo?: {
+      name: string
+    }
+    tools?: unknown[]
+    content?: Array<{ text: string }>
+  }
+}
+
+interface ProgressResultLike {
+  status: string
+  next_action: {
+    tool: string
+    instruction: string
+  }
+}
+
+function assertPresent<T>(value: T): asserts value is NonNullable<T> {
+  assert(value)
+}
+
+function writeJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-function recordAttemptIfManifest(runDir: any, metadata: any) {
+function recordAttemptIfManifest(runDir: string, metadata: JsonRecord): void {
   if (fs.existsSync(path.join(runDir, 'run-manifest.json'))) {
     recordResolvedExecution(runDir, metadata)
   }
 }
 
-function settings(baseUrl: any, model: string | null = null) {
+function settings(baseUrl: string, model: string | null = null): SettingsFixture {
   return {
     env: {
       ANTHROPIC_BASE_URL: baseUrl,
@@ -67,8 +171,8 @@ const EXECUTION_BOUNDARIES = [
   'plan_bloat',
 ]
 
-function executionCoverage(overrides: any = {}) {
-  return EXECUTION_BOUNDARIES.map((boundary: any) => ({
+function executionCoverage(overrides: Record<string, ExecutionCoverageOverride> = {}) {
+  return EXECUTION_BOUNDARIES.map((boundary) => ({
     boundary,
     status: 'covered',
     evidence_basis: 'plan_text',
@@ -77,7 +181,7 @@ function executionCoverage(overrides: any = {}) {
   }))
 }
 
-function configFixture(tempDir: any) {
+function configFixture(tempDir: string): { configFile: string; settingsDir: string } {
   const settingsDir = path.join(tempDir, 'settings')
   writeJson(path.join(settingsDir, 'kimi.json'), settings('https://kimi.example'))
   writeJson(path.join(settingsDir, 'deepseek.json'), settings('https://gateway.example', 'deepseek'))
@@ -124,9 +228,9 @@ function configFixture(tempDir: any) {
   return { configFile, settingsDir }
 }
 
-function writeReviewerAttempt(runDir: any, role: any, model: any, status: any = 'completed') {
+function writeReviewerAttempt(runDir: string, role: string, model: string, status = 'completed'): void {
   const roleDir = path.join(runDir, 'roles', role)
-  const output: any = {
+  const output: JsonRecord = {
     probe: role,
     issues: [],
     missing_questions: [],
@@ -149,7 +253,7 @@ function writeReviewerAttempt(runDir: any, role: any, model: any, status: any = 
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function writeFactCheckAttempt(runDir: any, model: any, status: any = 'completed') {
+function writeFactCheckAttempt(runDir: string, model: string, status = 'completed'): void {
   const roleDir = path.join(runDir, 'roles', 'fact_check')
   writeJson(path.join(roleDir, 'output.json'), {
     probe: 'fact_check',
@@ -170,7 +274,7 @@ function writeFactCheckAttempt(runDir: any, model: any, status: any = 'completed
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function writeSynthesisAttempt(runDir: any, model: any, status: any = 'completed') {
+function writeSynthesisAttempt(runDir: string, model: string, status = 'completed'): void {
   const roleDir = path.join(runDir, 'roles', 'synthesis')
   writeJson(path.join(roleDir, 'output.json'), {
     probe: 'synthesis',
@@ -203,12 +307,18 @@ function writeSynthesisAttempt(runDir: any, model: any, status: any = 'completed
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function createRetryRun(config: any, tempDir: any, runId: any, roles: any, retryCounts: any = {}) {
+function createRetryRun<T extends WorkspaceConfigLike>(
+  config: T,
+  tempDir: string,
+  runId: string,
+  roles: string[],
+  retryCounts: JsonRecord = {},
+): { runDir: string; projectRoot: string; config: T } {
   const projectRoot = path.join(tempDir, `${runId}-project`)
   const runDir = path.join(tempDir, `${runId}-run`)
   fs.mkdirSync(projectRoot, { recursive: true })
   fs.mkdirSync(runDir, { recursive: true })
-  const request = {
+  const request: WorkspaceRequestLike = {
     run_id: runId,
     created_at: '2026-06-16T00:00:00.000Z',
     project_root: projectRoot,
@@ -236,13 +346,13 @@ function createRetryRun(config: any, tempDir: any, runId: any, roles: any, retry
         ...config.execution,
         max_concurrency: 2,
       },
-    },
+    } as T,
   }
 }
 
-function retryExecutors(calls: any) {
+function retryExecutors(calls: RetryCalls) {
   return {
-    runRole: async (config: any, request: any, role: any, runDir: any) => {
+    runRole: async (config: WorkspaceConfigLike, request: WorkspaceRequestLike, role: string, runDir: string) => {
       calls.reviewers.push(role)
       const model = config.roles[role]
       writeReviewerAttempt(runDir, role, model)
@@ -258,9 +368,14 @@ function retryExecutors(calls: any) {
         output_file: path.join('roles', role, 'output.json'),
       }
     },
-    runFactCheck: async (config: any, request: any, reviewerResults: any, runDir: any) => {
+    runFactCheck: async (
+      config: WorkspaceConfigLike,
+      request: WorkspaceRequestLike,
+      reviewerResults: ReviewerResultLike[],
+      runDir: string,
+    ) => {
       calls.fact_check += 1
-      calls.fact_check_reviewers = reviewerResults.map((item: any) => item.role)
+      calls.fact_check_reviewers = reviewerResults.map((item) => item.role)
       const model = config.roles.fact_check
       writeFactCheckAttempt(runDir, model)
       return {
@@ -280,9 +395,15 @@ function retryExecutors(calls: any) {
         summary_file: 'roles/fact_check/fact-check-summary.json',
       }
     },
-    runSynthesis: async (config: any, request: any, reviewerResults: any, factCheck: any, runDir: any) => {
+    runSynthesis: async (
+      config: WorkspaceConfigLike,
+      request: WorkspaceRequestLike,
+      reviewerResults: ReviewerResultLike[],
+      factCheck: FactCheckResultLike,
+      runDir: string,
+    ) => {
       calls.synthesis += 1
-      calls.synthesis_reviewers = reviewerResults.map((item: any) => item.role)
+      calls.synthesis_reviewers = reviewerResults.map((item) => item.role)
       calls.synthesis_fact_check_probe = factCheck.output.probe
       const model = config.roles.synthesis
       writeSynthesisAttempt(runDir, model)
@@ -566,7 +687,7 @@ async function main() {
       '  await context.close();',
       '  return { ok: true };',
       '}',
-      ...Array.from({ length: 30 }, (_: any, index: any) => [
+      ...Array.from({ length: 30 }, (_, index) => [
         `const step${index} = await runDetailedImplementationStep(${index});`,
         `expect(step${index}.ok).toBe(true);`,
       ]).flat(),
@@ -599,7 +720,7 @@ async function main() {
     assert(compactedPlan.stats.saved_chars > 0)
 
     const proposedArtifactDir = path.join(tempDir, 'artifact-source')
-    const proposedArtifacts = compactedPlan.artifacts.map((artifact: any) => {
+    const proposedArtifacts = (compactedPlan.artifacts as ProposedArtifactLike[]).map((artifact) => {
       const sourceFile = path.join(proposedArtifactDir, artifact.relative_path)
       fs.mkdirSync(path.dirname(sourceFile), { recursive: true })
       fs.writeFileSync(sourceFile, artifact.content, 'utf8')
@@ -633,7 +754,11 @@ async function main() {
     assert.equal(refs.format_status.has_existing_code_refs_section, true)
     assert.equal(refs.format_status.has_proposed_code_artifacts_section, false)
     assert.equal(refs.format_status.refs_scoped_to_existing_code_refs_section, true)
-    assert(refs.existing_code_refs.some((item: any) => item.path === 'src/cli.ts' && item.line_ref === '1-1'))
+    assert(
+      (refs.existing_code_refs as ExistingRefLike[]).some(
+        (item) => item.path === 'src/cli.ts' && item.line_ref === '1-1',
+      ),
+    )
     assert.deepEqual(refs.existing_code_ref_dirs, [])
     assert.deepEqual(refs.proposed_code_artifacts, [])
     assert(refs.blocked_refs.includes('/outside/project.ts'))
@@ -656,17 +781,17 @@ async function main() {
     assert.equal(chineseRefs.format_status.refs_scoped_to_existing_code_refs_section, true)
     assert(
       chineseRefs.existing_code_refs.some(
-        (item: any) => item.path === 'src/screens/main/mine/index.tsx' && item.line_ref === '1',
+        (item: ExistingRefLike) => item.path === 'src/screens/main/mine/index.tsx' && item.line_ref === '1',
       ),
     )
     assert(
       chineseRefs.existing_code_refs.some(
-        (item: any) => item.path === 'src/navigation/index.tsx' && item.line_ref === '1',
+        (item: ExistingRefLike) => item.path === 'src/navigation/index.tsx' && item.line_ref === '1',
       ),
     )
-    assert(chineseRefs.existing_code_ref_dirs.some((item: any) => item.path === 'src/cdp'))
+    assert((chineseRefs.existing_code_ref_dirs as ExistingRefLike[]).some((item) => item.path === 'src/cdp'))
     assert(!chineseRefs.skipped_refs.includes('src/cdp'))
-    assert(!chineseRefs.existing_code_refs.some((item: any) => item.path === 'src/cdp/extract.ts'))
+    assert(!(chineseRefs.existing_code_refs as ExistingRefLike[]).some((item) => item.path === 'src/cdp/extract.ts'))
 
     const riskValidatorLog = path.join(tempDir, 'risk.validator.log')
     assert.throws(() => buildClaudeWorkspaceArgs(config, 'qwen', 'risk', tempDir), /Missing validator log file/)
@@ -1240,26 +1365,30 @@ async function main() {
     )
     writeJson(path.join(settingsDir, 'glm.json'), settings('https://gateway.example', 'glm'))
 
+    const tools = toolList() as unknown as ToolDefinitionLike[]
     assert.deepEqual(
-      toolList().map((tool: any) => tool.name),
+      tools.map((tool) => tool.name),
       ['configuration_status', 'start_plan_review', 'retry_plan_review_stage', 'get_plan_review'],
     )
-    const startTool: any = toolList().find((tool: any) => tool.name === 'start_plan_review')
-    const retryTool: any = toolList().find((tool: any) => tool.name === 'retry_plan_review_stage')
-    const getTool: any = toolList().find((tool: any) => tool.name === 'get_plan_review')
+    const startTool = tools.find((tool) => tool.name === 'start_plan_review')
+    const retryTool = tools.find((tool) => tool.name === 'retry_plan_review_stage')
+    const getTool = tools.find((tool) => tool.name === 'get_plan_review')
+    assert(startTool)
+    assert(retryTool)
+    assert(getTool)
     assert(startTool.description.includes('同一计划只调用一次'))
-    assert.equal(startTool.inputSchema.oneOf.length, 2)
-    assert(startTool.inputSchema.properties.plan_file.description.includes('优先使用'))
-    assert(startTool.inputSchema.properties.project_root.description.includes('CLAUDE_PROJECT_DIR'))
+    assert.equal(startTool.inputSchema.oneOf?.length, 2)
+    assert(startTool.inputSchema.properties.plan_file?.description?.includes('优先使用'))
+    assert(startTool.inputSchema.properties.project_root?.description?.includes('CLAUDE_PROJECT_DIR'))
     assert(retryTool.description.includes('stage=reviewers'))
     assert(retryTool.description.includes('stage=fact_check'))
     assert(retryTool.description.includes('stage=synthesis'))
     assert(retryTool.description.includes('最多重试 3 次'))
-    assert.deepEqual(retryTool.inputSchema.properties.stage.enum, ['reviewers', 'fact_check', 'synthesis'])
+    assert.deepEqual(retryTool.inputSchema.properties.stage?.enum, ['reviewers', 'fact_check', 'synthesis'])
     assert(getTool.description.includes('progress notification'))
     assert(getTool.description.includes('禁止使用 Bash'))
-    assert.equal(getTool.inputSchema.properties.wait_ms.default, undefined)
-    assert.equal(getTool.annotations.readOnlyHint, true)
+    assert.equal(getTool.inputSchema.properties.wait_ms?.default, undefined)
+    assert.equal(getTool.annotations?.readOnlyHint, true)
 
     const planFile = path.join(tempDir, 'plan.md')
     fs.writeFileSync(planFile, '# 实施计划\n\n1. 更新配置。\n', 'utf8')
@@ -1645,7 +1774,7 @@ async function main() {
       role: 'risk',
       model: 'qwen',
     })
-    const progressEvents: any[] = []
+    const progressEvents: ProgressEventLike[] = []
     setTimeout(() => {
       appendExecutionLog(waitRunDir, 'agent_completed', {
         role: 'risk',
@@ -1691,7 +1820,7 @@ async function main() {
         include_report: true,
         wait_ms: 1500,
       },
-      (progress: any) => progressEvents.push(progress),
+      (progress: ProgressEventLike) => progressEvents.push(progress),
     )
     assert.equal(waitedResult.status, 'completed')
     assert.equal(waitedResult.progress.completed_reviewers, 1)
@@ -1718,7 +1847,7 @@ async function main() {
     writeReviewerAttempt(reviewerRetry.runDir, 'architecture', 'kimi', 'failed')
     writeFactCheckAttempt(reviewerRetry.runDir, 'glm', 'failed')
     writeSynthesisAttempt(reviewerRetry.runDir, 'kimi', 'failed')
-    const reviewerCalls: any = {
+    const reviewerCalls: RetryCalls = {
       reviewers: [],
       fact_check: 0,
       synthesis: 0,
@@ -1934,10 +2063,14 @@ async function main() {
     const responses = result.stdout
       .trim()
       .split('\n')
-      .map((line: any) => JSON.parse(line))
+      .map((line) => JSON.parse(line) as RpcMessageLike)
     assert.equal(responses.length, 2)
-    assert.equal(responses[0].result.serverInfo.name, 'plan-review-harness')
-    assert.equal(responses[1].result.tools.length, 4)
+    const initializeResponse = responses[0]
+    const toolsResponse = responses[1]
+    assertPresent(initializeResponse?.result?.serverInfo)
+    assertPresent(toolsResponse?.result?.tools)
+    assert.equal(initializeResponse.result.serverInfo.name, 'plan-review-harness')
+    assert.equal(toolsResponse.result.tools.length, 4)
     assert(!result.stdout.includes('must-not-appear'))
 
     const rpcRunId = 'rpc-wait-run'
@@ -1981,12 +2114,16 @@ async function main() {
     const progressMessages = result.stdout
       .trim()
       .split('\n')
-      .map((line: any) => JSON.parse(line))
-    assert.equal(progressMessages[0].method, 'notifications/progress')
-    assert.equal(progressMessages[0].params.progressToken, 'progress-test')
-    assert(progressMessages[0].params.message.includes('risk/qwen'))
-    assert.equal(progressMessages[1].id, 3)
-    const progressResult = JSON.parse(progressMessages[1].result.content[0].text)
+      .map((line) => JSON.parse(line) as RpcMessageLike)
+    const progressNotification = progressMessages[0]
+    const progressResponse = progressMessages[1]
+    assertPresent(progressNotification?.params)
+    assertPresent(progressResponse?.result?.content?.[0])
+    assert.equal(progressNotification.method, 'notifications/progress')
+    assert.equal(progressNotification.params.progressToken, 'progress-test')
+    assert(progressNotification.params.message?.includes('risk/qwen'))
+    assert.equal(progressResponse.id, 3)
+    const progressResult = JSON.parse(progressResponse.result.content[0].text) as ProgressResultLike
     assert.equal(progressResult.status, 'running')
     assert.equal(progressResult.next_action.tool, 'get_plan_review')
     assert(progressResult.next_action.instruction.includes('不要调用 Bash'))
@@ -1997,7 +2134,7 @@ async function main() {
   }
 }
 
-main().catch((error: any) => {
-  console.error(error.stack || error.message)
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.stack || error.message : String(error))
   process.exitCode = 1
 })
