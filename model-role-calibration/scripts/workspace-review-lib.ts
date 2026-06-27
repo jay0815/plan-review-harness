@@ -5,7 +5,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { ROOT, parseJsonFile, readText, schemaForProbe, slug, writeGenerated } from './lib.js'
+import { ROOT, parseJsonFile, readText, runtimeNodeScriptArgs, schemaForProbe, slug, writeGenerated } from './lib.js'
 
 const REVIEW_ROLES = ['risk', 'architecture', 'execution', 'rebuttal']
 const FACT_CHECK_ROLE = 'fact_check'
@@ -1337,7 +1337,7 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options: any
         json_validator: {
           type: 'stdio',
           command: process.execPath,
-          args: [path.join(ROOT, 'scripts', 'json-validator-mcp.js')],
+          args: runtimeNodeScriptArgs('json-validator-mcp'),
           env: {
             MODEL_ROLE_CALIBRATION_SCHEMA_FILE: schemaFile,
             MODEL_ROLE_CALIBRATION_VALIDATOR_LOG: validatorLogFile,

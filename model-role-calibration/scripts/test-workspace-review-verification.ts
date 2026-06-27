@@ -498,7 +498,7 @@ function main() {
         (item) =>
           item.id === 'manifest.present' &&
           item.status === 'fail' &&
-          item.details.backfill_command.includes('backfill-workspace-run-manifest.js'),
+          item.details.backfill_command.includes('backfill-workspace-run-manifest.ts'),
       ),
     )
     const legacyDoctor: any = doctorWorkspaceReviewRun(legacyRunDir)
@@ -573,7 +573,7 @@ function main() {
         (item) =>
           item.kind === 'retry_stage' &&
           item.stage === 'reviewers' &&
-          item.command.includes('retry-workspace-review-stage.js'),
+          item.command.includes('retry-workspace-review-stage.ts'),
       ),
     )
 

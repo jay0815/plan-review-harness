@@ -13,20 +13,23 @@ interface BuildDistributionOptions {
 
 export const PACKAGE_NAME = 'plan-review-harness-claude-code'
 const DEFAULT_OUTPUT_DIR = path.join(ROOT, 'dist')
-export const RUNTIME_FILES = [
-  'scripts/lib.js',
-  'scripts/run-model.js',
-  'scripts/json-validator-mcp.js',
-  'scripts/plan-authoring-lint.js',
-  'scripts/workspace-review-lib.js',
-  'scripts/workspace-review-manifest.js',
-  'scripts/run-workspace-review.js',
-  'scripts/retry-workspace-review-stage.js',
-  'scripts/plan-review-mcp.js',
-  'scripts/inspect-workspace-run.js',
-  'scripts/verify-workspace-review-run.js',
-  'scripts/doctor-workspace-review-run.js',
-  'scripts/backfill-workspace-run-manifest.js',
+export const RUNTIME_SCRIPT_SOURCES = [
+  'scripts/lib.ts',
+  'scripts/run-model.ts',
+  'scripts/json-validator-mcp.ts',
+  'scripts/plan-authoring-lint.ts',
+  'scripts/workspace-review-lib.ts',
+  'scripts/workspace-review-manifest.ts',
+  'scripts/run-workspace-review.ts',
+  'scripts/retry-workspace-review-stage.ts',
+  'scripts/plan-review-mcp.ts',
+  'scripts/inspect-workspace-run.ts',
+  'scripts/verify-workspace-review-run.ts',
+  'scripts/doctor-workspace-review-run.ts',
+  'scripts/backfill-workspace-run-manifest.ts',
+]
+const RUNTIME_SCRIPT_OUTPUTS = RUNTIME_SCRIPT_SOURCES.map((file) => file.replace(/\.ts$/, '.js'))
+const RUNTIME_ASSET_FILES = [
   'default-role-routes.json',
   'claude-plan-authoring.md',
   'prompts/probe-risk.md',
@@ -42,6 +45,7 @@ export const RUNTIME_FILES = [
   'schemas/fact-check-output.schema.json',
   'schemas/synthesis-output.schema.json',
 ]
+export const RUNTIME_FILES = [...RUNTIME_SCRIPT_OUTPUTS, ...RUNTIME_ASSET_FILES]
 export const SKILL_SOURCE = 'claude-code/skills/plan-review/SKILL.md'
 
 function installScript() {
@@ -411,6 +415,39 @@ function writeExecutable(file, content) {
   fs.chmodSync(file, 0o755)
 }
 
+function compileRuntimeScripts(packageDir) {
+  const configFile = path.join(packageDir, '.tsconfig.runtime.json')
+  const config = {
+    extends: path.join(ROOT, 'tsconfig.json'),
+    compilerOptions: {
+      noEmit: false,
+      outDir: path.join(packageDir, 'mcp'),
+      declaration: false,
+      declarationMap: false,
+      sourceMap: false,
+      noEmitOnError: true,
+      typeRoots: [path.resolve(ROOT, '..', 'node_modules', '@types')],
+    },
+    files: RUNTIME_SCRIPT_SOURCES.map((file) => path.join(ROOT, file)),
+  }
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n', 'utf8')
+  const tscBin = path.resolve(ROOT, '..', 'node_modules', 'typescript', 'bin', 'tsc')
+  const result = spawnSync(process.execPath, [tscBin, '-p', configFile], {
+    encoding: 'utf8',
+  })
+  fs.rmSync(configFile, { force: true })
+  if (result.error || result.status !== 0) {
+    const reason = result.error?.message || [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n')
+    throw new Error(`Unable to compile distribution runtime scripts: ${reason || `exit ${result.status}`}`)
+  }
+  for (const file of RUNTIME_SCRIPT_OUTPUTS) {
+    const outputFile = path.join(packageDir, 'mcp', file)
+    if (!fs.existsSync(outputFile) || !fs.statSync(outputFile).isFile()) {
+      throw new Error(`Distribution runtime script was not generated: ${outputFile}`)
+    }
+  }
+}
+
 function createArchive(outputDir, packageDir) {
   const archiveFile = path.join(outputDir, `${PACKAGE_NAME}.tar.gz`)
   if (fs.existsSync(archiveFile)) {
@@ -432,8 +469,10 @@ export function buildDistribution(options: BuildDistributionOptions = {}) {
   fs.mkdirSync(outputDir, { recursive: true })
   fs.rmSync(packageDir, { recursive: true, force: true })
   fs.mkdirSync(packageDir, { recursive: false })
+  fs.mkdirSync(path.join(packageDir, 'mcp'), { recursive: true })
 
-  for (const relativeFile of RUNTIME_FILES) {
+  compileRuntimeScripts(packageDir)
+  for (const relativeFile of RUNTIME_ASSET_FILES) {
     copyFile(path.join(ROOT, relativeFile), path.join(packageDir, 'mcp', relativeFile))
   }
   copyFile(path.join(ROOT, SKILL_SOURCE), path.join(packageDir, 'skill', 'plan-review', 'SKILL.md'))

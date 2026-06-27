@@ -19,6 +19,7 @@ export const ROOT = path.resolve(__dirname, '..')
 const CONFIG_FILE = path.join(ROOT, 'calibration.config.json')
 export const PROBES = ['planner', 'risk', 'architecture', 'execution', 'rebuttal', 'synthesis']
 const REVIEW_PROBES = new Set(['risk', 'architecture', 'execution', 'rebuttal'])
+const SCRIPT_EXTENSION = path.extname(__filename) === '.ts' ? '.ts' : '.js'
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {}
@@ -134,6 +135,18 @@ export function isMainScript(filename: string, argv: string[] = process.argv): b
   } catch {
     return false
   }
+}
+
+export function runtimeScript(name: string): string {
+  return path.join(ROOT, 'scripts', `${name}${SCRIPT_EXTENSION}`)
+}
+
+export function nodeScriptArgs(script: string, ...args: string[]): string[] {
+  return path.extname(script) === '.ts' ? ['--import', 'tsx', script, ...args] : [script, ...args]
+}
+
+export function runtimeNodeScriptArgs(name: string, ...args: string[]): string[] {
+  return nodeScriptArgs(runtimeScript(name), ...args)
 }
 
 function loadLegacyCaseInput(caseDir: string): string {

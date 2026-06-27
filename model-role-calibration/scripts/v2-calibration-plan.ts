@@ -24,18 +24,19 @@ interface CalibrationConfig {
 }
 
 const DEFAULT_SCORE_VERSION = 'manual-v1'
-const SCRIPT = 'model-role-calibration/scripts/v2-calibration-plan.js'
-const RUN_CALIBRATION = 'model-role-calibration/scripts/run-calibration.js'
-const SCORE_OUTPUT = 'model-role-calibration/scripts/score-output.js'
-const SUMMARIZE_RESULTS = 'model-role-calibration/scripts/summarize-results.js'
+const TS_RUNNER = 'node --import tsx'
+const SCRIPT = 'model-role-calibration/scripts/v2-calibration-plan.ts'
+const RUN_CALIBRATION = 'model-role-calibration/scripts/run-calibration.ts'
+const SCORE_OUTPUT = 'model-role-calibration/scripts/score-output.ts'
+const SUMMARIZE_RESULTS = 'model-role-calibration/scripts/summarize-results.ts'
 
 function usage() {
   return [
     'Usage:',
-    `  node ${SCRIPT} --run <run-id> --action status`,
-    `  node ${SCRIPT} --run <run-id> --action prepare --cases synthetic/plugin-lifecycle`,
-    `  node ${SCRIPT} --run <run-id> --action commands --cases synthetic/plugin-lifecycle`,
-    `  node ${SCRIPT} --run <run-id> --action score-commands`,
+    `  ${TS_RUNNER} ${SCRIPT} --run <run-id> --action status`,
+    `  ${TS_RUNNER} ${SCRIPT} --run <run-id> --action prepare --cases synthetic/plugin-lifecycle`,
+    `  ${TS_RUNNER} ${SCRIPT} --run <run-id> --action commands --cases synthetic/plugin-lifecycle`,
+    `  ${TS_RUNNER} ${SCRIPT} --run <run-id> --action score-commands`,
     '',
     'Actions:',
     '  status          Inspect prompt, output, and score coverage. Does not write files.',
@@ -44,7 +45,7 @@ function usage() {
     '  score-commands  Print score-output commands for completed outputs missing scores.',
     '  all             Print status, model commands, score commands, and summarize command.',
     '',
-    'This helper never starts run-calibration.js or any model wrapper itself.',
+    'This helper never starts run-calibration.ts or any model wrapper itself.',
   ].join('\n')
 }
 
@@ -160,7 +161,7 @@ function preparePrompts({ run, cases, probes }) {
 function printModelCommands({ run, cases, models, probes, jobs }) {
   console.log('# Prepare prompts first. This command does not run models.')
   console.log(
-    `node ${SCRIPT} --run ${run} --cases ${cases.join(',')} --models ${models.join(',')} ` +
+    `${TS_RUNNER} ${SCRIPT} --run ${run} --cases ${cases.join(',')} --models ${models.join(',')} ` +
       `--probes ${probes.join(',')} --action prepare`,
   )
   console.log('')
@@ -173,7 +174,7 @@ function printModelCommands({ run, cases, models, probes, jobs }) {
     }
     console.log(
       [
-        `node ${RUN_CALIBRATION} \\`,
+        `${TS_RUNNER} ${RUN_CALIBRATION} \\`,
         `  --run ${run} \\`,
         `  --case ${caseId} \\`,
         `  --models ${models.join(',')} \\`,
@@ -193,7 +194,7 @@ function printScoreCommands({ run, jobs, scoreVersion }) {
   for (const job of missing) {
     console.log(
       [
-        `node ${SCORE_OUTPUT} \\`,
+        `${TS_RUNNER} ${SCORE_OUTPUT} \\`,
         `  --run ${run} \\`,
         `  --case ${job.caseId} \\`,
         `  --model ${job.model} \\`,
@@ -207,7 +208,7 @@ function printScoreCommands({ run, jobs, scoreVersion }) {
 
 function printSummaryCommand(run, scoreVersion) {
   console.log('# Summarize after scores are filled.')
-  console.log(`node ${SUMMARIZE_RESULTS} --run ${run} --score-version ${scoreVersion}`)
+  console.log(`${TS_RUNNER} ${SUMMARIZE_RESULTS} --run ${run} --score-version ${scoreVersion}`)
 }
 
 function main() {

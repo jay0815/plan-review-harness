@@ -139,7 +139,7 @@ npm run plan-review:lint-plan -- \
 创建 case：
 
 ```bash
-node model-role-calibration/scripts/create-case.js --group synthetic --id case-004
+node --import tsx model-role-calibration/scripts/create-case.ts --group synthetic --id case-004
 ```
 
 ### Fact Checker 校准
@@ -237,7 +237,7 @@ npm run fact-check:run -- \
 一键生成 run、生成全部 prompt 并启动三并发模型池：
 
 ```bash
-node model-role-calibration/scripts/run-calibration.js
+node --import tsx model-role-calibration/scripts/run-calibration.ts
 ```
 
 默认等价于：
@@ -251,7 +251,7 @@ probes: planner,risk,architecture,execution,rebuttal,synthesis
 也可以显式覆盖：
 
 ```bash
-node model-role-calibration/scripts/run-calibration.js \
+node --import tsx model-role-calibration/scripts/run-calibration.ts \
   --run synthetic-event-reporting-manual-001 \
   --case synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
@@ -293,7 +293,7 @@ model-role-calibration/cases/synthetic/event-reporting/v2-experiment.md
 ```bash
 RUN_ID="synthetic-event-reporting-v2-$(date -u +%Y%m%dT%H%M%SZ)"
 
-node model-role-calibration/scripts/run-calibration.js \
+node --import tsx model-role-calibration/scripts/run-calibration.ts \
   --run "$RUN_ID" \
   --case synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
@@ -311,7 +311,7 @@ model-role-calibration/runs/<run-id>/batch.json
 生成 prompt：
 
 ```bash
-node model-role-calibration/scripts/generate-prompts.js \
+node --import tsx model-role-calibration/scripts/generate-prompts.ts \
   --case synthetic/event-reporting \
   --probes planner,risk,architecture,execution,rebuttal,synthesis
 ```
@@ -325,7 +325,7 @@ model-role-calibration/runs/<run-id>/<case-id>/prompts/
 运行单个 agent：
 
 ```bash
-node model-role-calibration/scripts/run-model.js \
+node --import tsx model-role-calibration/scripts/run-model.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -337,7 +337,7 @@ node model-role-calibration/scripts/run-model.js \
 使用固定三并发池运行候选队列：
 
 ```bash
-node model-role-calibration/scripts/run-agent-pool.js \
+node --import tsx model-role-calibration/scripts/run-agent-pool.ts \
   --run <run-id> \
   --cases synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
@@ -347,7 +347,7 @@ node model-role-calibration/scripts/run-agent-pool.js \
 录入模型输出：
 
 ```bash
-node model-role-calibration/scripts/ingest-output.js \
+node --import tsx model-role-calibration/scripts/ingest-output.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -360,7 +360,7 @@ node model-role-calibration/scripts/ingest-output.js \
 创建人工评分文件：
 
 ```bash
-node model-role-calibration/scripts/score-output.js \
+node --import tsx model-role-calibration/scripts/score-output.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -377,7 +377,7 @@ model-role-calibration/runs/<run-id>/<case-id>/scores/versions/manual-v1/<model>
 汇总一次 run：
 
 ```bash
-node model-role-calibration/scripts/summarize-results.js --run <run-id> --score-version manual-v1
+node --import tsx model-role-calibration/scripts/summarize-results.ts --run <run-id> --score-version manual-v1
 ```
 
 生成报告：
@@ -418,7 +418,7 @@ model-role-calibration/cases/synthetic/event-reporting/rubric.md
 让工具自动生成 run id：
 
 ```bash
-node model-role-calibration/scripts/generate-prompts.js \
+node --import tsx model-role-calibration/scripts/generate-prompts.ts \
   --case synthetic/event-reporting \
   --probes planner
 ```
@@ -435,7 +435,7 @@ Generated prompts: model-role-calibration/runs/<run-id>/synthetic/event-reportin
 如果要为一个 case 生成全部 probe：
 
 ```bash
-node model-role-calibration/scripts/generate-prompts.js \
+node --import tsx model-role-calibration/scripts/generate-prompts.ts \
   --case synthetic/event-reporting \
   --probes planner,risk,architecture,execution,rebuttal,synthesis
 ```
@@ -443,7 +443,7 @@ node model-role-calibration/scripts/generate-prompts.js \
 如果要把另一个 case 加入同一个 run：
 
 ```bash
-node model-role-calibration/scripts/generate-prompts.js \
+node --import tsx model-role-calibration/scripts/generate-prompts.ts \
   --run <run-id> \
   --case synthetic/plugin-lifecycle \
   --probes planner,risk,architecture,execution,rebuttal,synthesis
@@ -465,7 +465,7 @@ synthesis -> synthesis-output.schema.json
 单个任务：
 
 ```bash
-node model-role-calibration/scripts/run-model.js \
+node --import tsx model-role-calibration/scripts/run-model.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -496,7 +496,7 @@ runner 通过交互式 zsh 解析 wrapper 别名，并以 `-p --output-format st
 调试真实 wrapper 时，如果需要保留 Claude Code 会话供人工 `--resume` 检查，可以加：
 
 ```bash
-node model-role-calibration/scripts/run-model.js \
+node --import tsx model-role-calibration/scripts/run-model.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model deepseek \
@@ -509,7 +509,7 @@ node model-role-calibration/scripts/run-model.js \
 如果需要评估“agent + JSON 校验工具”的生产表现，而不是模型原生输出 JSON 的能力，可以开启本地 MCP 校验工具：
 
 ```bash
-node model-role-calibration/scripts/run-model.js \
+node --import tsx model-role-calibration/scripts/run-model.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model qwen \
@@ -519,7 +519,7 @@ node model-role-calibration/scripts/run-model.js \
 
 此模式会：
 
-- 加载 `scripts/json-validator-mcp.js` 作为唯一 MCP server。
+- 加载 `scripts/json-validator-mcp.ts` 作为唯一 MCP server。
 - 保持 `--tools ""`，仍禁用 Bash、Read、Edit 等内置工具。
 - 保持 `--strict-mcp-config`，只允许本次显式传入的 MCP。
 - 不再传 `--disallowed-tools "mcp__*"`，否则 validator 工具也会被禁用。
@@ -544,7 +544,7 @@ model-role-calibration/runs/<run-id>/<case-id>/agent-outputs/attempts/<model>-<p
 如果 case 或 probe prompt 已修改，需要在同一个 run 中刷新指定任务，可以使用 `run-calibration.js --force`：
 
 ```bash
-node model-role-calibration/scripts/run-calibration.js \
+node --import tsx model-role-calibration/scripts/run-calibration.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
@@ -558,7 +558,7 @@ node model-role-calibration/scripts/run-calibration.js \
 批量角色扮演使用固定容量为 3 的池：
 
 ```bash
-node model-role-calibration/scripts/run-agent-pool.js \
+node --import tsx model-role-calibration/scripts/run-agent-pool.ts \
   --run <run-id> \
   --cases synthetic/event-reporting \
   --models kimi,deepseek,glm,qwen \
@@ -590,7 +590,7 @@ model-role-calibration/runs/<run-id>/agent-pools/batch-<timestamp>.json
 当前批次完全排空，并确认累计索引没有 `unresolved_jobs` 后，逐个录入可评分输出：
 
 ```bash
-node model-role-calibration/scripts/ingest-output.js \
+node --import tsx model-role-calibration/scripts/ingest-output.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -612,7 +612,7 @@ model-role-calibration/runs/<run-id>/synthetic/event-reporting/outputs/normalize
 创建人工评分文件：
 
 ```bash
-node model-role-calibration/scripts/score-output.js \
+node --import tsx model-role-calibration/scripts/score-output.ts \
   --run <run-id> \
   --case synthetic/event-reporting \
   --model kimi \
@@ -637,7 +637,7 @@ model-role-calibration/cases/synthetic/event-reporting/rubric.md
 至少填写一个 score 文件后，执行：
 
 ```bash
-node model-role-calibration/scripts/summarize-results.js --run <run-id> --score-version manual-v1
+node --import tsx model-role-calibration/scripts/summarize-results.ts --run <run-id> --score-version manual-v1
 ```
 
 报告会写入：

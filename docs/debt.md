@@ -17,6 +17,6 @@
 ## test 命令过长
 
 - **状态**: 已知
-- **影响**: package.json 中 test 脚本超过 3000 字符，难以维护
-- **原因**: 所有 node --check 和测试命令串行拼接
+- **影响**: package.json 中 calibration:test 脚本串行列出多个回归脚本，仍偏长
+- **原因**: 多个 TS runner 测试命令直接拼接在 package script 中
 - **后续**: 考虑拆分为独立的 test 脚本文件

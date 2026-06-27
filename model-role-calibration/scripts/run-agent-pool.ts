@@ -19,6 +19,8 @@ import {
   parseJsonFile,
   timestamp,
   agentOutputPaths,
+  nodeScriptArgs,
+  runtimeScript,
 } from './lib.js'
 
 const MAX_CONCURRENCY = 3
@@ -278,7 +280,7 @@ function main() {
     }
   }
 
-  const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || path.join(ROOT, 'scripts', 'run-model.js')
+  const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('run-model')
   const pending: any[] = [...jobs]
   const active = new Map<number, any>()
   const completed: any[] = []
@@ -363,7 +365,7 @@ function main() {
       const label = jobKey(job)
       const child = spawn(
         process.execPath,
-        [
+        nodeScriptArgs(
           runner,
           '--run',
           run,
@@ -374,7 +376,7 @@ function main() {
           '--probe',
           job.probe,
           '--with-json-validator',
-        ],
+        ),
         {
           cwd: ROOT,
           env: process.env,

@@ -6,14 +6,14 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { ROOT, agentOutputPaths, parseJsonFile as parseJsonFileTyped } from './lib.js'
+import { ROOT, agentOutputPaths, nodeScriptArgs, parseJsonFile as parseJsonFileTyped, runtimeScript } from './lib.js'
 
 const parseJsonFile = parseJsonFileTyped as (file: string) => any
 
 const FAKE_CONCURRENCY_DELAY_MS = '250'
 
 function runNode(script, args, env: any = {}) {
-  return spawnSync(process.execPath, [script, ...args], {
+  return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
     timeout: 10000,
@@ -31,7 +31,7 @@ function requireSuccess(result, label) {
 }
 
 function generatePrompts(run, probes) {
-  const result = runNode(path.join(ROOT, 'scripts', 'generate-prompts.js'), [
+  const result = runNode(runtimeScript('generate-prompts'), [
     '--run',
     run,
     '--case',
@@ -73,9 +73,9 @@ function main() {
   const fakeShell = path.join(tempDir, 'fake-shell')
   const fakeModel = path.join(tempDir, 'fake-model.mjs')
   const noOutputRunner = path.join(tempDir, 'no-output-runner.mjs')
-  const runModel = path.join(ROOT, 'scripts', 'run-model.js')
-  const runPool = path.join(ROOT, 'scripts', 'run-agent-pool.js')
-  const runCalibration = path.join(ROOT, 'scripts', 'run-calibration.js')
+  const runModel = runtimeScript('run-model')
+  const runPool = runtimeScript('run-agent-pool')
+  const runCalibration = runtimeScript('run-calibration')
   const runIds = [
     `runtime-retry-${process.pid}-${Date.now()}`,
     `runtime-pool-${process.pid}-${Date.now()}`,

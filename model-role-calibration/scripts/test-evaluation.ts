@@ -6,7 +6,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { ROOT, ensureDir, parseJsonFile, writeGenerated } from './lib.js'
+import { ROOT, ensureDir, nodeScriptArgs, parseJsonFile, runtimeScript, writeGenerated } from './lib.js'
 import {
   buildCodexArgs,
   buildEvaluationPrompt,
@@ -18,7 +18,7 @@ import {
 const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (score: any, expected: any) => any
 
 function runNode(script, args, env = {}) {
-  return spawnSync(process.execPath, [script, ...args], {
+  return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
     timeout: 10000,
@@ -80,10 +80,10 @@ function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'evaluation-test-'))
   const fakeCodex = path.join(tempDir, 'fake-codex.mjs')
   const invocationFile = path.join(tempDir, 'invocation.json')
-  const runEvaluation = path.join(ROOT, 'scripts', 'run-evaluation.js')
-  const promoteEvaluation = path.join(ROOT, 'scripts', 'promote-evaluation.js')
-  const scoreOutput = path.join(ROOT, 'scripts', 'score-output.js')
-  const summarizeResults = path.join(ROOT, 'scripts', 'summarize-results.js')
+  const runEvaluation = runtimeScript('run-evaluation')
+  const promoteEvaluation = runtimeScript('promote-evaluation')
+  const scoreOutput = runtimeScript('score-output')
+  const summarizeResults = runtimeScript('summarize-results')
   const generatedOutputs = [
     path.join(ROOT, 'outputs', 'calibration-results.json'),
     path.join(ROOT, 'outputs', 'calibration-summary.md'),

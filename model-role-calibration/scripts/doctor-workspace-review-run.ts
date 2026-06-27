@@ -3,7 +3,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { isMainScript, parseArgs } from './lib.js'
+import { isMainScript, parseArgs, runtimeNodeScriptArgs } from './lib.js'
 import { resolveRunDir, verifyRun } from './verify-workspace-review-run.js'
 
 const REVIEWER_ROLES = new Set(['risk', 'architecture', 'execution', 'rebuttal'])
@@ -145,7 +145,7 @@ function shellCommand(parts) {
 function retryCommand(runDir, stage) {
   return shellCommand([
     'node',
-    path.join(__dirname, 'retry-workspace-review-stage.js'),
+    ...runtimeNodeScriptArgs('retry-workspace-review-stage'),
     '--run-dir',
     runDir,
     '--stage',
@@ -250,7 +250,7 @@ function buildActions({ runDir, verification, lint, refs, synthesis }) {
       priority: 'P1',
       kind: 'run_verify',
       reason: '标准验证未通过；查看 verify 输出中的 fail 项定位具体 contract 退化。',
-      command: shellCommand(['node', path.join(__dirname, 'verify-workspace-review-run.js'), '--run-dir', runDir]),
+      command: shellCommand(['node', ...runtimeNodeScriptArgs('verify-workspace-review-run', '--run-dir', runDir)]),
     })
   }
 

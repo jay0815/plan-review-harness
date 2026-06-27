@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { ROOT, isMainScript, parseArgs, parseJsonFile, writeFileNew } from './lib.js'
+import { ROOT, isMainScript, parseArgs, parseJsonFile, runtimeNodeScriptArgs, writeFileNew } from './lib.js'
 import {
   REVIEW_ROLES,
   MAX_EXECUTOR_RETRIES,
@@ -314,13 +314,16 @@ function startPlanReview(config, input: any) {
 
   const stdoutFd = fs.openSync(path.join(runDir, 'runner.stdout.log'), 'a')
   const stderrFd = fs.openSync(path.join(runDir, 'runner.stderr.log'), 'a')
-  const runner = path.join(ROOT, 'scripts', 'run-workspace-review.js')
-  const child = spawn(process.execPath, [runner, ...config.loader_args, '--run-dir', runDir], {
-    cwd: path.resolve(ROOT, '..'),
-    detached: true,
-    stdio: ['ignore', stdoutFd, stderrFd],
-    env: withoutAnthropicApiKey(process.env),
-  })
+  const child = spawn(
+    process.execPath,
+    runtimeNodeScriptArgs('run-workspace-review', ...config.loader_args, '--run-dir', runDir),
+    {
+      cwd: path.resolve(ROOT, '..'),
+      detached: true,
+      stdio: ['ignore', stdoutFd, stderrFd],
+      env: withoutAnthropicApiKey(process.env),
+    },
+  )
   child.on('error', (error) => {
     appendExecutionLog(runDir, 'runner_start_failed', {
       run_id: runId,
@@ -443,10 +446,17 @@ function retryPlanReviewStage(config, input: any) {
 
   const stdoutFd = fs.openSync(path.join(runDir, 'runner.stdout.log'), 'a')
   const stderrFd = fs.openSync(path.join(runDir, 'runner.stderr.log'), 'a')
-  const runner = path.join(ROOT, 'scripts', 'retry-workspace-review-stage.js')
   const child = spawn(
     process.execPath,
-    [runner, ...config.loader_args, '--run-dir', runDir, '--stage', input.stage, ...(input.force ? ['--force'] : [])],
+    runtimeNodeScriptArgs(
+      'retry-workspace-review-stage',
+      ...config.loader_args,
+      '--run-dir',
+      runDir,
+      '--stage',
+      input.stage,
+      ...(input.force ? ['--force'] : []),
+    ),
     {
       cwd: path.resolve(ROOT, '..'),
       detached: true,

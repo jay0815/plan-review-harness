@@ -20,6 +20,7 @@ import {
   parseJsonFile,
   schemaForProbe,
   agentOutputPaths,
+  runtimeNodeScriptArgs,
 } from './lib.js'
 
 const ALIAS_MARKER = Buffer.from('\0MRC_ARGV\0')
@@ -440,7 +441,7 @@ function buildCliArgs(wrapperArgs, schema, options) {
           json_validator: {
             type: 'stdio',
             command: process.execPath,
-            args: [path.join(ROOT, 'scripts', 'json-validator-mcp.js')],
+            args: runtimeNodeScriptArgs('json-validator-mcp'),
             env: {
               MODEL_ROLE_CALIBRATION_SCHEMA_FILE: options.schemaFile,
               MODEL_ROLE_CALIBRATION_VALIDATOR_LOG: options.validatorLogFile,

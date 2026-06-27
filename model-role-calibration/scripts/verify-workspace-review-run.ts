@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { isMainScript, parseArgs } from './lib.js'
+import { isMainScript, parseArgs, runtimeNodeScriptArgs } from './lib.js'
 import { inspect } from './inspect-workspace-run.js'
 
 const REVIEWER_ROLES = ['risk', 'architecture', 'execution', 'rebuttal']
@@ -151,7 +151,7 @@ function shellCommand(parts) {
 }
 
 function backfillManifestCommand(runDir) {
-  return shellCommand(['node', path.join(__dirname, 'backfill-workspace-run-manifest.js'), '--run-dir', runDir])
+  return shellCommand(['node', ...runtimeNodeScriptArgs('backfill-workspace-run-manifest', '--run-dir', runDir)])
 }
 
 function buildResult({ absoluteRunDir, state, report, inspected, compaction, totalElapsedMs, results, ready }) {

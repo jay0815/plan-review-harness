@@ -6,6 +6,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { nodeScriptArgs, runtimeScript } from './lib.js'
 import {
   loadWorkspaceReviewConfig,
   loadWorkspaceReviewSettingsDirectory,
@@ -318,7 +319,7 @@ function retryExecutors(calls: any) {
 
 async function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-mcp-test-'))
-  const server = path.join(__dirname, 'plan-review-mcp.js')
+  const server = runtimeScript('plan-review-mcp')
   try {
     const { configFile, settingsDir } = configFixture(tempDir)
     const config = loadWorkspaceReviewConfig(configFile)
@@ -712,7 +713,7 @@ async function main() {
       const mcpConfig = JSON.parse(roleArgs[roleArgs.indexOf('--mcp-config') + 1])
       const validator = mcpConfig.mcpServers.json_validator
       assert.equal(validator.command, process.execPath)
-      assert(validator.args[0].endsWith('scripts/json-validator-mcp.js'))
+      assert(validator.args.includes(runtimeScript('json-validator-mcp')))
       assert.equal(validator.env.MODEL_ROLE_CALIBRATION_MODEL, model)
       assert.equal(validator.env.MODEL_ROLE_CALIBRATION_PROBE, role)
       assert.equal(validator.env.MODEL_ROLE_CALIBRATION_VALIDATOR_LOG, validatorLog)
@@ -1883,7 +1884,7 @@ async function main() {
 
     let result = spawnSync(
       process.execPath,
-      [server, '--settings-dir', settingsDir, '--claude-bin', process.execPath, '--validate-only'],
+      nodeScriptArgs(server, '--settings-dir', settingsDir, '--claude-bin', process.execPath, '--validate-only'),
       {
         encoding: 'utf8',
         env: {
@@ -1914,15 +1915,19 @@ async function main() {
       }),
       '',
     ].join('\n')
-    result = spawnSync(process.execPath, [server, '--settings-dir', settingsDir, '--claude-bin', process.execPath], {
-      encoding: 'utf8',
-      input: rpcInput,
-      timeout: 10000,
-      env: {
-        ...withoutAnthropicApiKey(process.env),
-        ANTHROPIC_API_KEY: 'must-not-appear',
+    result = spawnSync(
+      process.execPath,
+      nodeScriptArgs(server, '--settings-dir', settingsDir, '--claude-bin', process.execPath),
+      {
+        encoding: 'utf8',
+        input: rpcInput,
+        timeout: 10000,
+        env: {
+          ...withoutAnthropicApiKey(process.env),
+          ANTHROPIC_API_KEY: 'must-not-appear',
+        },
       },
-    })
+    )
     assert.equal(result.status, 0, result.stderr)
     const responses = result.stdout
       .trim()
@@ -1964,7 +1969,7 @@ async function main() {
       }),
       '',
     ].join('\n')
-    result = spawnSync(process.execPath, [server, '--config', configFile], {
+    result = spawnSync(process.execPath, nodeScriptArgs(server, '--config', configFile), {
       encoding: 'utf8',
       input: progressRpcInput,
       timeout: 10000,

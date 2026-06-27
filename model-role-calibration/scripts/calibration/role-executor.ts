@@ -3,7 +3,15 @@ import * as path from 'node:path'
 import { spawn } from 'node:child_process'
 
 import { generatePrompts as generateRolePrompts } from '../generate-prompts.js'
-import { ROOT, agentOutputPaths, assertProbe, assertSafeCaseId, parseJsonFile } from '../lib.js'
+import {
+  ROOT,
+  agentOutputPaths,
+  assertProbe,
+  assertSafeCaseId,
+  nodeScriptArgs,
+  parseJsonFile,
+  runtimeScript,
+} from '../lib.js'
 import { slug, uniqueRunId as createUniqueRunId } from './core.js'
 
 interface CalibrationConfig {
@@ -159,10 +167,9 @@ export function runModelJob(
   options: RunModelJobOptions = {},
 ): Promise<CompletedRoleJobResult | FailedRoleJobResult> {
   return new Promise((resolve) => {
-    const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || path.join(ROOT, 'scripts', 'run-model.js')
+    const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('run-model')
     const startedAt = new Date().toISOString()
-    const childArgs = [
-      runner,
+    const runnerArgs = [
       '--run',
       job.run,
       '--case',
@@ -174,9 +181,9 @@ export function runModelJob(
       '--with-json-validator',
     ]
     if (options.force) {
-      childArgs.push('--force')
+      runnerArgs.push('--force')
     }
-    const child = spawn(process.execPath, childArgs, {
+    const child = spawn(process.execPath, nodeScriptArgs(runner, ...runnerArgs), {
       cwd: ROOT,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
