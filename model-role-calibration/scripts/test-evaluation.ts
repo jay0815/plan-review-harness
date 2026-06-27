@@ -2,6 +2,7 @@
 
 import assert from 'node:assert'
 import { spawnSync } from 'node:child_process'
+import type { SpawnSyncReturns } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -12,12 +13,26 @@ import {
   buildEvaluationPrompt,
   evaluationPaths,
   evaluationSchemaFile,
-  validateEvaluationScore as validateEvaluationScoreTyped,
+  validateEvaluationScore,
 } from './evaluation-lib.js'
 
-const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (score: any, expected: any) => any
+type EvaluationScoreFixture = Parameters<typeof validateEvaluationScore>[0]
 
-function runNode(script: any, args: any, env: any = {}) {
+interface InvocationRecord {
+  args: string[]
+  cwd: string
+  prompt_has_candidate: boolean
+}
+
+interface DecisionRecord {
+  decision: string
+}
+
+interface CalibrationResults {
+  score_version?: string
+}
+
+function runNode(script: string, args: string[], env: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
@@ -29,13 +44,13 @@ function runNode(script: any, args: any, env: any = {}) {
   })
 }
 
-function requireSuccess(result: any, label: any) {
+function requireSuccess(result: SpawnSyncReturns<string>, label: string): void {
   if (result.status !== 0) {
     throw new Error(`${label} failed:\n${result.stdout}\n${result.stderr}`)
   }
 }
 
-function scoreFixture(model: any = 'kimi', probe: any = 'planner') {
+function scoreFixture(model = 'kimi', probe: EvaluationScoreFixture['probe'] = 'planner'): EvaluationScoreFixture {
   const dimensions = {
     hit_rate: 4,
     contract_closure: 4,
@@ -49,16 +64,25 @@ function scoreFixture(model: any = 'kimi', probe: any = 'planner') {
     probe,
     score: dimensions,
     total: 20,
-    dimension_assessments: Object.fromEntries(
-      Object.entries(dimensions).map(([name, score]: any) => [
-        name,
-        {
-          score,
-          rationale: `${name} 评分依据`,
-          evidence: ['测试证据'],
-        },
-      ]),
-    ),
+    dimension_assessments: {
+      hit_rate: { score: dimensions.hit_rate, rationale: 'hit_rate 评分依据', evidence: ['测试证据'] },
+      contract_closure: {
+        score: dimensions.contract_closure,
+        rationale: 'contract_closure 评分依据',
+        evidence: ['测试证据'],
+      },
+      actionability: { score: dimensions.actionability, rationale: 'actionability 评分依据', evidence: ['测试证据'] },
+      evidence_discipline: {
+        score: dimensions.evidence_discipline,
+        rationale: 'evidence_discipline 评分依据',
+        evidence: ['测试证据'],
+      },
+      false_positive_cost: {
+        score: dimensions.false_positive_cost,
+        rationale: 'false_positive_cost 评分依据',
+        evidence: ['测试证据'],
+      },
+    },
     matched_known_issues: ['命中问题'],
     missed_known_issues: [],
     valuable_new_findings: [],
@@ -90,7 +114,7 @@ function main() {
     path.join(ROOT, 'outputs', 'model-role-map.md'),
   ]
   const outputBackups = new Map(
-    generatedOutputs.map((file: any) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]),
+    generatedOutputs.map((file) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]),
   )
 
   try {
@@ -195,8 +219,8 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
     )
     requireSuccess(result, 'execute draft evaluation')
     assert(fs.existsSync(paths.draftFile))
-    assert.equal(parseJsonFile<any>(paths.draftFile).total, 20)
-    const invocation = parseJsonFile<any>(invocationFile)
+    assert.equal(parseJsonFile<EvaluationScoreFixture>(paths.draftFile).total, 20)
+    const invocation = parseJsonFile<InvocationRecord>(invocationFile)
     assert(invocation.args.includes('--ignore-user-config'))
     assert(invocation.args.includes('--ignore-rules'))
     assert.equal(invocation.args[invocation.args.indexOf('--sandbox') + 1], 'read-only')
@@ -225,10 +249,10 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
     ])
     requireSuccess(result, 'promote confirmed evaluation')
     assert(fs.existsSync(paths.formalFile))
-    assert.equal(parseJsonFile<any>(paths.formalFile).total, 20)
-    const decisions = fs.readdirSync(paths.decisionsDir).filter((file: any) => file.endsWith('.json'))
+    assert.equal(parseJsonFile<EvaluationScoreFixture>(paths.formalFile).total, 20)
+    const decisions = fs.readdirSync(paths.decisionsDir).filter((file) => file.endsWith('.json'))
     assert.equal(decisions.length, 1)
-    assert.equal(parseJsonFile<any>(path.join(paths.decisionsDir, decisions[0])).decision, 'human_confirmed')
+    assert.equal(parseJsonFile<DecisionRecord>(path.join(paths.decisionsDir, decisions[0])).decision, 'human_confirmed')
 
     result = runNode(summarizeResults, ['--run', run])
     requireSuccess(result, 'summarize promoted score')
@@ -261,7 +285,10 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
     requireSuccess(result, 'summarize versioned score')
     assert(result.stdout.includes('Scores read: 1'))
     assert(result.stdout.includes('Score version: manual-v1'))
-    assert.equal(parseJsonFile<any>(path.join(ROOT, 'outputs', 'calibration-results.json')).score_version, 'manual-v1')
+    assert.equal(
+      parseJsonFile<CalibrationResults>(path.join(ROOT, 'outputs', 'calibration-results.json')).score_version,
+      'manual-v1',
+    )
 
     console.log('Evaluation workflow tests passed')
   } finally {
