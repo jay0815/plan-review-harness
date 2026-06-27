@@ -148,6 +148,14 @@ const buildCodexArgs = buildCodexArgsTyped as (options: {
   codexModel?: string | null
 }) => string[]
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorStackOrMessage(error: unknown): string {
+  return error instanceof Error ? error.stack || error.message : String(error)
+}
+
 export function positiveInteger(value: unknown, name: string): number {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -157,7 +165,7 @@ export function positiveInteger(value: unknown, name: string): number {
 }
 
 export function runProcess(command: string, args: string[], options: RunProcessOptions): Promise<RunProcessResult> {
-  return new Promise((resolve: any) => {
+  return new Promise((resolve) => {
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     let outputBytes = 0
@@ -188,12 +196,12 @@ export function runProcess(command: string, args: string[], options: RunProcessO
 
     child.stdout!.on('data', (chunk: Buffer) => append(stdout, chunk))
     child.stderr!.on('data', (chunk: Buffer) => append(stderr, chunk))
-    child.on('error', (spawnError: any) => {
+    child.on('error', (spawnError: NodeJS.ErrnoException) => {
       if (!error) {
         error = spawnError
       }
     })
-    child.on('close', (status: any, signal: any) => {
+    child.on('close', (status: number | null, signal: NodeJS.Signals | null) => {
       clearTimeout(timeout)
       resolve({
         status,
@@ -309,8 +317,8 @@ export async function executeEvaluation(options: ExecuteEvaluationOptions): Prom
       model: options.model,
       probe: options.probe,
     })
-  } catch (error: any) {
-    metadata.error = error.message
+  } catch (error) {
+    metadata.error = errorMessage(error)
     writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n')
     throw error
   }
@@ -334,7 +342,7 @@ async function main(): Promise<void> {
   assertProbe(probe)
 
   const config = loadConfig<CalibrationConfig>()
-  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   for (const model of models) {
     if (!config.models.includes(model)) {
       throw new Error(`Invalid model "${model}". Expected one of: ${config.models.join(', ')}`)
@@ -377,9 +385,9 @@ async function main(): Promise<void> {
         timeoutMs,
         maxBuffer,
       })
-    } catch (error: any) {
+    } catch (error) {
       failures.push({ model, error })
-      console.error(`[fail] ${model}/${probe}: ${error.message}`)
+      console.error(`[fail] ${model}/${probe}: ${errorMessage(error)}`)
     }
   }
   if (failures.length) {
@@ -391,8 +399,8 @@ async function main(): Promise<void> {
 }
 
 if (isMainScript(__filename)) {
-  main().catch((error: any) => {
-    console.error(error.stack || error.message)
+  main().catch((error) => {
+    console.error(errorStackOrMessage(error))
     process.exitCode = 1
   })
 }
