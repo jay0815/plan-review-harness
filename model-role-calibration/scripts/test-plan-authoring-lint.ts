@@ -8,6 +8,36 @@ import * as path from 'node:path'
 import { lintPlan, parseExistingCodeRefs, parseSections } from './plan-authoring-lint.js'
 import { createPlanReferenceManifest } from './workspace-review-lib.js'
 
+interface RequiredPlanOptions {
+  complexity?: string
+  existingHeading?: string
+  existingRefs?: string
+  tasks?: string
+  blocking?: string
+  appendix?: string
+}
+
+interface LintIssueLike {
+  code: string
+}
+
+interface CodeBlockMetricLike {
+  kind: string
+}
+
+interface LintResultLike {
+  errors: LintIssueLike[]
+  warnings: LintIssueLike[]
+  metrics: {
+    code_blocks: CodeBlockMetricLike[]
+  }
+}
+
+interface ExistingCodeRefLike {
+  path: string
+  lines: string
+}
+
 function requiredPlan({
   complexity = 'feature',
   existingHeading = 'Existing Code Refs',
@@ -15,7 +45,7 @@ function requiredPlan({
   tasks = '- Implement the decided contract.',
   blocking = 'None',
   appendix = '',
-}: any = {}) {
+}: RequiredPlanOptions = {}) {
   return [
     '# Plan',
     '',
@@ -51,13 +81,13 @@ function requiredPlan({
     'None',
     appendix,
   ]
-    .filter((line: any) => line !== '')
+    .filter((line) => line !== '')
     .join('\n')
 }
 
-function padToLines(plan: any, targetLines: any) {
+function padToLines(plan: string, targetLines: number): string {
   const lines = plan.split('\n')
-  const headingIndex = lines.findIndex((line: any) => line === '## Tasks and Dependencies')
+  const headingIndex = lines.findIndex((line) => line === '## Tasks and Dependencies')
   const insertAt = headingIndex + 1
   while (lines.length < targetLines) {
     lines.splice(insertAt, 0, `- Decision-preserving task note ${lines.length}.`)
@@ -65,10 +95,10 @@ function padToLines(plan: any, targetLines: any) {
   return lines.join('\n')
 }
 
-function codes(result: any) {
+function codes(result: LintResultLike) {
   return {
-    errors: result.errors.map((item: any) => item.code),
-    warnings: result.warnings.map((item: any) => item.code),
+    errors: result.errors.map((item) => item.code),
+    warnings: result.warnings.map((item) => item.code),
   }
 }
 
@@ -288,7 +318,10 @@ function main() {
       plan: chineseMappingPlan,
       projectRoot,
     })
-    const parsedChineseRefs = parseExistingCodeRefs(parseSections(chineseMappingPlan), projectRoot)
+    const parsedChineseRefs = parseExistingCodeRefs(
+      parseSections(chineseMappingPlan),
+      projectRoot,
+    ) as ExistingCodeRefLike[]
     const chineseManifest = createPlanReferenceManifest(projectRoot, chineseMappingPlan, [])
     const chineseManifestRefCount =
       chineseManifest.existing_code_refs.length + chineseManifest.existing_code_ref_dirs.length
@@ -298,8 +331,8 @@ function main() {
     assert.equal(chineseMappingRefs.metrics.existing_code_ref_count, 3)
     assert.equal(chineseMappingRefs.metrics.inline_existing_code_ref_count, 3)
     assert.equal(chineseMappingRefs.metrics.structured_existing_code_ref_count, 0)
-    assert(parsedChineseRefs.some((ref: any) => ref.path === 'src/screens/main/mine/index.tsx' && ref.lines === '1'))
-    assert(parsedChineseRefs.some((ref: any) => ref.path === 'src/screens/credit/ocr/index.tsx' && ref.lines === '1'))
+    assert(parsedChineseRefs.some((ref) => ref.path === 'src/screens/main/mine/index.tsx' && ref.lines === '1'))
+    assert(parsedChineseRefs.some((ref) => ref.path === 'src/screens/credit/ocr/index.tsx' && ref.lines === '1'))
 
     const mappedChineseRequiredPlan = [
       '# 中文计划',
@@ -369,7 +402,9 @@ function main() {
       'complete arrow function should be flagged regardless of line count',
     )
     assert(
-      arrowResult.metrics.code_blocks.some((b: any) => b.kind === 'arrow_function_implementation'),
+      arrowResult.metrics.code_blocks.some(
+        (block: CodeBlockMetricLike) => block.kind === 'arrow_function_implementation',
+      ),
       'arrow function should be classified as arrow_function_implementation',
     )
 
@@ -504,7 +539,7 @@ function main() {
         `${item.name} should be flagged as implementation_code_block`,
       )
       assert(
-        result.metrics.code_blocks.some((block: any) => block.kind === 'arrow_function_implementation'),
+        result.metrics.code_blocks.some((block: CodeBlockMetricLike) => block.kind === 'arrow_function_implementation'),
         `${item.name} should be classified as arrow_function_implementation`,
       )
     }
