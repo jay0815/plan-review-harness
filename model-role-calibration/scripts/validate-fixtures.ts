@@ -6,7 +6,7 @@ import * as path from 'node:path'
 import { PROBES, ROOT, loadCaseInput, loadConfig, parseJsonFile, schemaForProbe, slug } from './lib.js'
 import { validateJsonText as validateJsonTextUntyped } from './json-validator-mcp.js'
 
-type JsonObject = Record<string, any>
+type JsonObject = Record<string, unknown>
 
 interface CalibrationConfig {
   models: string[]
@@ -33,6 +33,23 @@ interface ValidationResult {
   errors?: ValidationError[]
 }
 
+interface ReviewerOutput extends JsonObject {
+  probe: string
+}
+
+interface FactCheckOutput extends JsonObject {
+  probe: 'fact_check'
+}
+
+interface DefaultRoleRoutes {
+  version?: number
+  source?: {
+    run_id?: string
+    score_version?: string
+  }
+  routes?: Record<string, string>
+}
+
 const validateJsonText = validateJsonTextUntyped as (candidateText: string, schema?: unknown) => ValidationResult
 
 const SYNTHESIS_SOURCE_BY_PROBE: Record<string, string> = {
@@ -44,14 +61,30 @@ const SYNTHESIS_SOURCE_BY_PROBE: Record<string, string> = {
 
 const DEFAULT_ROUTE_ROLES = ['risk', 'architecture', 'execution', 'rebuttal', 'fact_check', 'synthesis', 'planner']
 
+function isRecord(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function jsonObjects(value: unknown): JsonObject[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function isReviewerOutput(value: JsonObject): value is ReviewerOutput {
+  return typeof value.probe === 'string' && Boolean(SYNTHESIS_SOURCE_BY_PROBE[value.probe])
+}
+
+function isFactCheckOutput(value: JsonObject): value is FactCheckOutput {
+  return value.probe === 'fact_check'
+}
+
 function listDirectories(dir: string): string[] {
   if (!fs.existsSync(dir)) {
     return []
   }
   return fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((entry: any) => entry.isDirectory())
-    .map((entry: any) => entry.name)
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
     .sort()
 }
 
@@ -61,7 +94,11 @@ function jsonCodeBlocks(markdown: string, caseId: string): JsonObject[] {
   let match: RegExpExecArray | null
   while ((match = pattern.exec(markdown)) !== null) {
     try {
-      blocks.push(JSON.parse(match[1]))
+      const parsed = JSON.parse(match[1]) as unknown
+      if (!isRecord(parsed)) {
+        throw new Error('JSON block must be an object')
+      }
+      blocks.push(parsed)
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Invalid JSON block in ${caseId} synthesis input: ${message}`)
@@ -75,7 +112,7 @@ function assertSchema(value: unknown, schemaFile: string, label: string): void {
   if (!validation.valid) {
     const details = (validation.errors || [])
       .slice(0, 5)
-      .map((item: any) => `${item.path}: ${item.message}`)
+      .map((item) => `${item.path}: ${item.message}`)
       .join('; ')
     throw new Error(`${label} does not match schema: ${details || validation.stage}`)
   }
@@ -83,8 +120,8 @@ function assertSchema(value: unknown, schemaFile: string, label: string): void {
 
 function validateSynthesisFixture(caseId: string, input: string): void {
   const blocks = jsonCodeBlocks(input, caseId)
-  const reviewerOutputs = blocks.filter((item: any) => SYNTHESIS_SOURCE_BY_PROBE[item?.probe])
-  const factCheck = blocks.find((item: any) => item?.probe === 'fact_check')
+  const reviewerOutputs = blocks.filter(isReviewerOutput)
+  const factCheck = blocks.find(isFactCheckOutput)
   if (!reviewerOutputs.length) {
     throw new Error(`Missing Reviewer JSON blocks in ${caseId} synthesis input`)
   }
@@ -97,19 +134,21 @@ function validateSynthesisFixture(caseId: string, input: string): void {
   }
   assertSchema(factCheck, path.join(ROOT, 'schemas', 'fact-check-output.schema.json'), `${caseId}/fact_check`)
 
-  const expectedIssues = reviewerOutputs.flatMap((output: any) => {
+  const expectedIssues = reviewerOutputs.flatMap((output) => {
     const source = SYNTHESIS_SOURCE_BY_PROBE[output.probe]
-    return (output.issues || []).map((issue: JsonObject, index: number) => ({
+    return jsonObjects(output.issues).map((issue, index) => ({
       issue_id: `${slug(source)}-${String(index + 1).padStart(3, '0')}`,
       source,
       issue_title: issue.title,
     }))
   })
-  const checkedIssues: JsonObject[] = factCheck.checked_issues || []
+  const checkedIssues = jsonObjects(factCheck.checked_issues)
   if (checkedIssues.length !== expectedIssues.length) {
     throw new Error(`${caseId} Fact Check covers ${checkedIssues.length} issue(s), expected ${expectedIssues.length}`)
   }
-  const checkedById = new Map<string, JsonObject>(checkedIssues.map((item: any) => [item.issue_id, item]))
+  const checkedById = new Map<string, JsonObject>(
+    checkedIssues.filter((item) => typeof item.issue_id === 'string').map((item) => [String(item.issue_id), item]),
+  )
   for (const expected of expectedIssues) {
     const checked = checkedById.get(expected.issue_id)
     if (!checked) {
@@ -120,21 +159,21 @@ function validateSynthesisFixture(caseId: string, input: string): void {
     }
   }
 
-  for (const source of new Set(expectedIssues.map((item: any) => item.source))) {
+  for (const source of new Set(expectedIssues.map((item) => item.source))) {
     const sourceIssues = checkedIssues.filter((item: JsonObject) => item.source === source)
-    const summary = (factCheck.source_summaries || []).find((item: JsonObject) => item.source === source)
+    const summary = jsonObjects(factCheck.source_summaries).find((item) => item.source === source)
     if (!summary) {
       throw new Error(`${caseId} Fact Check missing source summary for ${source}`)
     }
     const statusCounts = Object.fromEntries(
-      ['verified', 'partially_verified', 'unsupported', 'contradicted', 'unverifiable'].map((status: any) => [
+      ['verified', 'partially_verified', 'unsupported', 'contradicted', 'unverifiable'].map((status) => [
         status,
         sourceIssues.filter((item: JsonObject) => item.status === status).length,
       ]),
     )
     if (
       summary.total_issues !== sourceIssues.length ||
-      Object.entries(statusCounts).some(([status, count]: any) => summary[status] !== count)
+      Object.entries(statusCounts).some(([status, count]) => summary[status] !== count)
     ) {
       throw new Error(`${caseId} Fact Check source summary mismatch for ${source}`)
     }
@@ -145,7 +184,7 @@ function main(): void {
   const schemaDir = path.join(ROOT, 'schemas')
   const schemaFiles = fs
     .readdirSync(schemaDir)
-    .filter((file: any) => file.endsWith('.json'))
+    .filter((file) => file.endsWith('.json'))
     .sort()
   for (const file of schemaFiles) {
     parseJsonFile(path.join(schemaDir, file))
@@ -175,7 +214,7 @@ function main(): void {
   }
 
   const config = loadConfig<CalibrationConfig>()
-  const defaultRoutes = parseJsonFile<JsonObject>(path.join(ROOT, 'default-role-routes.json'))
+  const defaultRoutes = parseJsonFile<DefaultRoleRoutes>(path.join(ROOT, 'default-role-routes.json'))
   if (defaultRoutes.version !== 1) {
     throw new Error('default-role-routes.json must use version 1')
   }
