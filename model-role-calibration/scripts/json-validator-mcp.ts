@@ -5,7 +5,64 @@ import * as path from 'node:path'
 
 import { isMainScript } from './lib.js'
 
-function readSchema() {
+type JsonObject = Record<string, unknown>
+
+interface JsonSchema extends JsonObject {
+  $ref?: string
+  const?: unknown
+  enum?: unknown[]
+  type?: string
+  properties?: Record<string, unknown>
+  required?: string[]
+  additionalProperties?: boolean
+  items?: unknown
+  minItems?: number
+  maxItems?: number
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  minimum?: number
+  maximum?: number
+}
+
+interface ValidationError {
+  path: string
+  message: string
+  context?: {
+    position: number
+    near: string
+  } | null
+  [key: string]: unknown
+}
+
+interface ValidationResult {
+  valid: boolean
+  stage: 'input' | 'json_parse' | 'schema'
+  errors: ValidationError[]
+  normalized_length?: number
+}
+
+type JsonRpcId = string | number | null
+
+interface JsonRpcMessage {
+  id?: JsonRpcId
+  method?: string
+  params?: JsonObject
+}
+
+function isRecord(value: unknown): value is JsonObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorStackOrMessage(error: unknown): string {
+  return error instanceof Error ? error.stack || error.message : String(error)
+}
+
+function readSchema(): unknown {
   const file = process.env.MODEL_ROLE_CALIBRATION_SCHEMA_FILE
   if (!file) {
     return null
@@ -13,7 +70,7 @@ function readSchema() {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function typeOf(value: any) {
+function typeOf(value: unknown): string {
   if (Array.isArray(value)) {
     return 'array'
   }
@@ -26,7 +83,7 @@ function typeOf(value: any) {
   return typeof value
 }
 
-function typeMatches(value: any, expected: any) {
+function typeMatches(value: unknown, expected: string): boolean {
   const actual = typeOf(value)
   if (expected === 'number') {
     return actual === 'number' || actual === 'integer'
@@ -34,119 +91,125 @@ function typeMatches(value: any, expected: any) {
   return actual === expected
 }
 
-function resolveRef(ref: any, rootSchema: any) {
+function resolveRef(ref: unknown, rootSchema: unknown): JsonSchema | null {
   if (!ref || typeof ref !== 'string' || !ref.startsWith('#/')) {
     return null
   }
   const parts = ref.slice(2).split('/')
-  let current = rootSchema
+  let current: unknown = rootSchema
   for (const part of parts) {
-    if (!current || typeof current !== 'object') {
+    if (!isRecord(current)) {
       return null
     }
     current = current[part]
   }
-  return current || null
+  return isRecord(current) ? current : null
 }
 
-export function validateSchema(value: any, schema: any, path: any = '$', errors: any[] = [], rootSchema: any = null) {
-  if (!schema || typeof schema !== 'object') {
+export function validateSchema(
+  value: unknown,
+  schema: unknown,
+  path = '$',
+  errors: ValidationError[] = [],
+  rootSchema: unknown = null,
+): ValidationError[] {
+  if (!isRecord(schema)) {
     return errors
   }
 
-  if (schema.$ref) {
-    const resolved = resolveRef(schema.$ref, rootSchema || schema)
+  const jsonSchema = schema as JsonSchema
+
+  if (jsonSchema.$ref) {
+    const resolved = resolveRef(jsonSchema.$ref, rootSchema || jsonSchema)
     if (resolved) {
-      return validateSchema(value, resolved, path, errors, rootSchema || schema)
+      return validateSchema(value, resolved, path, errors, rootSchema || jsonSchema)
     }
   }
 
-  if (schema.const !== undefined && value !== schema.const) {
+  if (jsonSchema.const !== undefined && value !== jsonSchema.const) {
     errors.push({
       path,
-      message: `expected const ${JSON.stringify(schema.const)}, got ${JSON.stringify(value)}`,
+      message: `expected const ${JSON.stringify(jsonSchema.const)}, got ${JSON.stringify(value)}`,
     })
   }
 
-  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
+  if (Array.isArray(jsonSchema.enum) && !jsonSchema.enum.includes(value)) {
     errors.push({
       path,
-      message: `expected one of ${schema.enum.map((item: any) => JSON.stringify(item)).join(', ')}`,
+      message: `expected one of ${jsonSchema.enum.map((item) => JSON.stringify(item)).join(', ')}`,
     })
   }
 
-  if (schema.type && !typeMatches(value, schema.type)) {
+  if (typeof jsonSchema.type === 'string' && !typeMatches(value, jsonSchema.type)) {
     errors.push({
       path,
-      message: `expected type ${schema.type}, got ${typeOf(value)}`,
+      message: `expected type ${jsonSchema.type}, got ${typeOf(value)}`,
     })
     return errors
   }
 
-  if (schema.type === 'object' || schema.properties || schema.required) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (jsonSchema.type === 'object' || jsonSchema.properties || jsonSchema.required) {
+    if (!isRecord(value)) {
       errors.push({ path, message: `expected object, got ${typeOf(value)}` })
       return errors
     }
-    for (const key of schema.required || []) {
+    for (const key of jsonSchema.required || []) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) {
         errors.push({ path: `${path}.${key}`, message: 'missing required property' })
       }
     }
-    const properties = schema.properties || {}
+    const properties = jsonSchema.properties || {}
     for (const [key, childValue] of Object.entries(value)) {
       if (properties[key]) {
         validateSchema(childValue, properties[key], `${path}.${key}`, errors, rootSchema)
-      } else if (schema.additionalProperties === false) {
+      } else if (jsonSchema.additionalProperties === false) {
         errors.push({ path: `${path}.${key}`, message: 'additional property is not allowed' })
       }
     }
   }
 
-  if (schema.type === 'array' || schema.items) {
+  if (jsonSchema.type === 'array' || jsonSchema.items) {
     if (!Array.isArray(value)) {
       errors.push({ path, message: `expected array, got ${typeOf(value)}` })
       return errors
     }
-    if (schema.minItems !== undefined && value.length < schema.minItems) {
-      errors.push({ path, message: `expected at least ${schema.minItems} item(s), got ${value.length}` })
+    if (jsonSchema.minItems !== undefined && value.length < jsonSchema.minItems) {
+      errors.push({ path, message: `expected at least ${jsonSchema.minItems} item(s), got ${value.length}` })
     }
-    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
-      errors.push({ path, message: `expected at most ${schema.maxItems} item(s), got ${value.length}` })
+    if (jsonSchema.maxItems !== undefined && value.length > jsonSchema.maxItems) {
+      errors.push({ path, message: `expected at most ${jsonSchema.maxItems} item(s), got ${value.length}` })
     }
-    if (schema.items) {
-      value.forEach((item: any, index: any) =>
-        validateSchema(item, schema.items, `${path}[${index}]`, errors, rootSchema),
-      )
+    if (jsonSchema.items) {
+      value.forEach((item, index) => validateSchema(item, jsonSchema.items, `${path}[${index}]`, errors, rootSchema))
     }
   }
 
-  if (schema.type === 'string' && typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push({ path, message: `expected length >= ${schema.minLength}, got ${value.length}` })
+  if (jsonSchema.type === 'string' && typeof value === 'string') {
+    if (jsonSchema.minLength !== undefined && value.length < jsonSchema.minLength) {
+      errors.push({ path, message: `expected length >= ${jsonSchema.minLength}, got ${value.length}` })
     }
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-      errors.push({ path, message: `expected length <= ${schema.maxLength}, got ${value.length}` })
+    if (jsonSchema.maxLength !== undefined && value.length > jsonSchema.maxLength) {
+      errors.push({ path, message: `expected length <= ${jsonSchema.maxLength}, got ${value.length}` })
     }
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) {
-      errors.push({ path, message: `expected string to match ${schema.pattern}` })
+    if (jsonSchema.pattern !== undefined && !new RegExp(jsonSchema.pattern).test(value)) {
+      errors.push({ path, message: `expected string to match ${jsonSchema.pattern}` })
     }
   }
 
-  if ((schema.type === 'number' || schema.type === 'integer') && typeof value === 'number') {
-    if (schema.minimum !== undefined && value < schema.minimum) {
-      errors.push({ path, message: `expected >= ${schema.minimum}, got ${value}` })
+  if ((jsonSchema.type === 'number' || jsonSchema.type === 'integer') && typeof value === 'number') {
+    if (jsonSchema.minimum !== undefined && value < jsonSchema.minimum) {
+      errors.push({ path, message: `expected >= ${jsonSchema.minimum}, got ${value}` })
     }
-    if (schema.maximum !== undefined && value > schema.maximum) {
-      errors.push({ path, message: `expected <= ${schema.maximum}, got ${value}` })
+    if (jsonSchema.maximum !== undefined && value > jsonSchema.maximum) {
+      errors.push({ path, message: `expected <= ${jsonSchema.maximum}, got ${value}` })
     }
   }
 
   return errors
 }
 
-function errorContext(text: string, error: any) {
-  const match = /position (\d+)/.exec(error.message)
+function errorContext(text: string, error: unknown): ValidationError['context'] {
+  const match = /position (\d+)/.exec(errorMessage(error))
   if (!match) {
     return null
   }
@@ -157,7 +220,7 @@ function errorContext(text: string, error: any) {
   }
 }
 
-export function validateJsonText(candidateText: any, schema: any = readSchema()) {
+export function validateJsonText(candidateText: unknown, schema: unknown = readSchema()): ValidationResult {
   if (typeof candidateText !== 'string') {
     return {
       valid: false,
@@ -180,17 +243,17 @@ export function validateJsonText(candidateText: any, schema: any = readSchema())
     }
   }
 
-  let parsed
+  let parsed: unknown
   try {
     parsed = JSON.parse(text)
-  } catch (error: any) {
+  } catch (error) {
     return {
       valid: false,
       stage: 'json_parse',
       errors: [
         {
           path: '$',
-          message: error.message,
+          message: errorMessage(error),
           context: errorContext(text, error),
         },
       ],
@@ -214,7 +277,7 @@ export function validateJsonText(candidateText: any, schema: any = readSchema())
   }
 }
 
-function appendLog(entry: any) {
+function appendLog(entry: Record<string, unknown>): void {
   const file = process.env.MODEL_ROLE_CALIBRATION_VALIDATOR_LOG
   if (!file) {
     return
@@ -227,20 +290,23 @@ function appendLog(entry: any) {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.appendFileSync(file, JSON.stringify(record) + '\n')
-  } catch (error: any) {
-    console.error(`[json-validator] failed to write log: ${error.message}`)
+  } catch (error) {
+    console.error(`[json-validator] failed to write log: ${errorMessage(error)}`)
   }
 }
 
-function errorSummary(errors: any) {
-  return (errors || []).slice(0, 5).map((error: any) => ({
-    path: error.path,
-    message: error.message,
-    context: error.context,
-  }))
+function errorSummary(errors: unknown): ValidationError[] {
+  return (Array.isArray(errors) ? errors : [])
+    .slice(0, 5)
+    .filter(isRecord)
+    .map((error) => ({
+      path: typeof error.path === 'string' ? error.path : '$',
+      message: typeof error.message === 'string' ? error.message : String(error.message || ''),
+      context: isRecord(error.context) ? (error.context as ValidationError['context']) : undefined,
+    }))
 }
 
-function logValidation(requestId: any, candidateText: any, result: any) {
+function logValidation(requestId: JsonRpcId | undefined, candidateText: unknown, result: ValidationResult): void {
   appendLog({
     event: 'tool_call',
     request_id: requestId,
@@ -286,11 +352,11 @@ export function toolList() {
   ]
 }
 
-function response(id: any, result: any) {
+function response(id: JsonRpcId | undefined, result: unknown): void {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 }
 
-function errorResponse(id: any, code: any, message: any) {
+function errorResponse(id: JsonRpcId | undefined, code: number, message: string): void {
   process.stdout.write(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -300,19 +366,20 @@ function errorResponse(id: any, code: any, message: any) {
   )
 }
 
-function handle(message: any) {
+function handle(message: JsonRpcMessage): void {
+  const params = isRecord(message.params) ? message.params : {}
   if (message.method === 'initialize') {
     appendLog({
       event: 'initialize',
       request_id: message.id,
-      protocol_version: message.params?.protocolVersion || null,
+      protocol_version: params.protocolVersion || null,
       schema_file: process.env.MODEL_ROLE_CALIBRATION_SCHEMA_FILE || null,
       attempt: process.env.MODEL_ROLE_CALIBRATION_ATTEMPT || null,
       model: process.env.MODEL_ROLE_CALIBRATION_MODEL || null,
       probe: process.env.MODEL_ROLE_CALIBRATION_PROBE || null,
     })
     response(message.id, {
-      protocolVersion: message.params?.protocolVersion || '2024-11-05',
+      protocolVersion: params.protocolVersion || '2024-11-05',
       capabilities: {
         tools: {},
       },
@@ -333,23 +400,25 @@ function handle(message: any) {
     appendLog({
       event: 'tools_list',
       request_id: message.id,
-      tools: toolList().map((tool: any) => tool.name),
+      tools: toolList().map((tool) => tool.name),
     })
     response(message.id, { tools: toolList() })
     return
   }
 
   if (message.method === 'tools/call') {
-    if (message.params?.name !== 'validate_json_output') {
+    const toolName = typeof params.name === 'string' ? params.name : null
+    if (toolName !== 'validate_json_output') {
       appendLog({
         event: 'unknown_tool',
         request_id: message.id,
-        tool: message.params?.name || null,
+        tool: toolName,
       })
-      errorResponse(message.id, -32601, `Unknown tool: ${message.params?.name}`)
+      errorResponse(message.id, -32601, `Unknown tool: ${toolName}`)
       return
     }
-    const candidateText = message.params?.arguments?.candidate_text
+    const args = isRecord(params.arguments) ? params.arguments : {}
+    const candidateText = args.candidate_text
     const result = validateJsonText(candidateText)
     logValidation(message.id, candidateText, result)
     response(message.id, {
@@ -377,7 +446,7 @@ function main() {
   })
   let buffer = ''
   process.stdin.setEncoding('utf8')
-  process.stdin.on('data', (chunk: any) => {
+  process.stdin.on('data', (chunk: string) => {
     buffer += chunk
     let index
     while ((index = buffer.indexOf('\n')) !== -1) {
@@ -387,13 +456,17 @@ function main() {
         continue
       }
       try {
-        handle(JSON.parse(line))
-      } catch (error: any) {
+        const message = JSON.parse(line) as unknown
+        if (!isRecord(message)) {
+          throw new Error('JSON-RPC message must be an object')
+        }
+        handle(message)
+      } catch (error) {
         appendLog({
           event: 'rpc_error',
-          message: error.message,
+          message: errorMessage(error),
         })
-        console.error(error.stack || error.message)
+        console.error(errorStackOrMessage(error))
       }
     }
   })
