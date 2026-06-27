@@ -17,7 +17,7 @@ const generatePrompts = generatePromptsUntyped as (opts: {
 function parseModels(value: string): string[] {
   return value
     .split(',')
-    .map((item: any) => item.trim())
+    .map((item) => item.trim())
     .filter(Boolean)
 }
 
