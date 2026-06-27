@@ -19,7 +19,7 @@ export async function main(): Promise<void> {
   const config = loadConfig<CalibrationConfig>()
   const run = args.run && args.run !== true ? String(args.run) : null
   const caseId = args.case && args.case !== true ? String(args.case) : DEFAULT_CASE
-  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   const probes = parseList(args.probes, PROBES)
   const concurrency = args.concurrency && args.concurrency !== true ? Number(args.concurrency) : DEFAULT_CONCURRENCY
   const force = args.force === true
