@@ -109,12 +109,12 @@ export function latestAttemptMetadata(run: string, job: RoleJob): LatestAttemptM
   }
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name: any) => {
+    .map((name) => {
       const match = /^attempt-(\d+)\.meta\.json$/.exec(name)
       return match ? { name, number: Number(match[1]) } : null
     })
-    .filter((item: any): item is { name: string; number: number } => Boolean(item))
-    .sort((a: any, b: any) => b.number - a.number)
+    .filter((item): item is { name: string; number: number } => Boolean(item))
+    .sort((a, b) => b.number - a.number)
   for (const attempt of attempts) {
     const file = path.join(paths.attemptsDir, attempt.name)
     try {
@@ -166,7 +166,7 @@ export function runModelJob(
   job: RoleJob,
   options: RunModelJobOptions = {},
 ): Promise<CompletedRoleJobResult | FailedRoleJobResult> {
-  return new Promise((resolve: any) => {
+  return new Promise((resolve) => {
     const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('run-model')
     const startedAt = new Date().toISOString()
     const runnerArgs = [
@@ -192,16 +192,16 @@ export function runModelJob(
     let stderr = ''
     let spawnError: string | null = null
 
-    child.stdout.on('data', (chunk: any) => {
+    child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString()
     })
-    child.stderr.on('data', (chunk: any) => {
+    child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString()
     })
-    child.on('error', (error: any) => {
+    child.on('error', (error: Error) => {
       spawnError = error.message
     })
-    child.on('close', (code: any, signal: any) => {
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       const paths = agentOutputPaths(job.run, job.caseId, job.model, job.probe)
       const base: RoleJobProcessResult = {
         caseId: job.caseId,
@@ -295,7 +295,7 @@ export class RoleCalibrationExecutor {
     const promptDir = path.join(ROOT, 'runs', run, caseId, 'prompts')
     const generatedProbes = force
       ? probes
-      : probes.filter((probe: any) => !fs.existsSync(path.join(promptDir, `${probe}.md`)))
+      : probes.filter((probe) => !fs.existsSync(path.join(promptDir, `${probe}.md`)))
     if (generatedProbes.length) {
       generateRolePrompts({
         run,
@@ -308,7 +308,7 @@ export class RoleCalibrationExecutor {
       promptDir,
       generated: generatedProbes.length,
       reused: probes.length - generatedProbes.length,
-      prompts: probes.map((probe: any) => ({
+      prompts: probes.map((probe) => ({
         probe,
         file: path.join(promptDir, `${probe}.md`),
       })),
@@ -364,7 +364,7 @@ export class RoleCalibrationExecutor {
       }
       stages[stages.length - 1]!.jobs.push(job)
     }
-    return stages.map(({ key, ...stage }: any) => stage)
+    return stages.map(({ key: _key, ...stage }) => stage)
   }
 
   async runJob(job: RoleJob, options: RunModelJobOptions = {}): Promise<RoleJobResult> {
