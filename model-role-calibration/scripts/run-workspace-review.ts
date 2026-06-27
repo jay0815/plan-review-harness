@@ -36,21 +36,194 @@ import {
   archiveResolvedExecutionAttempt,
 } from './workspace-review-manifest.js'
 
-const SOURCE_NAME_BY_ROLE: any = {
+type JsonRecord = Record<string, unknown>
+
+interface ReviewerIssue extends JsonRecord {
+  title?: string
+  severity?: string
+  type?: string
+  blocks_execution?: boolean
+  source_finding_ids?: string[]
+}
+
+interface ReviewerOutput extends JsonRecord {
+  issues?: ReviewerIssue[]
+}
+
+interface RoleResult extends JsonRecord {
+  role?: string
+  model?: string
+  output?: JsonRecord
+  output_file?: string
+  summary?: JsonRecord
+  summary_file?: string
+}
+
+interface InfraError extends JsonRecord {
+  role?: string
+  model?: string
+  type?: string
+  message?: string
+}
+
+interface WorkspaceRequest extends JsonRecord {
+  run_id: string
+  project_root: string
+  plan: string
+  review_plan?: string
+  context?: string
+  roles?: string[]
+  plan_compaction?: JsonRecord
+  proposed_artifacts?: ProposedArtifact[]
+  review_plan_refs?: JsonRecord | null
+  authoring_lint?: LintPlanLike
+}
+
+interface WorkspaceConfig extends JsonRecord {
+  claude_bin: string
+  models: Record<string, { settings_file: string }>
+  roles: Record<string, string>
+  execution: {
+    max_concurrency: number
+    timeout_ms: number
+    max_buffer_bytes: number
+    compact_plan: boolean
+    isolate_reviewers: boolean
+    read_scope_max_files: number
+  }
+}
+
+interface ProposedArtifact extends JsonRecord {
+  block_index?: number | null
+  language?: string
+  relative_path: string
+  source_file?: string | null
+  line_count?: number | null
+  char_count?: number | null
+  content?: string | null
+  origin?: string
+  review_semantics?: string
+  expected_completeness?: string
+}
+
+interface ReadBoundary extends JsonRecord {
+  mode: string
+  source_root?: string
+  exposed_root: string
+  files: string[]
+  proposed_artifacts?: ProposedArtifact[]
+  blocked_refs: string[]
+  skipped_refs: string[]
+}
+
+interface PreparedReadBoundary {
+  promptRoot: string
+  claudeRoot: string
+  boundary: ReadBoundary
+  cleanup: () => void
+}
+
+type WorkspaceReadScope = Parameters<typeof copyScopedWorkspace>[1]
+
+interface RunCommandResult {
+  stdout: string
+  stderr: string
+  status: number | null
+  signal: NodeJS.Signals | null
+  error: NodeJS.ErrnoException | null
+}
+
+interface ParsedAssistantOutput {
+  output: JsonRecord
+}
+
+interface RetryState extends JsonRecord {
+  status?: string
+  retry_counts?: Record<string, unknown>
+}
+
+interface ReviewerStageFailure extends Error {
+  infraErrors: InfraError[]
+  completedReviewerRoles: string[]
+  failedReviewerRoles: string[]
+}
+
+interface LintPlanLike extends JsonRecord {
+  errors: unknown[]
+  warnings: unknown[]
+  complexity: {
+    level?: unknown
+  }
+  metrics: {
+    total_lines?: unknown
+  }
+}
+
+interface RetryResult extends JsonRecord {
+  retry_counts: Record<string, number>
+}
+
+interface SettledResult<T> {
+  ok: boolean
+  result?: T
+  error?: unknown
+  role?: string
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorStackOrMessage(error: unknown): string {
+  return error instanceof Error ? error.stack || error.message : String(error)
+}
+
+function recordArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function asReviewerOutput(value: unknown): ReviewerOutput {
+  return isRecord(value) ? (value as ReviewerOutput) : {}
+}
+
+function asRunCommandResult(value: unknown): RunCommandResult {
+  return value as RunCommandResult
+}
+
+function asParsedAssistantOutput(value: unknown): ParsedAssistantOutput {
+  return value as ParsedAssistantOutput
+}
+
+function reviewerOutputEntries(reviewerResults: RoleResult[]): Array<[string, ReviewerOutput]> {
+  return reviewerResults
+    .filter((item) => typeof item.role === 'string' && item.role.length > 0)
+    .map((item): [string, ReviewerOutput] => [SOURCE_NAME_BY_ROLE[item.role as string], asReviewerOutput(item.output)])
+    .filter(([source]) => typeof source === 'string' && source.length > 0)
+}
+
+const SOURCE_NAME_BY_ROLE: Record<string, string> = {
   risk: 'Risk Reviewer',
   architecture: 'Architecture Reviewer',
   execution: 'Execution Reviewer',
   rebuttal: 'Rebuttal Reviewer',
 }
 
-const SEVERITY_RANK: any = {
+const SEVERITY_RANK: Record<string, number> = {
   low: 1,
   medium: 2,
   high: 3,
   blocker: 4,
 }
 
-const EXECUTION_BOUNDARIES_BY_ISSUE_TYPE: any = {
+const EXECUTION_BOUNDARIES_BY_ISSUE_TYPE: Record<string, string[]> = {
   step: ['main_path', 'step_order', 'rollback_or_recovery'],
   dependency: ['dependencies', 'compatibility_or_release'],
   input: ['inputs', 'implementation_discretion'],
@@ -77,26 +250,26 @@ const EXECUTION_REQUIRED_BOUNDARIES = Object.freeze([
   'plan_bloat',
 ])
 
-function writeJson(file: any, value: any) {
+function writeJson(file: string, value: unknown): void {
   writeGenerated(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-function writeRoleMetadata(runDir: any, roleDir: any, metadata: any) {
+function writeRoleMetadata(runDir: string, roleDir: string, metadata: JsonRecord): void {
   const metadataFile = path.join(roleDir, 'metadata.json')
   writeJson(metadataFile, metadata)
   recordResolvedExecution(runDir, metadata, {
-    status: metadata.status,
+    status: String(metadata.status || ''),
     metadata_file: path.relative(runDir, metadataFile),
   })
 }
 
-function reviewerSeverityByIssueId(reviewerOutputs: any = {}) {
-  const severities = new Map<string, any>()
-  for (const [source, reviewerOutput] of Object.entries(reviewerOutputs || {}) as [string, any][]) {
+function reviewerSeverityByIssueId(reviewerOutputs: Record<string, ReviewerOutput> = {}): Map<string, string> {
+  const severities = new Map<string, string>()
+  for (const [source, reviewerOutput] of Object.entries(reviewerOutputs || {})) {
     const issues = Array.isArray(reviewerOutput?.issues) ? reviewerOutput.issues : []
-    issues.forEach((issue: any, index: any) => {
+    issues.forEach((issue, index) => {
       const issueId = `${slug(source)}-${String(index + 1).padStart(3, '0')}`
-      if (issue?.severity) {
+      if (typeof issue?.severity === 'string') {
         severities.set(issueId, issue.severity)
       }
     })
@@ -104,33 +277,41 @@ function reviewerSeverityByIssueId(reviewerOutputs: any = {}) {
   return severities
 }
 
-function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerOutputs: any = {}) {
-  const findings = Array.isArray(output?.source_findings) ? output.source_findings : []
-  const byId = new Map<string, any>()
-  const byIssueId = new Map<string, any>()
+function validateSynthesisSemantics(
+  output: JsonRecord,
+  factCheckOutput: JsonRecord | null | undefined,
+  reviewerOutputs: Record<string, ReviewerOutput> = {},
+): void {
+  const findings = recordArray(output.source_findings)
+  const byId = new Map<string, JsonRecord>()
+  const byIssueId = new Map<string, JsonRecord>()
   for (const finding of findings) {
-    if (byId.has(finding.id)) {
+    const findingId = String(finding.id || '')
+    if (byId.has(findingId)) {
       throw new Error(`Synthesis semantic validation failed: duplicate source finding id ${finding.id}`)
     }
-    byId.set(finding.id, finding)
-    if (finding.source_issue_id) {
-      if (byIssueId.has(finding.source_issue_id)) {
+    byId.set(findingId, finding)
+    const sourceIssueId = typeof finding.source_issue_id === 'string' ? finding.source_issue_id : ''
+    if (sourceIssueId) {
+      if (byIssueId.has(sourceIssueId)) {
+        const previous = byIssueId.get(sourceIssueId)
         throw new Error(
-          `Synthesis semantic validation failed: duplicate source_issue_id ${finding.source_issue_id} on findings ${byIssueId.get(finding.source_issue_id).id} and ${finding.id}`,
+          `Synthesis semantic validation failed: duplicate source_issue_id ${sourceIssueId} on findings ${previous?.id} and ${finding.id}`,
         )
       }
-      byIssueId.set(finding.source_issue_id, finding)
+      byIssueId.set(sourceIssueId, finding)
     }
   }
 
-  const checkedIssues = Array.isArray(factCheckOutput?.checked_issues) ? factCheckOutput.checked_issues : []
+  const checkedIssues = recordArray(factCheckOutput?.checked_issues)
   const checkedIds = new Set<string>()
   for (const checked of checkedIssues) {
-    if (checkedIds.has(checked.issue_id)) {
+    const issueId = String(checked.issue_id || '')
+    if (checkedIds.has(issueId)) {
       throw new Error(`Synthesis semantic validation failed: duplicate fact_check issue_id ${checked.issue_id}`)
     }
-    checkedIds.add(checked.issue_id)
-    const finding = byIssueId.get(checked.issue_id)
+    checkedIds.add(issueId)
+    const finding = byIssueId.get(issueId)
     if (!finding) {
       throw new Error(`Synthesis semantic validation failed: missing source finding for issue_id ${checked.issue_id}`)
     }
@@ -159,16 +340,16 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
     const requiredDisposition =
       checked.scope_status === 'out_of_scope'
         ? 'out_of_scope'
-        : ['unsupported', 'contradicted', 'unverifiable'].includes(checked.status)
-          ? checked.status
+        : ['unsupported', 'contradicted', 'unverifiable'].includes(String(checked.status))
+          ? String(checked.status)
           : null
     if (requiredDisposition && finding.disposition !== requiredDisposition) {
       throw new Error(`Synthesis semantic validation failed: ${finding.id} must use disposition ${requiredDisposition}`)
     }
     if (
       !requiredDisposition &&
-      ['verified', 'partially_verified'].includes(checked.status) &&
-      !['retained', 'merged', 'duplicate'].includes(finding.disposition)
+      ['verified', 'partially_verified'].includes(String(checked.status)) &&
+      !['retained', 'merged', 'duplicate'].includes(String(finding.disposition))
     ) {
       throw new Error(
         `Synthesis semantic validation failed: ${finding.id} verified finding cannot use disposition ${finding.disposition}`,
@@ -177,15 +358,16 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
   }
 
   for (const finding of findings) {
-    if (finding.source_issue_id && !checkedIds.has(finding.source_issue_id)) {
+    const sourceIssueId = typeof finding.source_issue_id === 'string' ? finding.source_issue_id : ''
+    if (sourceIssueId && !checkedIds.has(sourceIssueId)) {
       throw new Error(
         `Synthesis semantic validation failed: source finding ${finding.id} has no matching fact_check entry for issue_id ${finding.source_issue_id}`,
       )
     }
   }
 
-  const referencedIds = (items: any, field: any = 'source_finding_ids') =>
-    (Array.isArray(items) ? items : []).flatMap((item: any) => item?.[field] || [])
+  const referencedIds = (items: unknown, field: string = 'source_finding_ids') =>
+    recordArray(items).flatMap((item) => stringArray(item[field]))
   const activeIds = [
     ...referencedIds(output.consensus_issues),
     ...referencedIds(output.disagreements),
@@ -199,38 +381,40 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
   }
   for (const id of activeIds) {
     const finding = byId.get(id)
-    if (excludedDispositions.has(finding.disposition)) {
+    if (finding && excludedDispositions.has(String(finding.disposition))) {
       throw new Error(`Synthesis semantic validation failed: excluded finding ${id} re-entered active conclusions`)
     }
   }
   for (const id of referencedIds(output.likely_false_positives)) {
     const finding = byId.get(id)
-    if (!excludedDispositions.has(finding.disposition)) {
+    if (finding && !excludedDispositions.has(String(finding.disposition))) {
       throw new Error(
         `Synthesis semantic validation failed: likely_false_positives cannot reference retained finding ${id}`,
       )
     }
   }
 
-  const processNodes = Array.isArray(output?.process_map?.nodes) ? output.process_map.nodes : []
+  const processMap = isRecord(output.process_map) ? output.process_map : {}
+  const processNodes = recordArray(processMap.nodes)
   const nodeIds = new Set<string>()
   for (const node of processNodes) {
-    if (nodeIds.has(node.id)) {
+    const nodeId = String(node.id || '')
+    if (nodeIds.has(nodeId)) {
       throw new Error(`Synthesis semantic validation failed: duplicate process_map node id ${node.id}`)
     }
-    nodeIds.add(node.id)
+    nodeIds.add(nodeId)
   }
-  if (!/^flowchart\s+(TD|LR)\b/.test(String(output?.process_map?.mermaid || '').trim())) {
+  if (!/^flowchart\s+(TD|LR)\b/.test(String(processMap.mermaid || '').trim())) {
     throw new Error(
       'Synthesis semantic validation failed: process_map.mermaid must start with flowchart TD or flowchart LR',
     )
   }
   const issueTitles = new Set<string>([
-    ...(output.consensus_issues || []).map((item: any) => item.title),
-    ...(output.disagreements || []).map((item: any) => item.title),
+    ...recordArray(output.consensus_issues).map((item) => String(item.title || '')),
+    ...recordArray(output.disagreements).map((item) => String(item.title || '')),
   ])
   for (const node of processNodes) {
-    for (const title of node.related_issue_titles || []) {
+    for (const title of stringArray(node.related_issue_titles)) {
       if (!issueTitles.has(title)) {
         throw new Error(
           `Synthesis semantic validation failed: process_map node ${node.id} references unknown issue title ${title}`,
@@ -238,8 +422,8 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
       }
     }
   }
-  for (const item of [...(output.consensus_issues || []), ...(output.disagreements || [])]) {
-    for (const nodeId of item.affected_nodes || []) {
+  for (const item of [...recordArray(output.consensus_issues), ...recordArray(output.disagreements)]) {
+    for (const nodeId of stringArray(item.affected_nodes)) {
       if (!nodeIds.has(nodeId)) {
         throw new Error(
           `Synthesis semantic validation failed: ${item.title} references unknown process_map node ${nodeId}`,
@@ -248,9 +432,13 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
     }
   }
 
-  for (const item of output.consensus_issues || []) {
-    const sources = new Set<string>(item.source_finding_ids.map((id: any) => byId.get(id)?.source).filter(Boolean))
-    const mergedFrom = new Set<string>(item.merged_from || [])
+  for (const item of recordArray(output.consensus_issues)) {
+    const sources = new Set<string>(
+      stringArray(item.source_finding_ids)
+        .map((id) => byId.get(id)?.source)
+        .filter((source): source is string => typeof source === 'string' && source.length > 0),
+    )
+    const mergedFrom = new Set<string>(stringArray(item.merged_from))
     for (const source of sources) {
       if (!mergedFrom.has(source)) {
         throw new Error(`Synthesis semantic validation failed: ${item.title} merged_from missing source ${source}`)
@@ -266,10 +454,10 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
   }
 
   const reviewerSeverities = reviewerSeverityByIssueId(reviewerOutputs)
-  for (const instruction of output.revision_instructions || []) {
-    for (const id of instruction.source_finding_ids || []) {
+  for (const instruction of recordArray(output.revision_instructions)) {
+    for (const id of stringArray(instruction.source_finding_ids)) {
       const finding = byId.get(id)
-      if (!['verified', 'partially_verified'].includes(finding.fact_check_status)) {
+      if (!finding || !['verified', 'partially_verified'].includes(String(finding.fact_check_status))) {
         throw new Error(
           `Synthesis semantic validation failed: revision instruction references non-verified finding ${id}`,
         )
@@ -277,16 +465,17 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
       if (finding.fact_check_status !== 'partially_verified') {
         continue
       }
-      const reviewerSeverity = reviewerSeverities.get(finding.source_issue_id)
+      const reviewerSeverity =
+        typeof finding.source_issue_id === 'string' ? reviewerSeverities.get(finding.source_issue_id) : null
       if (!reviewerSeverity) {
         continue
       }
       const reviewerRank = SEVERITY_RANK[reviewerSeverity] || 0
-      const linkedConsensus = (output.consensus_issues || []).filter((item: any) =>
-        (item.source_finding_ids || []).includes(id),
+      const linkedConsensus = recordArray(output.consensus_issues).filter((item) =>
+        stringArray(item.source_finding_ids).includes(id),
       )
       for (const consensus of linkedConsensus) {
-        const consensusRank = SEVERITY_RANK[consensus.severity] || 0
+        const consensusRank = SEVERITY_RANK[String(consensus.severity || '')] || 0
         if (consensusRank > reviewerRank) {
           throw new Error(
             `Synthesis semantic validation failed: partially_verified finding ${id} severity ${consensus.severity} exceeds reviewer severity ${reviewerSeverity}`,
@@ -295,7 +484,7 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
       }
     }
   }
-  for (const disagreement of output.disagreements || []) {
+  for (const disagreement of recordArray(output.disagreements)) {
     const shouldNeedHuman = disagreement.level === 'L3_direction_decision'
     if (disagreement.needs_human_decision !== shouldNeedHuman) {
       throw new Error(
@@ -306,17 +495,19 @@ function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerO
   }
 }
 
-function validateExecutionSemantics(output: any) {
-  const reviewed = output?.coverage_declaration?.reviewed_boundaries || []
+function validateExecutionSemantics(output: JsonRecord): void {
+  const coverageDeclaration = isRecord(output.coverage_declaration) ? output.coverage_declaration : {}
+  const reviewed = recordArray(coverageDeclaration.reviewed_boundaries)
   const coveredBoundaries = new Set<string>()
   const declaredBoundaries = new Set<string>()
   for (const item of reviewed) {
-    if (declaredBoundaries.has(item.boundary)) {
+    const boundary = String(item.boundary || '')
+    if (declaredBoundaries.has(boundary)) {
       throw new Error(`Execution semantic validation failed: duplicate coverage boundary ${item.boundary}`)
     }
-    declaredBoundaries.add(item.boundary)
-    if (['covered', 'partially_covered'].includes(item.status)) {
-      coveredBoundaries.add(item.boundary)
+    declaredBoundaries.add(boundary)
+    if (['covered', 'partially_covered'].includes(String(item.status))) {
+      coveredBoundaries.add(boundary)
     }
   }
   for (const boundary of EXECUTION_REQUIRED_BOUNDARIES) {
@@ -324,12 +515,12 @@ function validateExecutionSemantics(output: any) {
       throw new Error(`Execution semantic validation failed: coverage_declaration missing boundary ${boundary}`)
     }
   }
-  for (const issue of output?.issues || []) {
+  for (const issue of recordArray(output.issues)) {
     if (issue.type === 'preference' && issue.blocks_execution) {
       throw new Error(`Execution semantic validation failed: preference issue "${issue.title}" cannot block execution`)
     }
-    const expected = EXECUTION_BOUNDARIES_BY_ISSUE_TYPE[issue.type] || []
-    if (!expected.some((boundary: any) => coveredBoundaries.has(boundary))) {
+    const expected = EXECUTION_BOUNDARIES_BY_ISSUE_TYPE[String(issue.type || '')] || []
+    if (!expected.some((boundary) => coveredBoundaries.has(boundary))) {
       throw new Error(
         `Execution semantic validation failed: issue "${issue.title}" type ${issue.type} ` +
           `is not covered by coverage_declaration`,
@@ -338,12 +529,16 @@ function validateExecutionSemantics(output: any) {
   }
 }
 
-function validateWorkspaceOutput(role: any, output: any, context: any = {}) {
-  const validation = validateJsonText(JSON.stringify(output), parseJsonFile<any>(workspaceSchemaForRole(role)))
+function validateWorkspaceOutput(
+  role: string,
+  output: JsonRecord,
+  context: { factCheckOutput?: JsonRecord; reviewerOutputs?: Record<string, ReviewerOutput> } = {},
+): void {
+  const validation = validateJsonText(JSON.stringify(output), parseJsonFile<unknown>(workspaceSchemaForRole(role)))
   if (!validation.valid) {
     const details = (validation.errors || [])
       .slice(0, 5)
-      .map((item: any) => `${item.path}: ${item.message}`)
+      .map((item) => `${item.path}: ${item.message}`)
       .join('; ')
     throw new Error(`Schema validation failed for ${role}: ${details || validation.stage}`)
   }
@@ -355,8 +550,8 @@ function validateWorkspaceOutput(role: any, output: any, context: any = {}) {
   }
 }
 
-function materializeProposedArtifacts(runDir: any, artifacts: any[] = []) {
-  return artifacts.map((artifact: any) => {
+function materializeProposedArtifacts(runDir: string, artifacts: ProposedArtifact[] = []): ProposedArtifact[] {
+  return artifacts.map((artifact) => {
     const relativePath = artifact.relative_path
     if (
       typeof relativePath !== 'string' ||
@@ -379,24 +574,24 @@ function materializeProposedArtifacts(runDir: any, artifacts: any[] = []) {
   })
 }
 
-function countBy(items: any, key: any) {
-  const counts: any = {}
+function countBy(items: JsonRecord[], key: string): Record<string, number> {
+  const counts: Record<string, number> = {}
   for (const item of items || []) {
-    const value = item?.[key] || 'unknown'
+    const value = String(item?.[key] || 'unknown')
     counts[value] = (counts[value] || 0) + 1
   }
   return counts
 }
 
-function summarizeFactCheckOutput(output: any) {
-  const checkedIssues = Array.isArray(output?.checked_issues) ? output.checked_issues : []
+function summarizeFactCheckOutput(output: JsonRecord): JsonRecord {
+  const checkedIssues = recordArray(output.checked_issues)
   const statusCounts = countBy(checkedIssues, 'status')
   const scopeStatusCounts = countBy(checkedIssues, 'scope_status')
   const evidenceStatusCounts = countBy(checkedIssues, 'evidence_status')
   const claimSupportCounts = countBy(checkedIssues, 'claim_support')
   const total = checkedIssues.length
   const challenged = ['partially_verified', 'unsupported', 'contradicted', 'unverifiable'].reduce(
-    (sum: any, key: any) => sum + (statusCounts[key] || 0),
+    (sum, key) => sum + (statusCounts[key] || 0),
     0,
   )
   const verified = statusCounts.verified || 0
@@ -414,14 +609,14 @@ function summarizeFactCheckOutput(output: any) {
 }
 
 function summarizeReviewOutcome(
-  reviewerResults: any,
-  factCheck: any,
-  synthesis: any,
-  infraErrors: any,
-  authoringLint: any = null,
-) {
+  reviewerResults: RoleResult[],
+  factCheck: RoleResult,
+  synthesis: RoleResult,
+  infraErrors: InfraError[],
+  authoringLint: JsonRecord | null = null,
+): JsonRecord {
   const reviewerIssueCount = reviewerResults.reduce(
-    (sum: any, item: any) => sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0),
+    (sum, item) => sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0),
     0,
   )
   const consensusCount = Array.isArray(synthesis.output?.consensus_issues)
@@ -497,34 +692,34 @@ function summarizeReviewOutcome(
   }
 }
 
-function readJsonIfExists(file: any): any {
+function readJsonIfExists<T = JsonRecord>(file: string): T | null {
   if (!fs.existsSync(file)) {
     return null
   }
-  return parseJsonFile<any>(file)
+  return parseJsonFile<T>(file)
 }
 
-function completedReviewerResult(runDir: any, role: any): any {
+function completedReviewerResult(runDir: string, role: string): RoleResult | null {
   const roleDir = path.join(runDir, 'roles', role)
   const outputFile = path.join(roleDir, 'output.json')
   const metadataFile = path.join(roleDir, 'metadata.json')
   if (!fs.existsSync(outputFile) || !fs.existsSync(metadataFile)) {
     return null
   }
-  const metadata = parseJsonFile<any>(metadataFile)
+  const metadata = parseJsonFile<JsonRecord>(metadataFile)
   if (metadata.status !== 'completed') {
     return null
   }
   return {
     role,
-    model: metadata.model,
-    output: parseJsonFile<any>(outputFile),
+    model: String(metadata.model || ''),
+    output: parseJsonFile<JsonRecord>(outputFile),
     output_file: path.relative(runDir, outputFile),
   }
 }
 
-function loadCompletedReviewerResults(runDir: any, roles: any, retryStage: any = 'synthesis') {
-  return roles.map((role: any) => {
+function loadCompletedReviewerResults(runDir: string, roles: string[], retryStage: string = 'synthesis'): RoleResult[] {
+  return roles.map((role) => {
     const result = completedReviewerResult(runDir, role)
     if (!result) {
       throw new Error(`Cannot retry ${retryStage}: reviewer ${role} is not completed`)
@@ -533,7 +728,7 @@ function loadCompletedReviewerResults(runDir: any, roles: any, retryStage: any =
   })
 }
 
-function loadCompletedFactCheckResult(runDir: any, retryStage: any = 'synthesis'): any {
+function loadCompletedFactCheckResult(runDir: string, retryStage: string = 'synthesis'): RoleResult {
   const roleDir = path.join(runDir, 'roles', FACT_CHECK_ROLE)
   const outputFile = path.join(roleDir, 'output.json')
   const summaryFile = path.join(roleDir, 'fact-check-summary.json')
@@ -547,40 +742,42 @@ function loadCompletedFactCheckResult(runDir: any, retryStage: any = 'synthesis'
   if (!fs.existsSync(metadataFile)) {
     throw new Error(`Cannot retry ${retryStage}: missing fact_check metadata: ${metadataFile}`)
   }
-  const metadata = parseJsonFile<any>(metadataFile)
+  const metadata = parseJsonFile<JsonRecord>(metadataFile)
   if (metadata.status !== 'completed') {
     throw new Error(`Cannot retry ${retryStage}: fact_check status is ${metadata.status || 'unknown'}`)
   }
   return {
     role: FACT_CHECK_ROLE,
-    model: metadata.model,
-    output: parseJsonFile<any>(outputFile),
+    model: String(metadata.model || ''),
+    output: parseJsonFile<JsonRecord>(outputFile),
     output_file: path.relative(runDir, outputFile),
-    summary: parseJsonFile<any>(summaryFile),
+    summary: parseJsonFile<JsonRecord>(summaryFile),
     summary_file: path.relative(runDir, summaryFile),
   }
 }
 
-function loadRequestForRun(config: any, runDir: any): any {
+function loadRequestForRun(_config: WorkspaceConfig, runDir: string): { request: WorkspaceRequest; roles: string[] } {
   const requestFile = path.join(runDir, 'request.json')
   if (!fs.existsSync(requestFile)) {
     throw new Error(`Missing workspace review request: ${requestFile}`)
   }
-  const request = parseJsonFile<any>(requestFile)
+  const request = parseJsonFile<WorkspaceRequest>(requestFile)
   request.project_root = validateProjectRoot(request.project_root)
   request.review_plan = fs.existsSync(path.join(runDir, 'review-plan.md'))
     ? fs.readFileSync(path.join(runDir, 'review-plan.md'), 'utf8')
     : request.plan
-  request.plan_compaction = readJsonIfExists(path.join(runDir, 'plan-compaction.json'))
-  const proposedManifest = readJsonIfExists(path.join(runDir, 'proposed-code-manifest.json'))
+  request.plan_compaction = readJsonIfExists(path.join(runDir, 'plan-compaction.json')) || undefined
+  const proposedManifest = readJsonIfExists<{ artifacts?: ProposedArtifact[] }>(
+    path.join(runDir, 'proposed-code-manifest.json'),
+  )
   request.proposed_artifacts = Array.isArray(proposedManifest?.artifacts) ? proposedManifest.artifacts : []
-  request.review_plan_refs = readJsonIfExists(path.join(runDir, 'review-plan-refs.json')) || null
-  request.authoring_lint = readJsonIfExists(path.join(runDir, 'plan-authoring-lint.json'))
+  request.review_plan_refs = readJsonIfExists(path.join(runDir, 'review-plan-refs.json')) || undefined
+  request.authoring_lint = readJsonIfExists<LintPlanLike>(path.join(runDir, 'plan-authoring-lint.json')) || undefined
   if (!request.authoring_lint) {
     request.authoring_lint = lintPlan({
       plan: request.plan,
       projectRoot: request.project_root,
-    })
+    }) as unknown as LintPlanLike
     writeJson(path.join(runDir, 'plan-authoring-lint.json'), request.authoring_lint)
   }
   const roles = Array.isArray(request.roles) && request.roles.length ? request.roles : REVIEW_ROLES
@@ -605,13 +802,13 @@ function loadRequestForRun(config: any, runDir: any): any {
 }
 
 function writeWorkspaceReport(
-  runDir: any,
-  request: any,
-  reviewerResults: any,
-  factCheck: any,
-  synthesis: any,
-  infraErrors: any[] = [],
-) {
+  runDir: string,
+  request: WorkspaceRequest,
+  reviewerResults: RoleResult[],
+  factCheck: RoleResult,
+  synthesis: RoleResult,
+  infraErrors: InfraError[] = [],
+): JsonRecord {
   const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors, request.authoring_lint)
   const report = {
     run_id: request.run_id,
@@ -621,7 +818,7 @@ function writeWorkspaceReport(
     authoring_lint: request.authoring_lint,
     outcome,
     reviewers: Object.fromEntries(
-      reviewerResults.map((item: any) => [
+      reviewerResults.map((item) => [
         item.role,
         {
           model: item.model,
@@ -648,26 +845,26 @@ function writeWorkspaceReport(
   return report
 }
 
-function extractFinalOutputText(stdout: any) {
+function extractFinalOutputText(stdout: unknown): string {
   const lines = String(stdout || '')
     .trim()
     .split(/\n/)
     .filter(Boolean)
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    let event
+    let event: unknown
     try {
       event = JSON.parse(lines[index])
     } catch {
       continue
     }
-    if (event?.type === 'result' && typeof event.result === 'string') {
+    if (isRecord(event) && event.type === 'result' && typeof event.result === 'string') {
       return event.result
     }
-    const content = event?.message?.content
+    const content = isRecord(event) && isRecord(event.message) ? event.message.content : undefined
     if (Array.isArray(content)) {
       for (let contentIndex = content.length - 1; contentIndex >= 0; contentIndex -= 1) {
         const block = content[contentIndex]
-        if (block?.type === 'text' && typeof block.text === 'string') {
+        if (isRecord(block) && block.type === 'text' && typeof block.text === 'string') {
           return block.text
         }
       }
@@ -676,19 +873,26 @@ function extractFinalOutputText(stdout: any) {
   return ''
 }
 
-function reviewerInfraError(role: any, model: any, error: any, runDir: any) {
+function reviewerInfraError(role: string, model: string, error: unknown, runDir: string): InfraError {
+  const message = errorMessage(error)
   return {
     role,
     model,
-    type: /invalid output|valid JSON|Probe mismatch/i.test(error.message) ? 'invalid_output' : 'agent_failed',
-    message: error.message,
+    type: /invalid output|valid JSON|Probe mismatch/i.test(message) ? 'invalid_output' : 'agent_failed',
+    message,
     metadata_file: path.relative(runDir, path.join(runDir, 'roles', role, 'metadata.json')),
     stdout_file: path.relative(runDir, path.join(runDir, 'roles', role, 'stdout.jsonl')),
     stderr_file: path.relative(runDir, path.join(runDir, 'roles', role, 'stderr.log')),
   }
 }
 
-function prepareReadBoundary(config: any, request: any, runDir: any, role: any, readScope: any) {
+function prepareReadBoundary(
+  config: WorkspaceConfig,
+  request: WorkspaceRequest,
+  runDir: string,
+  role: string,
+  readScope: WorkspaceReadScope,
+): PreparedReadBoundary {
   if (config.execution.isolate_reviewers === false) {
     return {
       promptRoot: request.project_root,
@@ -698,7 +902,7 @@ function prepareReadBoundary(config: any, request: any, runDir: any, role: any, 
         mode: 'prompt_only',
         source_root: request.project_root,
         exposed_root: request.project_root,
-      },
+      } as ReadBoundary,
       cleanup: () => {},
     }
   }
@@ -723,7 +927,12 @@ function prepareReadBoundary(config: any, request: any, runDir: any, role: any, 
   }
 }
 
-async function runRole(config: any, request: any, role: any, runDir: any) {
+async function runRole(
+  config: WorkspaceConfig,
+  request: WorkspaceRequest,
+  role: string,
+  runDir: string,
+): Promise<RoleResult> {
   const model = config.roles[role]
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
@@ -741,32 +950,40 @@ async function runRole(config: any, request: any, role: any, runDir: any) {
     request.context || '',
     null,
     null,
-    readBoundary.boundary,
+    readBoundary.boundary as Parameters<typeof buildWorkspacePrompt>[6],
   )
   const promptFile = path.join(roleDir, 'prompt.md')
   const validatorLogFile = path.join(roleDir, 'validator.log')
   writeGenerated(promptFile, prompt)
-  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot, {
-    validatorLogFile,
-  })
+  const args = buildClaudeWorkspaceArgs(
+    config as unknown as Parameters<typeof buildClaudeWorkspaceArgs>[0],
+    model,
+    role,
+    readBoundary.claudeRoot,
+    {
+      validatorLogFile,
+    },
+  )
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-role-'))
   const startedAt = new Date().toISOString()
   appendExecutionLog(runDir, 'agent_started', {
     role,
     model,
   })
-  let child
+  let child: RunCommandResult
   try {
-    child = await runCommand(config.claude_bin, args, {
-      cwd: workDir,
-      env: withoutAnthropicApiKey(process.env),
-      input: prompt,
-      timeoutMs: config.execution.timeout_ms,
-      killSignal: 'SIGKILL',
-      maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile,
-    })
-  } catch (error: any) {
+    child = asRunCommandResult(
+      await runCommand(config.claude_bin, args, {
+        cwd: workDir,
+        env: withoutAnthropicApiKey(process.env),
+        input: prompt,
+        timeoutMs: config.execution.timeout_ms,
+        killSignal: 'SIGKILL',
+        maxBuffer: config.execution.max_buffer_bytes,
+        validatorLogFile,
+      }),
+    )
+  } catch (error: unknown) {
     appendExecutionLog(runDir, 'agent_failed', {
       role,
       model,
@@ -777,10 +994,10 @@ async function runRole(config: any, request: any, role: any, runDir: any) {
       model,
       started_at: startedAt,
       finished_at: new Date().toISOString(),
-      timed_out: /timed out/i.test(error.message || ''),
+      timed_out: /timed out/i.test(errorMessage(error)),
       exit_code: null,
       signal: null,
-      error: error.message,
+      error: errorMessage(error),
       prompt_file: path.relative(runDir, promptFile),
       settings_file: config.models[model].settings_file,
       allowed_tools: ['Read', 'Glob', 'Grep'],
@@ -846,11 +1063,11 @@ async function runRole(config: any, request: any, role: any, runDir: any) {
     throw new Error(`${role}/${model} failed: ${child.error?.message || `exit ${child.status}`}`)
   }
 
-  let parsed
+  let parsed: ParsedAssistantOutput
   try {
-    parsed = parseAssistantOutput(child.stdout, role)
+    parsed = asParsedAssistantOutput(parseAssistantOutput(child.stdout, role))
     validateWorkspaceOutput(role, parsed.output)
-  } catch (error: any) {
+  } catch (error: unknown) {
     writeGenerated(path.join(roleDir, 'output.invalid.txt'), extractFinalOutputText(child.stdout))
     appendExecutionLog(runDir, 'agent_invalid_output', {
       role,
@@ -860,11 +1077,11 @@ async function runRole(config: any, request: any, role: any, runDir: any) {
     writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: 'failed',
-      error: error.message,
+      error: errorMessage(error),
       failure_kind: 'invalid_output',
       invalid_output_file: path.relative(runDir, path.join(roleDir, 'output.invalid.txt')),
     })
-    throw new Error(`${role}/${model} returned invalid output: ${error.message}`)
+    throw new Error(`${role}/${model} returned invalid output: ${errorMessage(error)}`)
   }
   writeJson(path.join(roleDir, 'output.json'), parsed.output)
   writeRoleMetadata(runDir, roleDir, {
@@ -885,15 +1102,18 @@ async function runRole(config: any, request: any, role: any, runDir: any) {
   }
 }
 
-async function runFactCheck(config: any, request: any, reviewerResults: any, runDir: any) {
+async function runFactCheck(
+  config: WorkspaceConfig,
+  request: WorkspaceRequest,
+  reviewerResults: RoleResult[],
+  runDir: string,
+): Promise<RoleResult> {
   const role = FACT_CHECK_ROLE
   const model = config.roles[role]
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
   fs.mkdirSync(roleDir, { recursive: true })
-  const reviewerOutputs = Object.fromEntries(
-    reviewerResults.map((item: any) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
-  )
+  const reviewerOutputs = Object.fromEntries(reviewerOutputEntries(reviewerResults)) as Record<string, ReviewerOutput>
   const readScope = buildFactCheckReadScope(request.project_root, reviewerOutputs, {
     maxFiles: config.execution.read_scope_max_files,
     proposedArtifacts: request.proposed_artifacts || [],
@@ -908,22 +1128,28 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
     request.context || '',
     reviewerOutputs,
     null,
-    readBoundary.boundary,
+    readBoundary.boundary as Parameters<typeof buildWorkspacePrompt>[6],
   )
   const promptFile = path.join(roleDir, 'prompt.md')
   const validatorLogFile = path.join(roleDir, 'validator.log')
   writeGenerated(promptFile, prompt)
-  const args = buildClaudeWorkspaceArgs(config, model, role, readBoundary.claudeRoot, {
-    tools: 'Read',
-    allowProjectRead: true,
-    validatorLogFile,
-    systemPrompt: [
-      'You are a non-interactive evidence verification agent.',
-      'Read only files explicitly cited by reviewer evidence.',
-      'Never search for new issues, modify files, or execute shell commands.',
-      'Return only one raw JSON object that conforms to the provided schema.',
-    ].join(' '),
-  })
+  const args = buildClaudeWorkspaceArgs(
+    config as unknown as Parameters<typeof buildClaudeWorkspaceArgs>[0],
+    model,
+    role,
+    readBoundary.claudeRoot,
+    {
+      tools: 'Read',
+      allowProjectRead: true,
+      validatorLogFile,
+      systemPrompt: [
+        'You are a non-interactive evidence verification agent.',
+        'Read only files explicitly cited by reviewer evidence.',
+        'Never search for new issues, modify files, or execute shell commands.',
+        'Return only one raw JSON object that conforms to the provided schema.',
+      ].join(' '),
+    },
+  )
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-fact-check-'))
   const startedAt = new Date().toISOString()
   appendExecutionLog(runDir, 'fact_check_started', {
@@ -931,18 +1157,20 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
     model,
     reviewer_count: reviewerResults.length,
   })
-  let child
+  let child: RunCommandResult
   try {
-    child = await runCommand(config.claude_bin, args, {
-      cwd: workDir,
-      env: withoutAnthropicApiKey(process.env),
-      input: prompt,
-      timeoutMs: config.execution.timeout_ms,
-      killSignal: 'SIGKILL',
-      maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile,
-    })
-  } catch (error: any) {
+    child = asRunCommandResult(
+      await runCommand(config.claude_bin, args, {
+        cwd: workDir,
+        env: withoutAnthropicApiKey(process.env),
+        input: prompt,
+        timeoutMs: config.execution.timeout_ms,
+        killSignal: 'SIGKILL',
+        maxBuffer: config.execution.max_buffer_bytes,
+        validatorLogFile,
+      }),
+    )
+  } catch (error: unknown) {
     appendExecutionLog(runDir, 'fact_check_failed', {
       role,
       model,
@@ -953,10 +1181,10 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
       model,
       started_at: startedAt,
       finished_at: new Date().toISOString(),
-      timed_out: /timed out/i.test(error.message || ''),
+      timed_out: /timed out/i.test(errorMessage(error)),
       exit_code: null,
       signal: null,
-      error: error.message,
+      error: errorMessage(error),
       prompt_file: path.relative(runDir, promptFile),
       settings_file: config.models[model].settings_file,
       allowed_tools: ['Read'],
@@ -1022,11 +1250,11 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
     throw new Error(`${role}/${model} failed: ${child.error?.message || `exit ${child.status}`}`)
   }
 
-  let parsed
+  let parsed: ParsedAssistantOutput
   try {
-    parsed = parseAssistantOutput(child.stdout, role)
+    parsed = asParsedAssistantOutput(parseAssistantOutput(child.stdout, role))
     validateWorkspaceOutput(role, parsed.output)
-  } catch (error: any) {
+  } catch (error: unknown) {
     appendExecutionLog(runDir, 'fact_check_invalid_output', {
       role,
       model,
@@ -1035,9 +1263,9 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
     writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: 'failed',
-      error: error.message,
+      error: errorMessage(error),
     })
-    throw new Error(`${role}/${model} returned invalid output: ${error.message}`)
+    throw new Error(`${role}/${model} returned invalid output: ${errorMessage(error)}`)
   }
   writeJson(path.join(roleDir, 'output.json'), parsed.output)
   const factCheckSummary = summarizeFactCheckOutput(parsed.output)
@@ -1064,8 +1292,12 @@ async function runFactCheck(config: any, request: any, reviewerResults: any, run
   }
 }
 
-async function runWithConcurrency(items: any, concurrency: any, worker: any): Promise<any[]> {
-  const results: any[] = new Array(items.length)
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
   let nextIndex = 0
   async function consume() {
     while (true) {
@@ -1081,55 +1313,70 @@ async function runWithConcurrency(items: any, concurrency: any, worker: any): Pr
   return results
 }
 
-async function runReviewers(config: any, request: any, roles: any, runDir: any) {
-  const settled = await runWithConcurrency(roles, config.execution.max_concurrency, async (role: any) => {
-    const model = config.roles[role]
-    try {
-      return {
-        ok: true,
-        result: await runRole(config, request, role, runDir),
+async function runReviewers(
+  config: WorkspaceConfig,
+  request: WorkspaceRequest,
+  roles: string[],
+  runDir: string,
+): Promise<{ reviewerResults: RoleResult[]; infraErrors: InfraError[] }> {
+  const settled = await runWithConcurrency<string, SettledResult<RoleResult>>(
+    roles,
+    config.execution.max_concurrency,
+    async (role) => {
+      const model = config.roles[role]
+      try {
+        return {
+          ok: true,
+          result: await runRole(config, request, role, runDir),
+        }
+      } catch (error: unknown) {
+        return {
+          ok: false,
+          error: reviewerInfraError(role, model, error, runDir),
+        }
       }
-    } catch (error: any) {
-      return {
-        ok: false,
-        error: reviewerInfraError(role, model, error, runDir),
-      }
-    }
-  })
+    },
+  )
   return {
-    reviewerResults: settled.filter((item: any) => item.ok).map((item: any) => item.result),
-    infraErrors: settled.filter((item: any) => !item.ok).map((item: any) => item.error),
+    reviewerResults: settled.filter((item) => item.ok).map((item) => item.result as RoleResult),
+    infraErrors: settled.filter((item) => !item.ok).map((item) => item.error as InfraError),
   }
 }
 
-function reviewerStageError(reviewerResults: any, infraErrors: any) {
+function reviewerStageError(reviewerResults: RoleResult[], infraErrors: InfraError[]): ReviewerStageFailure | null {
   if (!infraErrors.length) {
     return null
   }
-  const completedRoles = reviewerResults.map((item: any) => item.role).filter(Boolean)
-  const failedRoles = infraErrors.map((item: any) => item.role).filter(Boolean)
+  const completedRoles = reviewerResults.map((item) => item.role).filter((role): role is string => Boolean(role))
+  const failedRoles = infraErrors.map((item) => item.role).filter((role): role is string => Boolean(role))
   const detail = infraErrors
-    .map((item: any) => {
+    .map((item) => {
       const roleModel = [item.role, item.model].filter(Boolean).join('/')
       return `${roleModel || 'reviewer'}: ${item.message || item.type || 'failed'}`
     })
     .join('; ')
-  const error: any = new Error(`Reviewer stage failed before fact_check; retry reviewers first: ${detail}`)
+  const error = new Error(
+    `Reviewer stage failed before fact_check; retry reviewers first: ${detail}`,
+  ) as ReviewerStageFailure
   error.infraErrors = infraErrors
   error.completedReviewerRoles = completedRoles
   error.failedReviewerRoles = failedRoles
   return error
 }
 
-async function runSynthesis(config: any, request: any, reviewerResults: any, factCheckResult: any, runDir: any) {
+async function runSynthesis(
+  config: WorkspaceConfig,
+  request: WorkspaceRequest,
+  reviewerResults: RoleResult[],
+  factCheckResult: RoleResult,
+  runDir: string,
+): Promise<RoleResult> {
   const role = 'synthesis'
   const model = config.roles.synthesis
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
   fs.mkdirSync(roleDir, { recursive: true })
-  const reviewerOutputs = Object.fromEntries(
-    reviewerResults.map((item: any) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
-  )
+  const reviewerOutputs = Object.fromEntries(reviewerOutputEntries(reviewerResults)) as Record<string, ReviewerOutput>
   const prompt = buildWorkspacePrompt(
     role,
     request.project_root,
@@ -1141,11 +1388,17 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
   const promptFile = path.join(roleDir, 'prompt.md')
   const validatorLogFile = path.join(roleDir, 'validator.log')
   writeGenerated(promptFile, prompt)
-  const args = buildClaudeWorkspaceArgs(config, model, role, request.project_root, {
-    tools: '',
-    allowProjectRead: false,
-    validatorLogFile,
-  })
+  const args = buildClaudeWorkspaceArgs(
+    config as unknown as Parameters<typeof buildClaudeWorkspaceArgs>[0],
+    model,
+    role,
+    request.project_root,
+    {
+      tools: '',
+      allowProjectRead: false,
+      validatorLogFile,
+    },
+  )
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-synthesis-'))
   const startedAt = new Date().toISOString()
   appendExecutionLog(runDir, 'synthesis_started', {
@@ -1153,18 +1406,20 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
     model,
     reviewer_count: reviewerResults.length,
   })
-  let child
+  let child: RunCommandResult
   try {
-    child = await runCommand(config.claude_bin, args, {
-      cwd: workDir,
-      env: withoutAnthropicApiKey(process.env),
-      input: prompt,
-      timeoutMs: config.execution.timeout_ms,
-      killSignal: 'SIGKILL',
-      maxBuffer: config.execution.max_buffer_bytes,
-      validatorLogFile,
-    })
-  } catch (error: any) {
+    child = asRunCommandResult(
+      await runCommand(config.claude_bin, args, {
+        cwd: workDir,
+        env: withoutAnthropicApiKey(process.env),
+        input: prompt,
+        timeoutMs: config.execution.timeout_ms,
+        killSignal: 'SIGKILL',
+        maxBuffer: config.execution.max_buffer_bytes,
+        validatorLogFile,
+      }),
+    )
+  } catch (error: unknown) {
     appendExecutionLog(runDir, 'synthesis_failed', {
       role,
       model,
@@ -1175,10 +1430,10 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
       model,
       started_at: startedAt,
       finished_at: new Date().toISOString(),
-      timed_out: /timed out/i.test(error.message || ''),
+      timed_out: /timed out/i.test(errorMessage(error)),
       exit_code: null,
       signal: null,
-      error: error.message,
+      error: errorMessage(error),
       prompt_file: path.relative(runDir, promptFile),
       settings_file: config.models[model].settings_file,
       allowed_tools: [],
@@ -1226,14 +1481,14 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
     })
     throw new Error(`synthesis/${model} failed: ${child.error?.message || `exit ${child.status}`}`)
   }
-  let parsed
+  let parsed: ParsedAssistantOutput
   try {
-    parsed = parseAssistantOutput(child.stdout, role)
+    parsed = asParsedAssistantOutput(parseAssistantOutput(child.stdout, role))
     validateWorkspaceOutput(role, parsed.output, {
       factCheckOutput: factCheckResult.output,
       reviewerOutputs,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     appendExecutionLog(runDir, 'synthesis_invalid_output', {
       role,
       model,
@@ -1242,9 +1497,9 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
     writeRoleMetadata(runDir, roleDir, {
       ...metadata,
       status: 'failed',
-      error: error.message,
+      error: errorMessage(error),
     })
-    throw new Error(`synthesis/${model} returned invalid output: ${error.message}`)
+    throw new Error(`synthesis/${model} returned invalid output: ${errorMessage(error)}`)
   }
   writeJson(path.join(roleDir, 'output.json'), parsed.output)
   writeRoleMetadata(runDir, roleDir, {
@@ -1265,7 +1520,7 @@ async function runSynthesis(config: any, request: any, reviewerResults: any, fac
   }
 }
 
-function archiveRoleAttempt(runDir: any, role: any) {
+function archiveRoleAttempt(runDir: string, role: string): string | null {
   const roleDir = path.join(runDir, 'roles', role)
   if (!fs.existsSync(roleDir)) {
     return null
@@ -1288,8 +1543,8 @@ function archiveRoleAttempt(runDir: any, role: any) {
   return archivedRoleDir
 }
 
-function normalizedRetryCounts(state: any) {
-  const counts: any = {}
+function normalizedRetryCounts(state: RetryState): Record<string, number> {
+  const counts: Record<string, number> = {}
   for (const role of [...REVIEW_ROLES, FACT_CHECK_ROLE, 'synthesis']) {
     const value = Number(state.retry_counts?.[role] || 0)
     counts[role] = Number.isInteger(value) && value >= 0 ? value : 0
@@ -1297,30 +1552,28 @@ function normalizedRetryCounts(state: any) {
   return counts
 }
 
-function assertRetryAvailable(retryCounts: any, executors: any) {
-  const exhausted = [...new Set<any>(executors)].filter(
-    (executor: any) => retryCounts[executor] >= MAX_EXECUTOR_RETRIES,
-  )
+function assertRetryAvailable(retryCounts: Record<string, number>, executors: string[]): void {
+  const exhausted = [...new Set<string>(executors)].filter((executor) => retryCounts[executor] >= MAX_EXECUTOR_RETRIES)
   if (exhausted.length) {
     throw new Error(`Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(', ')}`)
   }
 }
 
-function consumeExecutorRetries(runDir: any, retryCounts: any, executors: any) {
-  for (const executor of [...new Set<any>(executors)]) {
+function consumeExecutorRetries(runDir: string, retryCounts: Record<string, number>, executors: string[]): void {
+  for (const executor of [...new Set<string>(executors)]) {
     retryCounts[executor] += 1
   }
   updateState(runDir, {
     retry_counts: retryCounts,
   })
   appendExecutionLog(runDir, 'executor_retries_consumed', {
-    executors: [...new Set<any>(executors)],
+    executors: [...new Set<string>(executors)],
     retry_counts: retryCounts,
     retry_limit: MAX_EXECUTOR_RETRIES,
   })
 }
 
-function updateRunRetryManifest(runDir: any, stage: any, retryRoles: any) {
+function updateRunRetryManifest(runDir: string, stage: string, retryRoles: string[]): void {
   updateRunManifest(runDir, {
     retry_stage: stage,
     retry_roles: retryRoles,
@@ -1328,12 +1581,17 @@ function updateRunRetryManifest(runDir: any, stage: any, retryRoles: any) {
   })
 }
 
-async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, options: any = {}) {
+async function retryWorkspaceReviewStage(
+  config: WorkspaceConfig,
+  runDir: string,
+  stage: string,
+  options: JsonRecord = {},
+): Promise<RetryResult> {
   if (!['reviewers', FACT_CHECK_ROLE, 'synthesis'].includes(stage)) {
     throw new Error(`Unsupported retry stage: ${stage}. Expected reviewers, ${FACT_CHECK_ROLE}, or synthesis.`)
   }
   const absoluteRunDir = path.resolve(runDir)
-  const state: any = readJsonIfExists(path.join(absoluteRunDir, 'state.json')) || {}
+  const state: RetryState = readJsonIfExists<RetryState>(path.join(absoluteRunDir, 'state.json')) || {}
   if (state.status === 'running' && !options.force) {
     throw new Error(
       'Cannot retry while run status is running. Use force only if the previous process is known to be dead.',
@@ -1341,16 +1599,16 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
   }
   const { request, roles } = loadRequestForRun(config, absoluteRunDir)
   requireRunManifest(absoluteRunDir)
-  const runRoleStage = options.runRole || runRole
-  const runFactCheckStage = options.runFactCheck || runFactCheck
-  const runSynthesisStage = options.runSynthesis || runSynthesis
-  const completedReviewers = new Map<string, any>(
+  const runRoleStage = (options.runRole || runRole) as typeof runRole
+  const runFactCheckStage = (options.runFactCheck || runFactCheck) as typeof runFactCheck
+  const runSynthesisStage = (options.runSynthesis || runSynthesis) as typeof runSynthesis
+  const completedReviewers = new Map<string, RoleResult>(
     roles
-      .map((role: any) => completedReviewerResult(absoluteRunDir, role))
-      .filter((result: any): result is any => Boolean(result))
-      .map((result: any) => [result.role, result]),
+      .map((role) => completedReviewerResult(absoluteRunDir, role))
+      .filter((result): result is RoleResult & { role: string } => Boolean(result?.role))
+      .map((result) => [result.role, result]),
   )
-  const retryRoles = stage === 'reviewers' ? roles.filter((role: any) => !completedReviewers.has(role)) : []
+  const retryRoles = stage === 'reviewers' ? roles.filter((role) => !completedReviewers.has(role)) : []
   if (stage === 'reviewers' && !retryRoles.length) {
     throw new Error('Cannot retry reviewers: all requested reviewers are already completed')
   }
@@ -1366,7 +1624,7 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
         : ['synthesis']
   assertRetryAvailable(retryCounts, plannedExecutors)
 
-  const archivedAttempts: any = {}
+  const archivedAttempts: Record<string, string | null> = {}
   if (stage === 'reviewers') {
     for (const role of retryRoles) {
       archivedAttempts[role] = archiveRoleAttempt(absoluteRunDir, role)
@@ -1398,33 +1656,41 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
     archived_attempts: archivedAttempts,
   })
   try {
-    let reviewerResults
+    let reviewerResults: RoleResult[]
     if (stage === 'reviewers') {
       consumeExecutorRetries(absoluteRunDir, retryCounts, retryRoles)
-      const settled = await runWithConcurrency(retryRoles, config.execution.max_concurrency, async (role: any) => {
-        try {
-          return {
-            ok: true,
-            result: await runRoleStage(config, request, role, absoluteRunDir),
+      const settled = await runWithConcurrency<string, SettledResult<RoleResult>>(
+        retryRoles,
+        config.execution.max_concurrency,
+        async (role) => {
+          try {
+            return {
+              ok: true,
+              result: await runRoleStage(config, request, role, absoluteRunDir),
+            }
+          } catch (error: unknown) {
+            return {
+              ok: false,
+              role,
+              error,
+            }
           }
-        } catch (error: any) {
-          return {
-            ok: false,
-            role,
-            error,
-          }
-        }
-      })
-      const failures = settled.filter((item: any) => !item.ok)
+        },
+      )
+      const failures = settled.filter((item) => !item.ok)
       if (failures.length) {
         throw new Error(
-          `Reviewer retry failed: ${failures.map((item: any) => `${item.role}: ${item.error.message}`).join('; ')}`,
+          `Reviewer retry failed: ${failures.map((item) => `${item.role}: ${errorMessage(item.error)}`).join('; ')}`,
         )
       }
       for (const item of settled) {
-        completedReviewers.set(item.result.role, item.result)
+        if (item.result?.role) {
+          completedReviewers.set(item.result.role, item.result)
+        }
       }
-      reviewerResults = roles.map((role: any) => completedReviewers.get(role))
+      reviewerResults = roles
+        .map((role) => completedReviewers.get(role))
+        .filter((item): item is RoleResult => Boolean(item))
       archivedAttempts[FACT_CHECK_ROLE] = archiveRoleAttempt(absoluteRunDir, FACT_CHECK_ROLE)
       archivedAttempts.synthesis = archiveRoleAttempt(absoluteRunDir, 'synthesis')
       appendExecutionLog(absoluteRunDir, 'stage_retry_downstream_invalidated', {
@@ -1483,7 +1749,7 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
       archived_attempts: archivedAttempts,
       report_file: path.join(absoluteRunDir, 'report.json'),
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     appendExecutionLog(absoluteRunDir, 'stage_retry_failed', {
       stage,
     })
@@ -1493,12 +1759,12 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
     updateState(absoluteRunDir, {
       status: 'failed',
       finished_at: new Date().toISOString(),
-      error: error.stack || error.message,
+      error: errorStackOrMessage(error),
       retry_stage: null,
     })
     markManifestFinished(absoluteRunDir, 'failed', {
       retry_stage: null,
-      error: error.stack || error.message,
+      error: errorStackOrMessage(error),
     })
     throw error
   }
@@ -1507,10 +1773,10 @@ async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, o
 async function main() {
   const args = parseArgs(process.argv)
   const runDir = path.resolve(requireArg(args, 'run-dir'))
-  const config = loadWorkspaceReviewFromArgs(args)
+  const config = loadWorkspaceReviewFromArgs(args) as WorkspaceConfig
   const { request, roles } = loadRequestForRun(config, runDir)
   requireRunManifest(runDir)
-  const reviewPlan: any = config.execution.compact_plan
+  const reviewPlan = config.execution.compact_plan
     ? compactPlanForReview(request.plan)
     : {
         text: request.plan,
@@ -1521,7 +1787,15 @@ async function main() {
           code_blocks: 0,
           compacted_blocks: 0,
           preserved_blocks: 0,
+          original_lines: String(request.plan).split('\n').length,
+          implementation_detail_chars: 0,
+          implementation_detail_lines: 0,
+          implementation_detail_ratio: 0,
+          plan_bloat_warning: false,
+          proposed_artifact_count: 0,
+          proposed_artifact_chars: 0,
         },
+        artifacts: [],
       }
   request.review_plan = reviewPlan.text
   request.plan_compaction = reviewPlan.stats
@@ -1554,11 +1828,12 @@ async function main() {
     max_concurrency: config.execution.max_concurrency,
   })
   appendExecutionLog(runDir, 'plan_compacted', request.plan_compaction)
+  const authoringLint = request.authoring_lint
   appendExecutionLog(runDir, 'plan_authoring_linted', {
-    errors: request.authoring_lint.errors.length,
-    warnings: request.authoring_lint.warnings.length,
-    complexity: request.authoring_lint.complexity.level,
-    total_lines: request.authoring_lint.metrics.total_lines,
+    errors: authoringLint?.errors.length || 0,
+    warnings: authoringLint?.warnings.length || 0,
+    complexity: authoringLint?.complexity.level || null,
+    total_lines: authoringLint?.metrics.total_lines || null,
   })
   appendExecutionLog(runDir, 'proposed_artifacts_prepared', {
     artifacts: request.proposed_artifacts.length,
@@ -1593,8 +1868,8 @@ async function main() {
       reviewer_count: reviewerResults.length,
       infra_error_count: infraErrors.length,
     })
-  } catch (error: any) {
-    const infraErrors = Array.isArray(error.infraErrors) ? error.infraErrors : []
+  } catch (error: unknown) {
+    const infraErrors = isRecord(error) && Array.isArray(error.infraErrors) ? (error.infraErrors as InfraError[]) : []
     appendExecutionLog(runDir, 'run_failed', {
       run_id: request.run_id,
       infra_error_count: infraErrors.length,
@@ -1602,11 +1877,11 @@ async function main() {
     updateState(runDir, {
       status: 'failed',
       finished_at: new Date().toISOString(),
-      error: error.stack || error.message,
+      error: errorStackOrMessage(error),
       infra_errors: infraErrors,
     })
     markManifestFinished(runDir, 'failed', {
-      error: error.stack || error.message,
+      error: errorStackOrMessage(error),
       infra_errors: infraErrors,
     })
     throw error
@@ -1614,8 +1889,8 @@ async function main() {
 }
 
 if (isMainScript(__filename)) {
-  main().catch((error: any) => {
-    console.error(error.stack || error.message)
+  main().catch((error: unknown) => {
+    console.error(errorStackOrMessage(error))
     process.exitCode = 1
   })
 }
