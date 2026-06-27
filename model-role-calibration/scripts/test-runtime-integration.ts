@@ -2,17 +2,56 @@
 
 import assert from 'node:assert'
 import { spawnSync } from 'node:child_process'
+import type { SpawnSyncReturns } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { ROOT, agentOutputPaths, nodeScriptArgs, parseJsonFile as parseJsonFileTyped, runtimeScript } from './lib.js'
+import { ROOT, agentOutputPaths, nodeScriptArgs, parseJsonFile, runtimeScript } from './lib.js'
 
-const parseJsonFile = parseJsonFileTyped as (file: string) => any
+interface AttemptMetadata {
+  status?: string
+  timed_out?: boolean
+  json_validator_enabled?: boolean
+  command_args: string[]
+}
+
+interface PoolIndex {
+  version: number
+  max_concurrency: number
+  batches: Array<{ file: string }>
+  requested_jobs: unknown[]
+  unresolved_jobs: unknown[]
+  ready_for_evaluation: boolean
+}
+
+interface PoolBatch {
+  max_concurrency: number
+  scheduled: number
+  skipped: unknown[]
+  completed: unknown[]
+}
+
+interface WorkflowBatch {
+  type?: string
+  force?: boolean
+  requested: number
+  completed: number
+  failed: number
+  skipped: number
+  results: Array<{ status: string }>
+  job_stages?: Array<{ label: string; concurrency: number; jobs: number }>
+}
+
+interface PoolLogEvent {
+  event: 'start' | 'end'
+  id: string
+  time: number
+}
 
 const FAKE_CONCURRENCY_DELAY_MS = '250'
 
-function runNode(script: any, args: any, env: any = {}) {
+function runNode(script: string, args: string[], env: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
@@ -24,13 +63,13 @@ function runNode(script: any, args: any, env: any = {}) {
   })
 }
 
-function requireSuccess(result: any, label: any) {
+function requireSuccess(result: SpawnSyncReturns<string>, label: string): void {
   if (result.status !== 0) {
     throw new Error(`${label} failed:\n${result.stdout}\n${result.stderr}`)
   }
 }
 
-function generatePrompts(run: any, probes: any) {
+function generatePrompts(run: string, probes: string[]): void {
   const result = runNode(runtimeScript('generate-prompts'), [
     '--run',
     run,
@@ -42,18 +81,18 @@ function generatePrompts(run: any, probes: any) {
   requireSuccess(result, `generate prompts for ${run}`)
 }
 
-function maxConcurrency(logFile: any) {
+function maxConcurrency(logFile: string): number {
   return maxConcurrencyFor(logFile, () => true)
 }
 
-function maxConcurrencyFor(logFile: any, predicate: any) {
+function maxConcurrencyFor(logFile: string, predicate: (id: string) => boolean): number {
   const events = fs
     .readFileSync(logFile, 'utf8')
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line: any) => JSON.parse(line))
-    .sort((a: any, b: any) => a.time - b.time || (a.event === 'start' ? -1 : 1))
+    .map((line) => JSON.parse(line) as PoolLogEvent)
+    .sort((a, b) => a.time - b.time || (a.event === 'start' ? -1 : 1))
   let active = 0
   let maximum = 0
   for (const event of events) {
@@ -168,8 +207,14 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
 
     const retryPaths = agentOutputPaths(retryRun, 'synthetic/event-reporting', 'kimi', 'planner')
     assert(fs.existsSync(retryPaths.resultFile))
-    assert.equal(parseJsonFile(path.join(retryPaths.attemptsDir, 'attempt-001.meta.json')).status, 'failed')
-    assert.equal(parseJsonFile(path.join(retryPaths.attemptsDir, 'attempt-002.meta.json')).status, 'completed')
+    assert.equal(
+      parseJsonFile<AttemptMetadata>(path.join(retryPaths.attemptsDir, 'attempt-001.meta.json')).status,
+      'failed',
+    )
+    assert.equal(
+      parseJsonFile<AttemptMetadata>(path.join(retryPaths.attemptsDir, 'attempt-002.meta.json')).status,
+      'completed',
+    )
 
     result = runNode(
       runModel,
@@ -192,7 +237,10 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     )
     assert.notEqual(result.status, 0)
     const timeoutPaths = agentOutputPaths(retryRun, 'synthetic/event-reporting', 'deepseek', 'planner')
-    assert.equal(parseJsonFile(path.join(timeoutPaths.attemptsDir, 'attempt-001.meta.json')).timed_out, true)
+    assert.equal(
+      parseJsonFile<AttemptMetadata>(path.join(timeoutPaths.attemptsDir, 'attempt-001.meta.json')).timed_out,
+      true,
+    )
 
     result = runNode(
       runModel,
@@ -258,14 +306,14 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     )
     requireSuccess(result, 'idempotent pool rerun')
 
-    const poolIndex = parseJsonFile(path.join(ROOT, 'runs', poolRun, 'agent-pool.json'))
+    const poolIndex = parseJsonFile<PoolIndex>(path.join(ROOT, 'runs', poolRun, 'agent-pool.json'))
     assert.equal(poolIndex.version, 2)
     assert.equal(poolIndex.max_concurrency, 3)
     assert.equal(poolIndex.batches.length, 3)
     assert.equal(poolIndex.requested_jobs.length, 8)
     assert.equal(poolIndex.unresolved_jobs.length, 0)
     assert.equal(poolIndex.ready_for_evaluation, true)
-    const lastBatch = parseJsonFile(path.join(path.resolve(ROOT), poolIndex.batches[2].file))
+    const lastBatch = parseJsonFile<PoolBatch>(path.join(path.resolve(ROOT), poolIndex.batches[2].file))
     assert.equal(lastBatch.max_concurrency, 3)
     assert.equal(lastBatch.scheduled, 0)
     assert.equal(lastBatch.skipped.length, 4)
@@ -313,11 +361,11 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     requireSuccess(result, 'partial pool retry')
     assert.equal(maxConcurrency(partialRetryLog), 2)
 
-    const partialRetryIndex = parseJsonFile(path.join(ROOT, 'runs', partialRetryRun, 'agent-pool.json'))
+    const partialRetryIndex = parseJsonFile<PoolIndex>(path.join(ROOT, 'runs', partialRetryRun, 'agent-pool.json'))
     assert.equal(partialRetryIndex.max_concurrency, 3)
     assert.equal(partialRetryIndex.ready_for_evaluation, true)
     assert.equal(partialRetryIndex.unresolved_jobs.length, 0)
-    const partialRetryBatch = parseJsonFile(path.join(path.resolve(ROOT), partialRetryIndex.batches[1].file))
+    const partialRetryBatch = parseJsonFile<PoolBatch>(path.join(path.resolve(ROOT), partialRetryIndex.batches[1].file))
     assert.equal(partialRetryBatch.max_concurrency, 3)
     assert.equal(partialRetryBatch.scheduled, 2)
     assert.equal(partialRetryBatch.completed.length, 2)
@@ -347,7 +395,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.equal(maxConcurrency(workflowLog), 3)
     assert(fs.existsSync(path.join(ROOT, 'runs', workflowRun, 'synthetic/event-reporting/prompts/planner.md')))
     assert(fs.existsSync(path.join(ROOT, 'runs', workflowRun, 'synthetic/event-reporting/prompts/risk.md')))
-    let workflowBatch = parseJsonFile(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
+    let workflowBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
     assert.equal(workflowBatch.type, 'role')
     assert.equal(workflowBatch.requested, 4)
     assert.equal(workflowBatch.completed, 4)
@@ -370,12 +418,12 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     )
     requireSuccess(result, 'resumable full workflow')
     assert(result.stdout.includes('Prompts: 0 generated, 2 reused'))
-    workflowBatch = parseJsonFile(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
+    workflowBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
     assert.equal(workflowBatch.requested, 4)
     assert.equal(workflowBatch.completed, 4)
     assert.equal(workflowBatch.failed, 0)
     assert.equal(workflowBatch.skipped, 4)
-    assert(workflowBatch.results.every((item: any) => item.status === 'skipped'))
+    assert(workflowBatch.results.every((item) => item.status === 'skipped'))
 
     const forceLog = path.join(tempDir, 'force-workflow.log')
     result = runNode(
@@ -400,7 +448,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       },
     )
     requireSuccess(result, 'forced workflow refresh')
-    workflowBatch = parseJsonFile(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
+    workflowBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', workflowRun, 'batch.json'))
     assert.equal(workflowBatch.force, true)
     assert.equal(workflowBatch.requested, 2)
     assert.equal(workflowBatch.completed, 2)
@@ -408,7 +456,10 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.equal(maxConcurrency(forceLog), 2)
     for (const model of ['kimi', 'deepseek']) {
       const paths = agentOutputPaths(workflowRun, 'synthetic/event-reporting', model, 'planner')
-      assert.equal(parseJsonFile(path.join(paths.attemptsDir, 'attempt-002.meta.json')).status, 'completed')
+      assert.equal(
+        parseJsonFile<AttemptMetadata>(path.join(paths.attemptsDir, 'attempt-002.meta.json')).status,
+        'completed',
+      )
     }
 
     const synthesisStageRun = runIds[7]
@@ -435,17 +486,17 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       },
     )
     requireSuccess(result, 'synthesis stage concurrency override')
-    const synthesisStageBatch = parseJsonFile(path.join(ROOT, 'runs', synthesisStageRun, 'batch.json'))
+    const synthesisStageBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', synthesisStageRun, 'batch.json'))
     assert.deepEqual(synthesisStageBatch.job_stages, [
       { label: 'default', concurrency: 4, jobs: 4 },
       { label: 'synthesis', concurrency: 1, jobs: 4 },
     ])
     assert.equal(
-      maxConcurrencyFor(synthesisStageLog, (id: any) => id.endsWith('/risk')),
+      maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith('/risk')),
       4,
     )
     assert.equal(
-      maxConcurrencyFor(synthesisStageLog, (id: any) => id.endsWith('/synthesis')),
+      maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith('/synthesis')),
       1,
     )
 
@@ -467,7 +518,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       /attempt: runs\/runtime-pool-failure-[^/]+\/synthetic\/event-reporting\/agent-outputs\/attempts\/deepseek-planner\/attempt-001\.meta\.json/,
     )
     const failurePaths = agentOutputPaths(failureRun, 'synthetic/event-reporting', 'deepseek', 'planner')
-    const failureMetadata = parseJsonFile(path.join(failurePaths.attemptsDir, 'attempt-001.meta.json'))
+    const failureMetadata = parseJsonFile<AttemptMetadata>(path.join(failurePaths.attemptsDir, 'attempt-001.meta.json'))
     assert.equal(failureMetadata.json_validator_enabled, true)
     assert.equal(failureMetadata.command_args[failureMetadata.command_args.indexOf('--max-turns') + 1], '4')
 
@@ -492,7 +543,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /\[fail\] deepseek\/synthetic\/event-reporting\/planner/)
     assert.match(result.stderr, /Invalid model output: JSON parse error at position \d+/)
-    const workflowFailureBatch = parseJsonFile(path.join(ROOT, 'runs', workflowFailureRun, 'batch.json'))
+    const workflowFailureBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', workflowFailureRun, 'batch.json'))
     assert.equal(workflowFailureBatch.requested, 1)
     assert.equal(workflowFailureBatch.completed, 0)
     assert.equal(workflowFailureBatch.failed, 1)
@@ -509,7 +560,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     )
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /Model runner exited successfully without output/)
-    const missingOutputBatch = parseJsonFile(path.join(ROOT, 'runs', missingOutputRun, 'batch.json'))
+    const missingOutputBatch = parseJsonFile<WorkflowBatch>(path.join(ROOT, 'runs', missingOutputRun, 'batch.json'))
     assert.equal(missingOutputBatch.failed, 1)
     assert.equal(missingOutputBatch.results[0].status, 'failed')
 
