@@ -18,9 +18,9 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 `tsc -p tsconfig.build.json --emitDeclarationOnly` 生成声明文件。
 - `pnpm test`：运行核心 TypeScript harness 的 Vitest 测试套件。
-- `pnpm calibration:test`：运行 `model-role-calibration/scripts/` 下的历史 JS 校准和回归脚本。
-- `pnpm calibration:build`：将已迁移的 `model-role-calibration/scripts/**/*.ts` 编译为旧脚本可 `require` 的 JS。
-- `pnpm calibration:typecheck`：检查 `model-role-calibration/` 后续迁移出的 TypeScript 文件。
+- `pnpm calibration:test`：先构建校准工具链，再运行 `model-role-calibration/scripts/` 下生成的 JS 校准和回归脚本。
+- `pnpm calibration:build`：将 `model-role-calibration/scripts/**/*.ts` 编译为 CommonJS 兼容 JS。
+- `pnpm calibration:typecheck`：检查 `model-role-calibration/` 的 TypeScript 源码。
 - `pnpm lint` / `pnpm lint:fix`：使用根级 `.oxlintrc.json` 检查或修复 `src/`、`tests/` 和配置文件。
 - `pnpm fmt` / `pnpm fmt:check`：使用 oxfmt 格式化或检查源文件、文档、fixtures 和配置。
 - `pnpm plan-review -- start ...`：使用 mock workers 执行一次本地 review run。
@@ -35,9 +35,9 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 
 Vitest 测试位于 `tests/unit/` 和 `tests/integration/`，文件名使用 `*.test.ts`，通过 `pnpm test` 运行。单元测试覆盖模块行为，集成测试覆盖 CLI、workflow 阶段、artifact 目录结构、schema 兼容性和持久化契约。
 
-`model-role-calibration/scripts/*.js` 属于历史校准工具链，通过 `pnpm calibration:test` 单独验证。只有修改 `model-role-calibration/` 或相关 package scripts 时，才需要把它纳入本轮验证。
+`model-role-calibration/scripts/**/*.ts` 是校准工具链源码；同目录 `.js` 是 `pnpm calibration:build` 生成并供 package scripts 执行的兼容产物。只有修改 `model-role-calibration/` 或相关 package scripts 时，才需要把它纳入本轮验证。
 
-`model-role-calibration/package.json` 只用于声明 CommonJS 模块边界，避免根包 `"type": "module"` 改变旧脚本语义。`model-role-calibration/tsconfig.json` 当前只纳入 `.ts` 和 `.d.ts`，让迁移可以逐文件推进；旧 `.js` 的运行正确性仍由 `pnpm calibration:test` 验证。修改已迁移的 TS 源后，先运行 `pnpm calibration:build`，再运行相关测试。
+`model-role-calibration/package.json` 只用于声明 CommonJS 模块边界，避免根包 `"type": "module"` 改变生成脚本的运行语义。`model-role-calibration/tsconfig.json` 纳入 `.ts` 和 `.d.ts`；生成 `.js` 的运行正确性由 `pnpm calibration:test` 验证。修改 TS 源后，先运行 `pnpm calibration:build`，再运行相关测试。
 
 生成文件的测试应使用 `mkdtemp` 创建临时目录，并在 `finally` 中清理。不要让测试依赖仓库现有 `runs/` 内容。
 
