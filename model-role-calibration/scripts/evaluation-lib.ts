@@ -128,7 +128,7 @@ export function parseList(value: ArgValue, fallback: string[]): string[] {
       ? fallback
       : String(value)
           .split(',')
-          .map((item: any) => item.trim())
+          .map((item) => item.trim())
           .filter(Boolean)
   return [...new Set(items)]
 }
@@ -169,7 +169,7 @@ export function buildEvaluationPrompt(run: string, caseId: string, model: string
   prompt = replaceAllLiteral(prompt, INPUT_PLACEHOLDER_BY_PROBE[probe], input)
   prompt = replaceAllLiteral(prompt, OUTPUT_PLACEHOLDER_BY_PROBE[probe], output)
 
-  const unresolved = [...prompt.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map((match: any) => match[1])
+  const unresolved = [...prompt.matchAll(/\{\{([A-Z0-9_]+)\}\}/g)].map((match) => match[1])
   if (unresolved.length) {
     throw new Error(`Unresolved evaluator placeholders: ${[...new Set(unresolved)].join(', ')}`)
   }
@@ -209,9 +209,9 @@ export function nextEvaluationAttempt(paths: EvaluationPaths): EvaluationAttempt
   fs.mkdirSync(paths.attemptsDir, { recursive: true })
   const numbers = fs
     .readdirSync(paths.attemptsDir)
-    .map((name: any) => /^attempt-(\d+)\.meta\.json$/.exec(name))
-    .filter((match: any): match is RegExpExecArray => Boolean(match))
-    .map((match: any) => Number(match[1]))
+    .map((name) => /^attempt-(\d+)\.meta\.json$/.exec(name))
+    .filter((match): match is RegExpExecArray => Boolean(match))
+    .map((match) => Number(match[1]))
   const number = numbers.length ? Math.max(...numbers) + 1 : 1
   const label = `attempt-${String(number).padStart(3, '0')}`
   return {
@@ -234,7 +234,7 @@ export function validateEvaluationScore<T extends EvaluationScore>(score: T, exp
   const schema = parseJsonFile(schemaFile)
   const validation = validateJsonText(JSON.stringify(score), schema)
   if (!validation.valid) {
-    const details = validation.errors?.map((item: any) => item.message || String(item)).join('; ')
+    const details = validation.errors?.map((item) => item.message || String(item)).join('; ')
     throw new Error(`Evaluation score schema validation failed: ${details || validation.stage}`)
   }
   for (const field of ['case_id', 'model', 'probe'] as const) {
