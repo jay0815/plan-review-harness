@@ -25,21 +25,110 @@ import {
 
 const MAX_CONCURRENCY = 3
 
-function parseList(value: any, fallback: any) {
+type Probe = 'planner' | 'risk' | 'architecture' | 'execution' | 'rebuttal' | 'synthesis'
+
+interface CalibrationConfig {
+  primary_cases: string[]
+  models: string[]
+}
+
+interface AgentJob {
+  caseId: string
+  model: string
+  probe: string
+}
+
+interface SkippedJob extends AgentJob {
+  reason: string
+  result_file: string
+}
+
+interface JobResult extends AgentJob {
+  id: number
+  started_at: string
+  finished_at: string
+  exit_code: number | null
+  signal: NodeJS.Signals | null
+  stdout: string
+  stderr: string
+  error: string | null
+}
+
+interface BatchIndexItem {
+  id: string
+  file: string | null
+  requested: number
+  scheduled?: number
+  completed: number
+  failed: number
+  skipped: number
+  started_at?: string
+  finished_at?: string
+  imported_legacy_record?: boolean
+}
+
+interface PoolIndex {
+  version: number
+  run?: string
+  max_concurrency?: number
+  updated_at?: string
+  ready_for_evaluation?: boolean
+  requested_jobs: AgentJob[]
+  unresolved_jobs?: AgentJob[]
+  batches: BatchIndexItem[]
+  requested?: number
+  completed?: AgentJob[]
+  failed?: AgentJob[]
+}
+
+interface AttemptMetadata {
+  timed_out?: boolean
+  timeout_ms?: number
+  error?: string
+  exit_code?: number | null
+}
+
+interface AttemptMetadataRecord {
+  file: string
+  metadata: AttemptMetadata
+}
+
+interface ActiveJob {
+  record: Omit<JobResult, 'finished_at' | 'exit_code' | 'signal' | 'stdout' | 'stderr' | 'error'>
+  stdout: string
+  stderr: string
+  spawnError?: string
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function parseList(value: string | true | undefined, fallback: string[]): string[] {
   if (!value || value === true) {
     return [...fallback]
   }
   return String(value)
     .split(',')
-    .map((item: any) => item.trim())
+    .map((item) => item.trim())
     .filter(Boolean)
 }
 
-function jobKey(job: any) {
+function jobKey(job: AgentJob): string {
   return `${job.model}/${job.caseId}/${job.probe}`
 }
 
-function validateSelection(cases: any, models: any, probes: any, config: any, run: any) {
+function validateSelection(
+  cases: string[],
+  models: string[],
+  probes: string[],
+  config: CalibrationConfig,
+  run: string,
+): void {
   for (const caseId of cases) {
     assertSafeCaseId(caseId)
   }
@@ -61,16 +150,16 @@ function validateSelection(cases: any, models: any, probes: any, config: any, ru
   }
 }
 
-function processExists(pid: any) {
+function processExists(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true
-  } catch (error: any) {
-    return error.code === 'EPERM'
+  } catch (error: unknown) {
+    return isNodeError(error) && error.code === 'EPERM'
   }
 }
 
-function acquireRunLock(lockFile: any) {
+function acquireRunLock(lockFile: string): () => void {
   ensureDir(path.dirname(lockFile))
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -92,13 +181,16 @@ function acquireRunLock(lockFile: any) {
           fs.unlinkSync(lockFile)
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      if (!isNodeError(error)) {
+        throw error
+      }
       if (error.code !== 'EEXIST') {
         throw error
       }
-      let existing: any
+      let existing: { pid?: number } | null
       try {
-        existing = parseJsonFile<any>(lockFile)
+        existing = parseJsonFile<{ pid?: number }>(lockFile)
       } catch {
         existing = null
       }
@@ -114,7 +206,7 @@ function acquireRunLock(lockFile: any) {
   throw new Error(`Unable to acquire run lock: ${lockFile}`)
 }
 
-function loadPoolIndex(indexFile: any) {
+function loadPoolIndex(indexFile: string): PoolIndex {
   if (!fs.existsSync(indexFile)) {
     return {
       version: 2,
@@ -122,17 +214,17 @@ function loadPoolIndex(indexFile: any) {
       requested_jobs: [],
     }
   }
-  const existing = parseJsonFile<any>(indexFile)
+  const existing = parseJsonFile<PoolIndex>(indexFile)
   if (existing.version === 2 && Array.isArray(existing.batches)) {
     return existing
   }
   const legacyJobs = [...(existing.completed || []), ...(existing.failed || [])]
-    .map((item: any) => ({
+    .map((item) => ({
       caseId: item.caseId,
       model: item.model,
       probe: item.probe,
     }))
-    .filter((item: any) => item.caseId && item.model && item.probe)
+    .filter((item) => item.caseId && item.model && item.probe)
   return {
     version: 2,
     batches: [
@@ -150,7 +242,7 @@ function loadPoolIndex(indexFile: any) {
   }
 }
 
-function uniqueBatchId(batchDir: any) {
+function uniqueBatchId(batchDir: string): string {
   const base = `batch-${timestamp()}`
   let id = base
   let suffix = 2
@@ -161,8 +253,8 @@ function uniqueBatchId(batchDir: any) {
   return id
 }
 
-function mergeRequestedJobs(previous: any, current: any) {
-  const jobs = new Map()
+function mergeRequestedJobs(previous: AgentJob[], current: AgentJob[]): AgentJob[] {
+  const jobs = new Map<string, AgentJob>()
   for (const job of [...previous, ...current]) {
     jobs.set(jobKey(job), {
       caseId: job.caseId,
@@ -170,28 +262,28 @@ function mergeRequestedJobs(previous: any, current: any) {
       probe: job.probe,
     })
   }
-  return [...jobs.values()].sort((a: any, b: any) => jobKey(a).localeCompare(jobKey(b)))
+  return [...jobs.values()].sort((a, b) => jobKey(a).localeCompare(jobKey(b)))
 }
 
-function latestAttemptMetadata(run: any, job: any) {
+function latestAttemptMetadata(run: string, job: AgentJob): AttemptMetadataRecord | null {
   const paths = agentOutputPaths(run, job.caseId, job.model, job.probe)
   if (!fs.existsSync(paths.attemptsDir)) {
     return null
   }
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name: any) => {
+    .map((name) => {
       const match = /^attempt-(\d+)\.meta\.json$/.exec(name)
       return match ? { name, number: Number(match[1]) } : null
     })
-    .filter((attempt: any): attempt is { name: string; number: number } => Boolean(attempt))
-    .sort((a: any, b: any) => b.number - a.number)
+    .filter((attempt): attempt is { name: string; number: number } => Boolean(attempt))
+    .sort((a, b) => b.number - a.number)
   for (const attempt of attempts) {
     const file = path.join(paths.attemptsDir, attempt.name)
     try {
       return {
         file,
-        metadata: parseJsonFile<any>(file),
+        metadata: parseJsonFile<AttemptMetadata>(file),
       }
     } catch {
       // Try the preceding attempt if the newest metadata is incomplete.
@@ -200,8 +292,13 @@ function latestAttemptMetadata(run: any, job: any) {
   return null
 }
 
-function failureSummary(metadata: any, exitCode: any, signal: any, spawnError: any) {
-  const compactMessage = (message: any) => {
+function failureSummary(
+  metadata: AttemptMetadata | null | undefined,
+  exitCode: number | null,
+  signal: NodeJS.Signals | null,
+  spawnError: string | null | undefined,
+): string {
+  const compactMessage = (message: unknown) => {
     const compact = String(message).replace(/\s+/g, ' ').trim()
     return compact.length > 300 ? `${compact.slice(0, 297)}...` : compact
   }
@@ -231,13 +328,13 @@ function failureSummary(metadata: any, exitCode: any, signal: any, spawnError: a
 function main() {
   const args = parseArgs(process.argv)
   const run = requireArg(args, 'run')
-  const config: any = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   const cases = parseList(args.cases, config.primary_cases)
-  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   const probes = parseList(args.probes, PROBES)
   validateSelection(cases, models, probes, config, run)
 
-  const requestedJobs: any[] = []
+  const requestedJobs: AgentJob[] = []
   for (const caseId of cases) {
     for (const probe of probes) {
       for (const model of models) {
@@ -263,10 +360,10 @@ function main() {
   const batchId = uniqueBatchId(batchDir)
   const batchFile = path.join(batchDir, `${batchId}.json`)
   const indexFile = path.join(runDir, 'agent-pool.json')
-  const poolIndex: any = loadPoolIndex(indexFile)
+  const poolIndex = loadPoolIndex(indexFile)
 
-  const skipped: any[] = []
-  const jobs: any[] = []
+  const skipped: SkippedJob[] = []
+  const jobs: AgentJob[] = []
   for (const job of requestedJobs) {
     const paths = agentOutputPaths(run, job.caseId, job.model, job.probe)
     if (fs.existsSync(paths.resultFile)) {
@@ -281,10 +378,10 @@ function main() {
   }
 
   const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('run-model')
-  const pending: any[] = [...jobs]
-  const active = new Map<number, any>()
-  const completed: any[] = []
-  const failed: any[] = []
+  const pending: AgentJob[] = [...jobs]
+  const active = new Map<number, ActiveJob>()
+  const completed: JobResult[] = []
+  const failed: JobResult[] = []
   const startedAt = new Date().toISOString()
   let sequence = 0
   let finishing = false
@@ -313,7 +410,7 @@ function main() {
     writeFileNew(batchFile, JSON.stringify(batch, null, 2) + '\n')
 
     const allRequestedJobs = mergeRequestedJobs(poolIndex.requested_jobs || [], requestedJobs)
-    const unresolved = allRequestedJobs.filter((job: any) => {
+    const unresolved = allRequestedJobs.filter((job) => {
       const paths = agentOutputPaths(run, job.caseId, job.model, job.probe)
       return !fs.existsSync(paths.resultFile)
     })
@@ -388,28 +485,28 @@ function main() {
         ...job,
         started_at: new Date().toISOString(),
       }
-      active.set(id, { child, record, stdout: '', stderr: '' })
+      active.set(id, { record, stdout: '', stderr: '' })
       console.log(`[start ${id}/${jobs.length}] ${label} (active=${active.size})`)
 
-      child.stdout.on('data', (chunk: any) => {
+      child.stdout.on('data', (chunk: Buffer) => {
         const state = active.get(id)
         if (state) {
           state.stdout += chunk.toString()
         }
       })
-      child.stderr.on('data', (chunk: any) => {
+      child.stderr.on('data', (chunk: Buffer) => {
         const state = active.get(id)
         if (state) {
           state.stderr += chunk.toString()
         }
       })
-      child.on('error', (error: any) => {
+      child.on('error', (error: Error) => {
         const state = active.get(id)
         if (state) {
           state.spawnError = error.message
         }
       })
-      child.on('close', (code: any, signal: any) => {
+      child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
         const state = active.get(id)
         if (!state) {
           return
@@ -456,8 +553,8 @@ function main() {
 if (isMainScript(__filename)) {
   try {
     main()
-  } catch (error: any) {
-    console.error(error.message)
+  } catch (error: unknown) {
+    console.error(errorMessage(error))
     process.exitCode = 1
   }
 }
