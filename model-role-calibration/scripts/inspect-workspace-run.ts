@@ -5,11 +5,117 @@ import * as path from 'node:path'
 
 import { isMainScript, parseArgs, requireArg } from './lib.js'
 
-function readJson(file: any) {
-  return JSON.parse(fs.readFileSync(file, 'utf8'))
+type JsonEvent = Record<string, unknown> & {
+  type?: string
+  subtype?: string
+  session_id?: string
+  message?: {
+    usage?: Usage
+    content?: unknown
+  }
 }
 
-function parseJsonLines(file: any) {
+type Usage = {
+  input_tokens?: number
+  prompt_tokens?: number
+  output_tokens?: number
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
+}
+
+type UsageSummary = {
+  first_input_tokens: number | null
+  max_input_tokens: number
+  last_input_tokens: number | null
+  last_output_tokens: number | null
+  cache_read_input_tokens: number | null
+  cache_creation_input_tokens: number | null
+}
+
+type ToolUse = {
+  id: string | null
+  name: string
+  input: Record<string, unknown>
+}
+
+type ToolResult = {
+  is_error: boolean
+  content: unknown
+}
+
+type ReadAttempt = {
+  id: string | null
+  file: string
+  result: ToolResult | null
+}
+
+type ProposedArtifact = {
+  relative_path?: string
+  line_count?: number
+}
+
+type ReadBoundary = Record<string, unknown> & {
+  exposed_root?: string
+  source_root?: string
+  mode?: string
+  file_count?: number
+  proposed_artifacts?: ProposedArtifact[]
+}
+
+type RoleMetadata = {
+  model?: string
+  status?: string
+  started_at?: string
+  finished_at?: string
+  read_boundary?: ReadBoundary
+}
+
+type RoleSummary = {
+  role: string
+  model: string | null
+  session_id: string | null
+  status: string | null
+  elapsed_ms: number | null
+  prompt_bytes: number
+  output_bytes: number
+  stdout_bytes: number
+  event_count: number
+  tools: string[]
+  tool_counts: Record<string, number>
+  read_files: string[]
+  read_attempt_files: string[]
+  failed_read_files: string[]
+  mapped_read_files: string[]
+  out_of_boundary_read_files: string[]
+  failed_out_of_boundary_read_files: string[]
+  read_boundary: ReadBoundary | null
+  fact_check_summary: Record<string, unknown> | null
+  usage: UsageSummary | null
+}
+
+type RunSummary = {
+  run_id: string
+  run_dir: string
+  roles: RoleSummary[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function readJson<T = unknown>(file: string): T {
+  return JSON.parse(fs.readFileSync(file, 'utf8')) as T
+}
+
+function parseJsonLines(file: string): JsonEvent[] {
   if (!fs.existsSync(file)) {
     return []
   }
@@ -17,28 +123,29 @@ function parseJsonLines(file: any) {
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line: any, index: any) => {
+    .map((line, index) => {
       try {
-        return JSON.parse(line)
-      } catch (error: any) {
+        const event = JSON.parse(line) as unknown
+        return isRecord(event) ? event : { type: 'json_value', value: event }
+      } catch (error) {
         return {
           type: 'parse_error',
           line: index + 1,
-          error: error.message,
+          error: errorMessage(error),
         }
       }
     })
 }
 
-function usageSummary(events: any) {
-  const usages = events.map((event: any) => event.message?.usage).filter(Boolean)
+function usageSummary(events: JsonEvent[]): UsageSummary | null {
+  const usages = events.map((event) => event.message?.usage).filter((usage): usage is Usage => Boolean(usage))
   if (!usages.length) {
     return null
   }
   const last = usages[usages.length - 1]
   return {
     first_input_tokens: usages[0].input_tokens ?? usages[0].prompt_tokens ?? null,
-    max_input_tokens: Math.max(...usages.map((item: any) => item.input_tokens ?? item.prompt_tokens ?? 0)),
+    max_input_tokens: Math.max(...usages.map((item) => item.input_tokens ?? item.prompt_tokens ?? 0)),
     last_input_tokens: last.input_tokens ?? last.prompt_tokens ?? null,
     last_output_tokens: last.output_tokens ?? null,
     cache_read_input_tokens: last.cache_read_input_tokens ?? null,
@@ -46,19 +153,19 @@ function usageSummary(events: any) {
   }
 }
 
-function extractToolUses(events: any) {
-  const calls: any[] = []
+function extractToolUses(events: JsonEvent[]): ToolUse[] {
+  const calls: ToolUse[] = []
   for (const event of events) {
     const content = event.message?.content
     if (!Array.isArray(content)) {
       continue
     }
     for (const block of content) {
-      if (block?.type === 'tool_use') {
+      if (isRecord(block) && block.type === 'tool_use') {
         calls.push({
-          id: block.id || null,
-          name: block.name,
-          input: block.input || {},
+          id: typeof block.id === 'string' ? block.id : null,
+          name: typeof block.name === 'string' ? block.name : '',
+          input: isRecord(block.input) ? block.input : {},
         })
       }
     }
@@ -66,15 +173,15 @@ function extractToolUses(events: any) {
   return calls
 }
 
-function extractToolResults(events: any) {
-  const results = new Map<any, any>()
+function extractToolResults(events: JsonEvent[]): Map<string, ToolResult> {
+  const results = new Map<string, ToolResult>()
   for (const event of events) {
     const content = event.message?.content
     if (!Array.isArray(content)) {
       continue
     }
     for (const block of content) {
-      if (block?.type !== 'tool_result' || !block.tool_use_id) {
+      if (!isRecord(block) || block.type !== 'tool_result' || typeof block.tool_use_id !== 'string') {
         continue
       }
       results.set(block.tool_use_id, {
@@ -86,11 +193,11 @@ function extractToolResults(events: any) {
   return results
 }
 
-function unique(values: any) {
+function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))]
 }
 
-function isOutOfBoundary(file: any, exposedRoot: any) {
+function isOutOfBoundary(file: string, exposedRoot: string | null) {
   if (!exposedRoot) {
     return false
   }
@@ -98,7 +205,7 @@ function isOutOfBoundary(file: any, exposedRoot: any) {
   return relative.startsWith('..') || path.isAbsolute(relative)
 }
 
-function mapReadFile(file: any, exposedRoot: any, sourceRoot: any) {
+function mapReadFile(file: string, exposedRoot: string | null, sourceRoot: string | null): string {
   if (!exposedRoot || !sourceRoot) {
     return file
   }
@@ -109,17 +216,23 @@ function mapReadFile(file: any, exposedRoot: any, sourceRoot: any) {
   return path.join(sourceRoot, relative)
 }
 
-function summarizeRole(roleDir: any) {
+function proposedArtifacts(readBoundary: ReadBoundary | null): ProposedArtifact[] {
+  return Array.isArray(readBoundary?.proposed_artifacts) ? readBoundary.proposed_artifacts : []
+}
+
+function summarizeRole(roleDir: string): RoleSummary {
   const role = path.basename(roleDir)
   const metadataFile = path.join(roleDir, 'metadata.json')
   const stdoutFile = path.join(roleDir, 'stdout.jsonl')
   const outputFile = path.join(roleDir, 'output.json')
   const promptFile = path.join(roleDir, 'prompt.md')
-  const metadata = fs.existsSync(metadataFile) ? readJson(metadataFile) : {}
+  const metadata = fs.existsSync(metadataFile) ? readJson<RoleMetadata>(metadataFile) : {}
   const factCheckSummaryFile = path.join(roleDir, 'fact-check-summary.json')
-  const factCheckSummary = fs.existsSync(factCheckSummaryFile) ? readJson(factCheckSummaryFile) : null
+  const factCheckSummary = fs.existsSync(factCheckSummaryFile)
+    ? readJson<Record<string, unknown>>(factCheckSummaryFile)
+    : null
   const events = parseJsonLines(stdoutFile)
-  const init = events.find((event: any) => event.type === 'system' && event.subtype === 'init') || {}
+  const init = events.find((event) => event.type === 'system' && event.subtype === 'init') || {}
   const toolUses = extractToolUses(events)
   const toolResults = extractToolResults(events)
   const toolCounts: Record<string, number> = {}
@@ -127,29 +240,33 @@ function summarizeRole(roleDir: any) {
     toolCounts[call.name] = (toolCounts[call.name] || 0) + 1
   }
   const readAttempts = toolUses
-    .filter((call: any) => call.name === 'Read' && call.input.file_path)
-    .map((call: any) => ({
-      id: call.id,
-      file: call.input.file_path,
-      result: call.id ? toolResults.get(call.id) : null,
-    }))
-  const readAttemptFiles = unique(readAttempts.map((attempt: any) => attempt.file))
+    .filter((call) => call.name === 'Read' && typeof call.input.file_path === 'string')
+    .map(
+      (call): ReadAttempt => ({
+        id: call.id,
+        file: String(call.input.file_path),
+        result: call.id ? (toolResults.get(call.id) ?? null) : null,
+      }),
+    )
+  const readAttemptFiles = unique(readAttempts.map((attempt) => attempt.file))
   const successfulReadFiles = unique(
-    readAttempts.filter((attempt: any) => attempt.result?.is_error !== true).map((attempt: any) => attempt.file),
+    readAttempts.filter((attempt) => attempt.result?.is_error !== true).map((attempt) => attempt.file),
   )
   const failedReadFiles = unique(
-    readAttempts.filter((attempt: any) => attempt.result?.is_error === true).map((attempt: any) => attempt.file),
+    readAttempts.filter((attempt) => attempt.result?.is_error === true).map((attempt) => attempt.file),
   )
-  const readBoundary = metadata.read_boundary || null
+  const readBoundary = isRecord(metadata.read_boundary) ? metadata.read_boundary : null
   const exposedRoot = readBoundary?.exposed_root ? path.resolve(readBoundary.exposed_root) : null
   const sourceRoot = readBoundary?.source_root ? path.resolve(readBoundary.source_root) : null
-  const outOfBoundaryReadFiles = successfulReadFiles.filter((file: any) => isOutOfBoundary(file, exposedRoot))
-  const failedOutOfBoundaryReadFiles = failedReadFiles.filter((file: any) => isOutOfBoundary(file, exposedRoot))
-  const mappedReadFiles = successfulReadFiles.map((file: any) => mapReadFile(file, exposedRoot, sourceRoot))
+  const outOfBoundaryReadFiles = successfulReadFiles.filter((file) => isOutOfBoundary(file, exposedRoot))
+  const failedOutOfBoundaryReadFiles = failedReadFiles.filter((file) => isOutOfBoundary(file, exposedRoot))
+  const mappedReadFiles = successfulReadFiles.map((file) => mapReadFile(file, exposedRoot, sourceRoot))
+  const initModel = typeof init.model === 'string' ? init.model : null
+  const sessionEvent = events.find((event) => typeof event.session_id === 'string')
   return {
     role,
-    model: metadata.model || init.model || null,
-    session_id: init.session_id || events.find((event: any) => event.session_id)?.session_id || null,
+    model: metadata.model || initModel,
+    session_id: init.session_id || sessionEvent?.session_id || null,
     status: metadata.status || null,
     elapsed_ms:
       metadata.started_at && metadata.finished_at
@@ -159,7 +276,7 @@ function summarizeRole(roleDir: any) {
     output_bytes: fs.existsSync(outputFile) ? fs.statSync(outputFile).size : 0,
     stdout_bytes: fs.existsSync(stdoutFile) ? fs.statSync(stdoutFile).size : 0,
     event_count: events.length,
-    tools: init.tools || [],
+    tools: Array.isArray(init.tools) ? init.tools.filter(isString) : [],
     tool_counts: toolCounts,
     read_files: successfulReadFiles,
     read_attempt_files: readAttemptFiles,
@@ -173,18 +290,18 @@ function summarizeRole(roleDir: any) {
   }
 }
 
-function printText(summary: any) {
+function printText(summary: RunSummary): void {
   console.log(`# Workspace Run Inspect: ${summary.run_id}`)
   console.log('')
   console.log(`Run dir: ${summary.run_dir}`)
-  console.log(`Roles: ${summary.roles.map((item: any) => item.role).join(', ')}`)
+  console.log(`Roles: ${summary.roles.map((item) => item.role).join(', ')}`)
   console.log('')
   console.log('| Role | Model | Elapsed | Prompt | Output | Stdout | Tool calls | Boundary | Max input tokens |')
   console.log('|---|---|---:|---:|---:|---:|---|---|---:|')
   for (const role of summary.roles) {
     const toolCalls =
       Object.entries(role.tool_counts)
-        .map(([name, count]: any) => `${name}:${count}`)
+        .map(([name, count]) => `${name}:${count}`)
         .join(', ') || '-'
     console.log(
       [
@@ -198,7 +315,7 @@ function printText(summary: any) {
         role.read_boundary
           ? [
               `${role.read_boundary.mode}:${role.read_boundary.file_count ?? '-'} files`,
-              `proposed:${(role.read_boundary.proposed_artifacts || []).length}`,
+              `proposed:${proposedArtifacts(role.read_boundary).length}`,
               `out:${role.out_of_boundary_read_files.length}`,
             ].join(', ')
           : '-',
@@ -213,9 +330,10 @@ function printText(summary: any) {
     console.log(`tools: ${role.tools.join(', ') || '-'}`)
     if (role.read_boundary) {
       console.log(`read_boundary: ${role.read_boundary.mode} (${role.read_boundary.file_count ?? '-'} file(s))`)
-      if ((role.read_boundary.proposed_artifacts || []).length) {
+      const artifacts = proposedArtifacts(role.read_boundary)
+      if (artifacts.length) {
         console.log('proposed_artifacts:')
-        for (const artifact of role.read_boundary.proposed_artifacts) {
+        for (const artifact of artifacts) {
           console.log(`- ${artifact.relative_path}:1-${artifact.line_count || '?'}`)
         }
       }
@@ -251,7 +369,7 @@ function printText(summary: any) {
   }
 }
 
-export function inspect(runDir: any) {
+export function inspect(runDir: string): RunSummary {
   const absoluteRunDir = path.resolve(runDir)
   const rolesDir = path.join(absoluteRunDir, 'roles')
   if (!fs.existsSync(rolesDir)) {
@@ -259,9 +377,9 @@ export function inspect(runDir: any) {
   }
   const roles = fs
     .readdirSync(rolesDir, { withFileTypes: true })
-    .filter((entry: any) => entry.isDirectory())
-    .map((entry: any) => summarizeRole(path.join(rolesDir, entry.name)))
-    .sort((a: any, b: any) => a.role.localeCompare(b.role))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => summarizeRole(path.join(rolesDir, entry.name)))
+    .sort((a, b) => a.role.localeCompare(b.role))
   return {
     run_id: path.basename(absoluteRunDir),
     run_dir: absoluteRunDir,
@@ -282,8 +400,8 @@ function main() {
 if (isMainScript(__filename)) {
   try {
     main()
-  } catch (error: any) {
-    console.error(error.message)
+  } catch (error) {
+    console.error(errorMessage(error))
     process.exitCode = 1
   }
 }
