@@ -1,6 +1,6 @@
 import * as path from 'node:path'
 
-import { positiveInteger, runWithConcurrency, writeGenerated } from './core'
+import { positiveInteger, runWithConcurrency, writeGenerated } from './core.js'
 
 export interface CalibrationJob {
   run: string
