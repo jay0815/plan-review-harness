@@ -242,7 +242,7 @@ export function sumScore(score: Record<string, unknown>): number {
     score.evidence_discipline,
     score.false_positive_cost,
   ]
-  return values.reduce<number>((total: any, value: any) => total + Number(value || 0), 0)
+  return values.reduce<number>((total, value) => total + Number(value ? value : 0), 0)
 }
 
 export function walk(dir: string, predicate?: (file: string) => boolean, results: string[] = []): string[] {

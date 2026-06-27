@@ -26,14 +26,144 @@ const STATUS_POLL_MS = 1000
 const PROGRESS_INTERVAL_MS = 5000
 const MAX_PLAN_BYTES = 2 * 1024 * 1024
 
-function compactTimestamp(date: any = new Date()) {
+type WorkspaceReviewConfig = {
+  workspace_runs_dir: string
+  loader_args: string[]
+  models: Record<string, unknown>
+  roles: Record<string, string>
+}
+
+type PlanReviewInput = {
+  project_root?: string
+  plan?: string
+  plan_file?: string
+  context?: string
+  roles?: string[]
+}
+
+type RetryStage = 'reviewers' | 'fact_check' | 'synthesis'
+
+type RetryPlanReviewInput = {
+  run_id?: string
+  stage?: RetryStage | string
+  force?: boolean
+}
+
+type GetPlanReviewInput = {
+  run_id: string
+  include_report?: boolean
+  wait_ms?: number | string
+}
+
+type RunState = Record<string, unknown> & {
+  status?: string
+  roles?: unknown
+  retry_counts?: unknown
+  infra_errors?: unknown
+}
+
+type RoleMetadata = {
+  status?: string
+}
+
+type ResolvedPlanInput = {
+  plan: string
+  plan_file: string | null
+}
+
+type ProgressStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+type ReviewerProgress = {
+  model?: string
+  status: ProgressStatus
+}
+
+type ProgressSnapshot = {
+  reviewers: Record<string, ReviewerProgress>
+  fact_check: ReviewerProgress
+  synthesis: ReviewerProgress
+  completed_reviewers: number
+  total_reviewers: number
+  active: string[]
+  message: string
+}
+
+type ExecutionLogEvent = Record<string, unknown> & {
+  event: string
+}
+
+type NextAction = {
+  tool: 'get_plan_review'
+  arguments: {
+    run_id: string
+    include_report: boolean
+    wait_ms: number
+  }
+  instruction: string
+}
+
+type PlanReviewResult = RunState & {
+  run_dir: string
+  execution_log: string
+  progress: ProgressSnapshot
+  report?: unknown
+  wait?: {
+    timed_out: boolean
+    waited_ms: number
+  }
+  next_action?: NextAction | null
+}
+
+type ProgressNotification = {
+  progress: number
+  message: string
+}
+
+type SendNotification = (method: string, params: Record<string, unknown>) => void
+
+type JsonRpcId = string | number | null
+
+type JsonRpcMessage = {
+  id?: JsonRpcId
+  method?: string
+  params?: {
+    protocolVersion?: string
+    name?: string
+    arguments?: Record<string, unknown>
+    _meta?: {
+      progressToken?: string | number
+    }
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+function isRetryStage(value: unknown): value is RetryStage {
+  return value === 'reviewers' || value === 'fact_check' || value === 'synthesis'
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function errorStackOrMessage(error: unknown): string {
+  return error instanceof Error ? error.stack || error.message : String(error)
+}
+
+function compactTimestamp(date: Date = new Date()): string {
   return date
     .toISOString()
     .replace(/[-:]/g, '')
     .replace(/\.\d{3}Z$/, 'Z')
 }
 
-function uniqueRunId(config: any, date: any = new Date()) {
+function uniqueRunId(config: WorkspaceReviewConfig, date: Date = new Date()): string {
   const base = `workspace-review-${compactTimestamp(date)}`
   let runId = base
   let index = 2
@@ -207,7 +337,7 @@ function toolList() {
   ]
 }
 
-function textResult(value: any, isError: any = false) {
+function textResult(value: unknown, isError = false) {
   return {
     content: [
       {
@@ -219,29 +349,31 @@ function textResult(value: any, isError: any = false) {
   }
 }
 
-function resolvePlanInput(input: any) {
-  const hasPlan = typeof input.plan === 'string'
-  const hasPlanFile = typeof input.plan_file === 'string'
+function resolvePlanInput(input: PlanReviewInput): ResolvedPlanInput {
+  const planText = input.plan
+  const planFileInput = input.plan_file
+  const hasPlan = typeof planText === 'string'
+  const hasPlanFile = typeof planFileInput === 'string'
   if (hasPlan === hasPlanFile) {
     throw new Error('Provide exactly one of plan or plan_file')
   }
   if (hasPlan) {
-    if (!input.plan.trim()) {
+    if (!planText.trim()) {
       throw new Error('plan must be a non-empty string')
     }
     return {
-      plan: input.plan,
+      plan: planText,
       plan_file: null,
     }
   }
 
-  if (!input.plan_file.trim()) {
+  if (!planFileInput?.trim()) {
     throw new Error('plan_file must be a non-empty absolute path')
   }
-  if (!path.isAbsolute(input.plan_file)) {
+  if (!path.isAbsolute(planFileInput)) {
     throw new Error('plan_file must be an absolute path')
   }
-  const planFile = path.normalize(input.plan_file)
+  const planFile = path.normalize(planFileInput)
   if (!fs.existsSync(planFile)) {
     throw new Error(`Plan file does not exist: ${planFile}`)
   }
@@ -263,7 +395,7 @@ function resolvePlanInput(input: any) {
   }
 }
 
-function startPlanReview(config: any, input: any) {
+function startPlanReview(config: WorkspaceReviewConfig, input: PlanReviewInput) {
   const planInput = resolvePlanInput(input)
   const projectRoot = validateProjectRoot(input.project_root || process.env.CLAUDE_PROJECT_DIR)
   const roles: string[] = input.roles?.length ? [...new Set<string>(input.roles)] : REVIEW_ROLES
@@ -324,7 +456,7 @@ function startPlanReview(config: any, input: any) {
       env: withoutAnthropicApiKey(process.env),
     },
   )
-  child.on('error', (error: any) => {
+  child.on('error', (error: Error) => {
     appendExecutionLog(runDir, 'runner_start_failed', {
       run_id: runId,
     })
@@ -365,65 +497,66 @@ function startPlanReview(config: any, input: any) {
   }
 }
 
-function retryPlanReviewStage(config: any, input: any) {
+function retryPlanReviewStage(config: WorkspaceReviewConfig, input: RetryPlanReviewInput) {
   const runId = String(input.run_id || '')
   if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
     throw new Error(`Invalid run_id: ${runId}`)
   }
-  if (!['reviewers', 'fact_check', 'synthesis'].includes(input.stage)) {
+  if (!isRetryStage(input.stage)) {
     throw new Error(`Unsupported retry stage: ${input.stage}`)
   }
+  const stage = input.stage
   const runDir = runDirectory(config, runId)
   const stateFile = path.join(runDir, 'state.json')
   if (!fs.existsSync(stateFile)) {
     throw new Error(`Unknown plan review run: ${runId}`)
   }
-  const state = parseJsonFile<any>(stateFile)
-  if (['queued', 'running'].includes(state.status) && !input.force) {
+  const state = parseJsonFile<RunState>(stateFile)
+  if (['queued', 'running'].includes(state.status || '') && !input.force) {
     throw new Error(
       'Run is still queued or running. Retry only after it fails, or pass force when the old process is known to be dead.',
     )
   }
-  const roles = Array.isArray(state.roles) && state.roles.length ? state.roles : REVIEW_ROLES
-  const reviewerCompleted = (role: any) => {
+  const roles = Array.isArray(state.roles) && state.roles.length ? state.roles.filter(isString) : REVIEW_ROLES
+  const reviewerCompleted = (role: string) => {
     const outputFile = path.join(runDir, 'roles', role, 'output.json')
     const metadataFile = path.join(runDir, 'roles', role, 'metadata.json')
     if (!fs.existsSync(outputFile) || !fs.existsSync(metadataFile)) {
       return false
     }
-    return parseJsonFile<any>(metadataFile).status === 'completed'
+    return parseJsonFile<RoleMetadata>(metadataFile).status === 'completed'
   }
-  const incompleteReviewers = roles.filter((role: any) => !reviewerCompleted(role))
-  if (input.stage === 'reviewers' && !incompleteReviewers.length) {
+  const incompleteReviewers = roles.filter((role) => !reviewerCompleted(role))
+  if (stage === 'reviewers' && !incompleteReviewers.length) {
     throw new Error('Cannot retry reviewers: all requested reviewers are already completed')
   }
-  if (input.stage !== 'reviewers' && incompleteReviewers.length) {
-    throw new Error(`Cannot retry ${input.stage}; incomplete reviewer(s): ${incompleteReviewers.join(', ')}`)
+  if (stage !== 'reviewers' && incompleteReviewers.length) {
+    throw new Error(`Cannot retry ${stage}; incomplete reviewer(s): ${incompleteReviewers.join(', ')}`)
   }
-  if (input.stage === 'synthesis') {
+  if (stage === 'synthesis') {
     const requiredFiles = [
       'roles/fact_check/output.json',
       'roles/fact_check/fact-check-summary.json',
       'roles/fact_check/metadata.json',
     ]
-    const missing = requiredFiles.filter((file: any) => !fs.existsSync(path.join(runDir, file)))
+    const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(runDir, file)))
     if (missing.length) {
       throw new Error(`Cannot retry synthesis; missing prerequisite artifact(s): ${missing.join(', ')}`)
     }
-    const factCheckMetadata = parseJsonFile<any>(path.join(runDir, 'roles', 'fact_check', 'metadata.json'))
+    const factCheckMetadata = parseJsonFile<RoleMetadata>(path.join(runDir, 'roles', 'fact_check', 'metadata.json'))
     if (factCheckMetadata.status !== 'completed') {
       throw new Error(`Cannot retry synthesis; fact_check status is ${factCheckMetadata.status || 'unknown'}`)
     }
   }
-  const retryCounts = state.retry_counts || {}
-  const plannedExecutors =
-    input.stage === 'reviewers'
+  const retryCounts = isRecord(state.retry_counts) ? state.retry_counts : {}
+  const plannedExecutors: string[] =
+    stage === 'reviewers'
       ? [...incompleteReviewers, 'fact_check', 'synthesis']
-      : input.stage === 'fact_check'
+      : stage === 'fact_check'
         ? ['fact_check', 'synthesis']
         : ['synthesis']
   const exhausted = [...new Set(plannedExecutors)].filter(
-    (executor: any) => Number(retryCounts[executor] || 0) >= MAX_EXECUTOR_RETRIES,
+    (executor) => Number(retryCounts[executor] || 0) >= MAX_EXECUTOR_RETRIES,
   )
   if (exhausted.length) {
     throw new Error(`Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(', ')}`)
@@ -431,7 +564,7 @@ function retryPlanReviewStage(config: any, input: any) {
 
   updateState(runDir, {
     status: 'queued',
-    retry_stage: input.stage,
+    retry_stage: stage,
     retry_queued_at: new Date().toISOString(),
     finished_at: undefined,
     error: null,
@@ -440,8 +573,8 @@ function retryPlanReviewStage(config: any, input: any) {
     retry_limit: MAX_EXECUTOR_RETRIES,
   })
   appendExecutionLog(runDir, 'stage_retry_queued', {
-    stage: input.stage,
-    retry_roles: input.stage === 'reviewers' ? incompleteReviewers : [],
+    stage,
+    retry_roles: stage === 'reviewers' ? incompleteReviewers : [],
   })
 
   const stdoutFd = fs.openSync(path.join(runDir, 'runner.stdout.log'), 'a')
@@ -454,7 +587,7 @@ function retryPlanReviewStage(config: any, input: any) {
       '--run-dir',
       runDir,
       '--stage',
-      input.stage,
+      stage,
       ...(input.force ? ['--force'] : []),
     ),
     {
@@ -464,9 +597,9 @@ function retryPlanReviewStage(config: any, input: any) {
       env: withoutAnthropicApiKey(process.env),
     },
   )
-  child.on('error', (error: any) => {
+  child.on('error', (error: Error) => {
     appendExecutionLog(runDir, 'stage_retry_start_failed', {
-      stage: input.stage,
+      stage,
     })
     const message = `Unable to start workspace review stage retry: ${error.message}`
     updateState(runDir, {
@@ -486,7 +619,7 @@ function retryPlanReviewStage(config: any, input: any) {
   return {
     run_id: runId,
     status: 'queued',
-    stage: input.stage,
+    stage,
     pid: child.pid,
     run_dir: runDir,
     execution_log: executionLogPath(runDir),
@@ -505,12 +638,12 @@ function retryPlanReviewStage(config: any, input: any) {
   }
 }
 
-function parseExecutionLogLine(line: any): any {
+function parseExecutionLogLine(line: string): ExecutionLogEvent | null {
   const match = /^\[[^\]]+\]\s+(\S+)(?:\s+(.*))?$/.exec(line)
   if (!match) {
     return null
   }
-  const details: Record<string, any> = {}
+  const details: Record<string, unknown> = {}
   const fieldPattern = /(\w+)=("(?:\\.|[^"])*"|\[[^\]]*\]|\{[^}]*\}|[^\s]+)/g
   let field
   while ((field = fieldPattern.exec(match[2] || '')) !== null) {
@@ -526,9 +659,10 @@ function parseExecutionLogLine(line: any): any {
   }
 }
 
-function progressSnapshot(config: any, runDir: any, state: any) {
-  const reviewers: any = Object.fromEntries(
-    (state.roles || []).map((role: any) => [
+function progressSnapshot(config: WorkspaceReviewConfig, runDir: string, state: RunState): ProgressSnapshot {
+  const roles = Array.isArray(state.roles) ? state.roles.filter(isString) : []
+  const reviewers: Record<string, ReviewerProgress> = Object.fromEntries(
+    roles.map((role) => [
       role,
       {
         model: config.roles[role],
@@ -536,11 +670,11 @@ function progressSnapshot(config: any, runDir: any, state: any) {
       },
     ]),
   )
-  let factCheck = {
+  let factCheck: ReviewerProgress = {
     model: config.roles.fact_check,
     status: 'pending',
   }
-  let synthesis = {
+  let synthesis: ReviewerProgress = {
     model: config.roles.synthesis,
     status: 'pending',
   }
@@ -549,13 +683,13 @@ function progressSnapshot(config: any, runDir: any, state: any) {
     const events = fs
       .readFileSync(logFile, 'utf8')
       .split('\n')
-      .filter((event: any): event is any => Boolean(event))
-      .map(parseExecutionLogLine)
       .filter(Boolean)
+      .map(parseExecutionLogLine)
+      .filter((event): event is ExecutionLogEvent => Boolean(event))
     for (const event of events) {
       if (event.event === 'stage_retry_queued' || event.event === 'stage_retry_started') {
         if (event.stage === 'reviewers') {
-          const retryRoles = Array.isArray(event.retry_roles) ? event.retry_roles : []
+          const retryRoles = Array.isArray(event.retry_roles) ? event.retry_roles.filter(isString) : []
           for (const role of retryRoles) {
             if (reviewers[role]) {
               reviewers[role].status = 'pending'
@@ -570,55 +704,57 @@ function progressSnapshot(config: any, runDir: any, state: any) {
           synthesis.status = 'pending'
         }
       }
-      if (event.role && reviewers[event.role]) {
+      const role = typeof event.role === 'string' ? event.role : null
+      const model = typeof event.model === 'string' ? event.model : null
+      if (role && reviewers[role]) {
         if (event.event === 'agent_started') {
-          reviewers[event.role].status = 'running'
+          reviewers[role].status = 'running'
         } else if (event.event === 'agent_completed') {
-          reviewers[event.role].status = 'completed'
+          reviewers[role].status = 'completed'
         } else if (event.event === 'agent_failed' || event.event === 'agent_invalid_output') {
-          reviewers[event.role].status = 'failed'
+          reviewers[role].status = 'failed'
         }
       }
       if (event.event === 'fact_check_started') {
         factCheck = {
-          model: event.model || factCheck.model,
+          model: model || factCheck.model,
           status: 'running',
         }
       } else if (event.event === 'fact_check_completed') {
         factCheck = {
-          model: event.model || factCheck.model,
+          model: model || factCheck.model,
           status: 'completed',
         }
       } else if (event.event === 'fact_check_failed' || event.event === 'fact_check_invalid_output') {
         factCheck = {
-          model: event.model || factCheck.model,
+          model: model || factCheck.model,
           status: 'failed',
         }
       }
       if (event.event === 'synthesis_started') {
         synthesis = {
-          model: event.model || synthesis.model,
+          model: model || synthesis.model,
           status: 'running',
         }
       } else if (event.event === 'synthesis_completed') {
         synthesis = {
-          model: event.model || synthesis.model,
+          model: model || synthesis.model,
           status: 'completed',
         }
       } else if (event.event === 'synthesis_failed' || event.event === 'synthesis_invalid_output') {
         synthesis = {
-          model: event.model || synthesis.model,
+          model: model || synthesis.model,
           status: 'failed',
         }
       }
     }
   }
 
-  const reviewerValues = Object.values(reviewers) as any[]
-  const completedReviewers = reviewerValues.filter((item: any) => item.status === 'completed').length
-  const active = (Object.entries(reviewers) as [string, any][])
-    .filter(([, item]: any) => item.status === 'running')
-    .map(([role, item]: any) => `${role}/${item.model}`)
+  const reviewerValues = Object.values(reviewers)
+  const completedReviewers = reviewerValues.filter((item) => item.status === 'completed').length
+  const active = Object.entries(reviewers)
+    .filter(([, item]) => item.status === 'running')
+    .map(([role, item]) => `${role}/${item.model}`)
   if (factCheck.status === 'running') {
     active.push(`fact_check/${factCheck.model}`)
   }
@@ -650,14 +786,14 @@ function progressSnapshot(config: any, runDir: any, state: any) {
   }
 }
 
-function planReviewResult(config: any, input: any) {
+function planReviewResult(config: WorkspaceReviewConfig, input: GetPlanReviewInput): PlanReviewResult {
   const runDir = runDirectory(config, input.run_id)
   const stateFile = path.join(runDir, 'state.json')
   if (!fs.existsSync(stateFile)) {
     throw new Error(`Unknown plan review run: ${input.run_id}`)
   }
-  const state = parseJsonFile<any>(stateFile)
-  const result: any = {
+  const state = parseJsonFile<RunState>(stateFile)
+  const result: PlanReviewResult = {
     ...state,
     run_dir: runDir,
     execution_log: executionLogPath(runDir),
@@ -666,7 +802,7 @@ function planReviewResult(config: any, input: any) {
   const includeReport = input.include_report !== false
   const reportFile = path.join(runDir, 'report.json')
   if (includeReport && state.status === 'completed' && fs.existsSync(reportFile)) {
-    result.report = parseJsonFile<any>(reportFile)
+    result.report = parseJsonFile<unknown>(reportFile)
   }
   if (state.status === 'completed' || state.status === 'failed') {
     result.next_action = null
@@ -674,7 +810,7 @@ function planReviewResult(config: any, input: any) {
   return result
 }
 
-function waitDuration(input: any) {
+function waitDuration(input: GetPlanReviewInput): number {
   const value = input.wait_ms === undefined ? DEFAULT_WAIT_MS : Number(input.wait_ms)
   if (!Number.isInteger(value) || value < 0 || value > MAX_WAIT_MS) {
     throw new Error(`wait_ms must be an integer between 0 and ${MAX_WAIT_MS}`)
@@ -682,11 +818,15 @@ function waitDuration(input: any) {
   return value
 }
 
-function delay(ms: any) {
-  return new Promise((resolve: any) => setTimeout(resolve, ms))
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function getPlanReview(config: any, input: any, onProgress: any = null) {
+async function getPlanReview(
+  config: WorkspaceReviewConfig,
+  input: GetPlanReviewInput,
+  onProgress: ((progress: ProgressNotification) => void) | null = null,
+): Promise<PlanReviewResult> {
   const waitMs = waitDuration(input)
   const startedAt = Date.now()
   let lastNotificationAt = 0
@@ -738,8 +878,8 @@ async function getPlanReview(config: any, input: any, onProgress: any = null) {
   }
 }
 
-function createHandler(config: any) {
-  return async function handle(message: any, sendNotification: any = null) {
+function createHandler(config: WorkspaceReviewConfig) {
+  return async function handle(message: JsonRpcMessage, sendNotification: SendNotification | null = null) {
     if (message.method === 'initialize') {
       return {
         protocolVersion: message.params?.protocolVersion || '2024-11-05',
@@ -780,22 +920,22 @@ function createHandler(config: any) {
         })
       }
       if (name === 'start_plan_review') {
-        return textResult(startPlanReview(config, input))
+        return textResult(startPlanReview(config, input as PlanReviewInput))
       }
       if (name === 'retry_plan_review_stage') {
-        return textResult(retryPlanReviewStage(config, input))
+        return textResult(retryPlanReviewStage(config, input as RetryPlanReviewInput))
       }
       if (name === 'get_plan_review') {
         const progressToken = message.params?._meta?.progressToken
-        const notifyProgress: any =
+        const notifyProgress =
           sendNotification && (typeof progressToken === 'string' || typeof progressToken === 'number')
-            ? (progress: any) =>
+            ? (progress: ProgressNotification) =>
                 sendNotification('notifications/progress', {
                   progressToken,
                   ...progress,
                 })
             : null
-        return textResult(await getPlanReview(config, input, notifyProgress))
+        return textResult(await getPlanReview(config, input as GetPlanReviewInput, notifyProgress))
       }
       throw new Error(`Unknown tool: ${name}`)
     }
@@ -803,15 +943,15 @@ function createHandler(config: any) {
   }
 }
 
-function response(id: any, result: any) {
+function response(id: JsonRpcId | undefined, result: unknown): void {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 }
 
-function notification(method: any, params: any) {
+function notification(method: string, params: Record<string, unknown>): void {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
 }
 
-function errorResponse(id: any, code: any, message: any) {
+function errorResponse(id: JsonRpcId | undefined, code: number, message: string): void {
   process.stdout.write(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -826,7 +966,7 @@ function errorResponse(id: any, code: any, message: any) {
 
 function main() {
   const args = parseArgs(process.argv)
-  const config: any = loadWorkspaceReviewFromArgs(args)
+  const config = loadWorkspaceReviewFromArgs(args) as WorkspaceReviewConfig
   const warnings = redactedSettingsWarnings(config)
   if (args['validate-only']) {
     console.log(
@@ -849,21 +989,21 @@ function main() {
   }
 
   const handle = createHandler(config)
-  async function processMessage(message: any) {
+  async function processMessage(message: JsonRpcMessage): Promise<void> {
     try {
       const result = await handle(message, notification)
       if (message.method === 'notifications/initialized') {
         return
       }
       response(message.id, result)
-    } catch (error: any) {
-      console.error(error.stack || error.message)
-      errorResponse(message?.id ?? null, -32603, error.message)
+    } catch (error) {
+      console.error(errorStackOrMessage(error))
+      errorResponse(message.id ?? null, -32603, errorMessage(error))
     }
   }
   let buffer = ''
   process.stdin.setEncoding('utf8')
-  process.stdin.on('data', (chunk: any) => {
+  process.stdin.on('data', (chunk: string) => {
     buffer += chunk
     let index
     while ((index = buffer.indexOf('\n')) !== -1) {
@@ -873,11 +1013,14 @@ function main() {
         continue
       }
       try {
-        const message = JSON.parse(line)
+        const message = JSON.parse(line) as unknown
+        if (!isRecord(message)) {
+          throw new Error('JSON-RPC message must be an object')
+        }
         void processMessage(message)
-      } catch (error: any) {
-        console.error(error.stack || error.message)
-        errorResponse(null, -32700, error.message)
+      } catch (error) {
+        console.error(errorStackOrMessage(error))
+        errorResponse(null, -32700, errorMessage(error))
       }
     }
   })
@@ -886,8 +1029,8 @@ function main() {
 if (isMainScript(__filename)) {
   try {
     main()
-  } catch (error: any) {
-    console.error(`[plan-review-mcp] startup validation failed: ${error.message}`)
+  } catch (error) {
+    console.error(`[plan-review-mcp] startup validation failed: ${errorMessage(error)}`)
     process.exitCode = 1
   }
 }
