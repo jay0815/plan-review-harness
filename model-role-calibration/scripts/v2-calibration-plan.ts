@@ -23,6 +23,65 @@ interface CalibrationConfig {
   models: string[]
 }
 
+interface Selection {
+  cases: string[]
+  models: string[]
+  probes: string[]
+}
+
+interface SelectionWithConfig extends Selection {
+  config: CalibrationConfig
+}
+
+interface CollectJobsOptions extends Selection {
+  run: string
+  scoreVersion: string
+}
+
+interface CalibrationJob {
+  run: string
+  caseId: string
+  model: string
+  probe: string
+  prompt: string
+  output: string
+  score: string
+  promptExists: boolean
+  outputExists: boolean
+  scoreExists: boolean
+}
+
+interface JobsByCaseAndProbe {
+  caseId: string
+  probe: string
+  models: string[]
+}
+
+interface RenderStatusOptions {
+  run: string
+  cases: string[]
+  probes: string[]
+  jobs: CalibrationJob[]
+  scoreVersion: string
+}
+
+interface PreparePromptsOptions {
+  run: string
+  cases: string[]
+  probes: string[]
+}
+
+interface PrintModelCommandsOptions extends Selection {
+  run: string
+  jobs: CalibrationJob[]
+}
+
+interface PrintScoreCommandsOptions {
+  run: string
+  jobs: CalibrationJob[]
+  scoreVersion: string
+}
+
 const DEFAULT_SCORE_VERSION = 'manual-v1'
 const TS_RUNNER = 'node --import tsx'
 const SCRIPT = 'model-role-calibration/scripts/v2-calibration-plan.ts'
@@ -45,23 +104,23 @@ function usage() {
     '  score-commands  Print score-output commands for completed outputs missing scores.',
     '  all             Print status, model commands, score commands, and summarize command.',
     '',
-    'This helper never starts run-calibration.ts or any model wrapper itself.',
+    'This helper never starts run-calibration.ts or model wrappers itself.',
   ].join('\n')
 }
 
-function rel(file: any) {
+function rel(file: string): string {
   return path.relative(path.resolve(ROOT, '..'), file)
 }
 
-function promptFile(run: any, caseId: any, probe: any) {
+function promptFile(run: string, caseId: string, probe: string): string {
   return path.join(ROOT, 'runs', run, caseId, 'prompts', `${probe}.md`)
 }
 
-function scoreFile(run: any, caseId: any, model: any, probe: any, scoreVersion: any) {
+function scoreFile(run: string, caseId: string, model: string, probe: string, scoreVersion: string): string {
   return path.join(ROOT, 'runs', run, caseId, 'scores', 'versions', scoreVersion, `${slug(model)}-${probe}.score.json`)
 }
 
-function validateSelection({ cases, models, probes, config }: any) {
+function validateSelection({ cases, models, probes, config }: SelectionWithConfig): void {
   for (const caseId of cases) {
     assertSafeCaseId(caseId)
   }
@@ -73,8 +132,8 @@ function validateSelection({ cases, models, probes, config }: any) {
   probes.forEach(assertProbe)
 }
 
-function collectJobs({ run, cases, models, probes, scoreVersion }: any) {
-  const jobs: any[] = []
+function collectJobs({ run, cases, models, probes, scoreVersion }: CollectJobsOptions): CalibrationJob[] {
+  const jobs: CalibrationJob[] = []
   for (const caseId of cases) {
     for (const probe of probes) {
       const prompt = promptFile(run, caseId, probe)
@@ -99,36 +158,38 @@ function collectJobs({ run, cases, models, probes, scoreVersion }: any) {
   return jobs
 }
 
-function byCaseAndProbe(jobs: any, predicate: any) {
-  const grouped = new Map<string, any>()
+function byCaseAndProbe(jobs: CalibrationJob[], predicate: (job: CalibrationJob) => boolean): JobsByCaseAndProbe[] {
+  const grouped = new Map<string, JobsByCaseAndProbe>()
   for (const job of jobs.filter(predicate)) {
     const key = `${job.caseId}\u0000${job.probe}`
-    if (!grouped.has(key)) {
-      grouped.set(key, {
+    let group = grouped.get(key)
+    if (!group) {
+      group = {
         caseId: job.caseId,
         probe: job.probe,
         models: [],
-      })
+      }
+      grouped.set(key, group)
     }
-    grouped.get(key).models.push(job.model)
+    group.models.push(job.model)
   }
   return [...grouped.values()]
 }
 
-function renderStatus({ cases, probes, jobs, scoreVersion }: any) {
+function renderStatus({ run, cases, probes, jobs, scoreVersion }: RenderStatusOptions): void {
   console.log(`Score version: ${scoreVersion}`)
   for (const caseId of cases) {
-    const caseJobs = jobs.filter((job: any) => job.caseId === caseId)
-    const promptCount = probes.filter((probe: any) => fs.existsSync(promptFile(caseJobs[0]?.run, caseId, probe))).length
-    const outputCount = caseJobs.filter((job: any) => job.outputExists).length
-    const scoreReadyJobs = caseJobs.filter((job: any) => job.outputExists)
-    const scoreCount = scoreReadyJobs.filter((job: any) => job.scoreExists).length
+    const caseJobs = jobs.filter((job) => job.caseId === caseId)
+    const promptCount = probes.filter((probe) => fs.existsSync(promptFile(run, caseId, probe))).length
+    const outputCount = caseJobs.filter((job) => job.outputExists).length
+    const scoreReadyJobs = caseJobs.filter((job) => job.outputExists)
+    const scoreCount = scoreReadyJobs.filter((job) => job.scoreExists).length
     console.log(`\n${caseId}`)
     console.log(`  prompts: ${promptCount}/${probes.length}`)
     console.log(`  outputs: ${outputCount}/${caseJobs.length}`)
     console.log(`  scores: ${scoreCount}/${scoreReadyJobs.length}`)
 
-    const missingOutputs = byCaseAndProbe(caseJobs, (job: any) => !job.outputExists)
+    const missingOutputs = byCaseAndProbe(caseJobs, (job) => !job.outputExists)
     if (missingOutputs.length) {
       console.log('  missing outputs:')
       for (const item of missingOutputs) {
@@ -136,7 +197,7 @@ function renderStatus({ cases, probes, jobs, scoreVersion }: any) {
       }
     }
 
-    const missingScores = byCaseAndProbe(caseJobs, (job: any) => job.outputExists && !job.scoreExists)
+    const missingScores = byCaseAndProbe(caseJobs, (job) => job.outputExists && !job.scoreExists)
     if (missingScores.length) {
       console.log('  missing scores:')
       for (const item of missingScores) {
@@ -146,9 +207,9 @@ function renderStatus({ cases, probes, jobs, scoreVersion }: any) {
   }
 }
 
-function preparePrompts({ run, cases, probes }: any) {
+function preparePrompts({ run, cases, probes }: PreparePromptsOptions): void {
   for (const caseId of cases) {
-    const missing = probes.filter((probe: any) => !fs.existsSync(promptFile(run, caseId, probe)))
+    const missing = probes.filter((probe) => !fs.existsSync(promptFile(run, caseId, probe)))
     if (!missing.length) {
       console.log(`${caseId}: prompts already complete`)
       continue
@@ -158,7 +219,7 @@ function preparePrompts({ run, cases, probes }: any) {
   }
 }
 
-function printModelCommands({ run, cases, models, probes, jobs }: any) {
+function printModelCommands({ run, cases, models, probes, jobs }: PrintModelCommandsOptions): void {
   console.log('# Prepare prompts first. This command does not run models.')
   console.log(
     `${TS_RUNNER} ${SCRIPT} --run ${run} --cases ${cases.join(',')} --models ${models.join(',')} ` +
@@ -167,7 +228,7 @@ function printModelCommands({ run, cases, models, probes, jobs }: any) {
   console.log('')
   console.log('# Run these manually when you want to start model calls.')
   for (const caseId of cases) {
-    const missing = jobs.some((job: any) => job.caseId === caseId && !job.outputExists)
+    const missing = jobs.some((job) => job.caseId === caseId && !job.outputExists)
     if (!missing) {
       console.log(`# ${caseId}: all outputs already exist`)
       continue
@@ -185,8 +246,8 @@ function printModelCommands({ run, cases, models, probes, jobs }: any) {
   }
 }
 
-function printScoreCommands({ run, jobs, scoreVersion }: any) {
-  const missing = jobs.filter((job: any) => job.outputExists && !job.scoreExists)
+function printScoreCommands({ run, jobs, scoreVersion }: PrintScoreCommandsOptions): void {
+  const missing = jobs.filter((job) => job.outputExists && !job.scoreExists)
   if (!missing.length) {
     console.log('# No missing score files for completed outputs.')
     return
@@ -206,7 +267,7 @@ function printScoreCommands({ run, jobs, scoreVersion }: any) {
   }
 }
 
-function printSummaryCommand(run: any, scoreVersion: any) {
+function printSummaryCommand(run: string, scoreVersion: string): void {
   console.log('# Summarize after scores are filled.')
   console.log(`${TS_RUNNER} ${SUMMARIZE_RESULTS} --run ${run} --score-version ${scoreVersion}`)
 }
@@ -224,7 +285,7 @@ function main() {
   }
   const action = args.action && args.action !== true ? String(args.action) : 'status'
   const cases = parseList(args.cases, config.primary_cases)
-  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
   const probes = parseList(args.probes, PROBES)
   const scoreVersion = optionalSlugArg(args, 'score-version') || DEFAULT_SCORE_VERSION
 
@@ -232,7 +293,7 @@ function main() {
   const jobs = collectJobs({ run, cases, models, probes, scoreVersion })
 
   if (action === 'status') {
-    renderStatus({ cases, probes, jobs, scoreVersion })
+    renderStatus({ run, cases, probes, jobs, scoreVersion })
     return
   }
   if (action === 'prepare') {
@@ -248,7 +309,7 @@ function main() {
     return
   }
   if (action === 'all') {
-    renderStatus({ cases, probes, jobs, scoreVersion })
+    renderStatus({ run, cases, probes, jobs, scoreVersion })
     console.log('')
     printModelCommands({ run, cases, models, probes, jobs })
     console.log('')
