@@ -139,7 +139,7 @@ function average(values: number[]): number | null {
   if (!values.length) {
     return null
   }
-  return values.reduce((total, value) => total + value, 0) / values.length
+  return values.reduce((total: any, value: any) => total + value, 0) / values.length
 }
 
 function scoreStats(values: number[]): ScoreStats {
@@ -156,7 +156,7 @@ function scoreStats(values: number[]): ScoreStats {
   const avg = average(values) as number
   const minimum = Math.min(...values)
   const maximum = Math.max(...values)
-  const variance = average(values.map((value) => (value - avg) ** 2)) as number
+  const variance = average(values.map((value: any) => (value - avg) ** 2)) as number
   return {
     count: values.length,
     average: avg,
@@ -197,17 +197,17 @@ export function listScoreFiles(runDir: string, scoreVersion: string | null = nul
   const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`
   if (scoreVersion) {
     const versionSegment = `${versionsSegment}${scoreVersion}${path.sep}`
-    return walk(runDir, (file) => file.endsWith('.score.json') && file.includes(versionSegment))
+    return walk(runDir, (file: any) => file.endsWith('.score.json') && file.includes(versionSegment))
   }
   return walk(
     runDir,
-    (file) => file.endsWith('.score.json') && !file.includes(draftsSegment) && !file.includes(versionsSegment),
+    (file: any) => file.endsWith('.score.json') && !file.includes(draftsSegment) && !file.includes(versionsSegment),
   )
 }
 
 export function listVersionedScoreFiles(runDir: string): string[] {
   const versionsSegment = `${path.sep}scores${path.sep}versions${path.sep}`
-  return walk(runDir, (file) => file.endsWith('.score.json') && file.includes(versionsSegment))
+  return walk(runDir, (file: any) => file.endsWith('.score.json') && file.includes(versionsSegment))
 }
 
 export function roleRecommendation(
@@ -222,10 +222,12 @@ export function roleRecommendation(
   const requiredCases = config.primary_cases
   const recommendationConfig = config.role_recommendation
   const candidates: ComparableCandidate[] = modelStats
-    .map((item) => {
+    .map((item: any) => {
       const scoresByCase = item.byProbeCase[probe] || {}
-      const missingCases = requiredCases.filter((caseId) => scoresByCase[caseId] === undefined)
-      const values = requiredCases.map((caseId) => scoresByCase[caseId]).filter((value) => value !== undefined)
+      const missingCases = requiredCases.filter((caseId: any) => scoresByCase[caseId] === undefined)
+      const values = requiredCases
+        .map((caseId: any) => scoresByCase[caseId])
+        .filter((value: any) => value !== undefined)
       const stats = scoreStats(values)
       const stabilityFailures: string[] = []
       if (!missingCases.length && stats.minimum! < recommendationConfig.minimum_case_score) {
@@ -244,8 +246,8 @@ export function roleRecommendation(
         failure_modes: item.failure_modes_by_probe?.[probe] || [],
       }
     })
-    .filter((item): item is ComparableCandidate => item.avg !== null)
-    .sort((a, b) => b.avg - a.avg)
+    .filter((item: any): item is ComparableCandidate => item.avg !== null)
+    .sort((a: any, b: any) => b.avg - a.avg)
 
   const minimumComparableModels = recommendationConfig.minimum_comparable_models
   if (candidates.length < minimumComparableModels) {
@@ -269,12 +271,12 @@ export function roleRecommendation(
     }
   }
 
-  const averageQualified = candidates.filter((item) => item.avg >= recommendationConfig.minimum_average_score)
-  const qualified = averageQualified.filter((item) => item.stability_failures.length === 0)
+  const averageQualified = candidates.filter((item: any) => item.avg >= recommendationConfig.minimum_average_score)
+  const qualified = averageQualified.filter((item: any) => item.stability_failures.length === 0)
   const top = candidates[0]
   const recommended = qualified[0] || null
   const backup = qualified[1] || null
-  const avoid = candidates.filter((item) => item.avg < 12.5).map((item) => item.model)
+  const avoid = candidates.filter((item: any) => item.avg < 12.5).map((item: any) => item.model)
   const status: RecommendationStatus = !averageQualified.length
     ? 'below_quality_threshold'
     : recommended
@@ -320,7 +322,7 @@ function main(): void {
         'Pass --score-version <version> to summarize them.',
     )
   }
-  const scores: NormalizedScore[] = scoreFiles.map((file) => {
+  const scores: NormalizedScore[] = scoreFiles.map((file: any) => {
     const data = parseJsonFile<ScoreFile>(file)
     const computedTotal = sumScore(data.score || {})
     return {
@@ -330,9 +332,9 @@ function main(): void {
     }
   })
 
-  const cases = [...new Set(scores.map((item) => item.case_id))].sort()
-  const models = [...new Set(scores.map((item) => item.model))].sort()
-  const probes = [...new Set(scores.map((item) => item.probe))].sort()
+  const cases = [...new Set(scores.map((item: any) => item.case_id))].sort()
+  const models = [...new Set(scores.map((item: any) => item.model))].sort()
+  const probes = [...new Set(scores.map((item: any) => item.probe))].sort()
   const seen = new Set<string>()
   for (const score of scores) {
     const key = `${score.case_id}\u0000${score.model}\u0000${score.probe}`
@@ -342,8 +344,8 @@ function main(): void {
     seen.add(key)
   }
 
-  const modelStats: ModelStats[] = models.map((model) => {
-    const rows = scores.filter((item) => item.model === model)
+  const modelStats: ModelStats[] = models.map((model: any) => {
+    const rows = scores.filter((item: any) => item.model === model)
     const byProbeCase: Partial<Record<Probe, Record<string, number>>> = {}
     const suggested_roles: string[] = []
     const unsuitable_roles: string[] = []
@@ -369,8 +371,8 @@ function main(): void {
   })
 
   const roleRecommendations = (['planner', 'architecture', 'execution', 'risk', 'synthesis'] as Probe[])
-    .map((probe) => roleRecommendation(probe, modelStats, config))
-    .filter((item): item is RoleRecommendation => Boolean(item))
+    .map((probe: any) => roleRecommendation(probe, modelStats, config))
+    .filter((item: any): item is RoleRecommendation => Boolean(item))
 
   const results: SummaryResults = {
     run,
@@ -381,31 +383,31 @@ function main(): void {
     probes,
     primary_cases: config.primary_cases,
     scores,
-    model_probe_averages: modelStats.map((item) => ({
+    model_probe_averages: modelStats.map((item: any) => ({
       model: item.model,
       averages: Object.fromEntries(
-        PROBE_COLUMNS.map((probe) => [
+        PROBE_COLUMNS.map((probe: any) => [
           probe,
           average(
             config.primary_cases
-              .map((caseId) => item.byProbeCase[probe]?.[caseId])
-              .filter((value): value is number => value !== undefined),
+              .map((caseId: any) => item.byProbeCase[probe]?.[caseId])
+              .filter((value: any): value is number => value !== undefined),
           ),
         ]),
       ) as Record<Probe, number | null>,
       coverage: Object.fromEntries(
-        PROBE_COLUMNS.map((probe) => [
+        PROBE_COLUMNS.map((probe: any) => [
           probe,
-          config.primary_cases.filter((caseId) => item.byProbeCase[probe]?.[caseId] !== undefined),
+          config.primary_cases.filter((caseId: any) => item.byProbeCase[probe]?.[caseId] !== undefined),
         ]),
       ) as Record<Probe, string[]>,
       stability: Object.fromEntries(
-        PROBE_COLUMNS.map((probe) => [
+        PROBE_COLUMNS.map((probe: any) => [
           probe,
           scoreStats(
             config.primary_cases
-              .map((caseId) => item.byProbeCase[probe]?.[caseId])
-              .filter((value): value is number => value !== undefined),
+              .map((caseId: any) => item.byProbeCase[probe]?.[caseId])
+              .filter((value: any): value is number => value !== undefined),
           ),
         ]),
       ) as Record<Probe, ScoreStats>,
@@ -450,8 +452,9 @@ function renderSummary(results: SummaryResults): string {
   lines.push('|---|---:|---:|---:|---:|---:|---:|---|')
   for (const item of results.model_probe_averages) {
     const count = results.primary_cases.length
-    const roleModes = PROBE_COLUMNS.filter((probe) => item.failure_modes_by_probe?.[probe]?.length)
-      .map((probe) => `${probe}: ${item.failure_modes_by_probe[probe]?.join('; ')}`)
+    const failureModesByProbe = item.failure_modes_by_probe as Record<string, string[]> | undefined
+    const roleModes = PROBE_COLUMNS.filter((probe: any) => failureModesByProbe?.[probe]?.length)
+      .map((probe: any) => `${probe}: ${failureModesByProbe?.[probe]?.join('; ')}`)
       .join(' | ')
     lines.push(
       `| ${item.model} | ${formatProbeCell(item, 'planner', count)} | ${formatProbeCell(item, 'risk', count)} | ${formatProbeCell(item, 'architecture', count)} | ${formatProbeCell(item, 'execution', count)} | ${formatProbeCell(item, 'rebuttal', count)} | ${formatProbeCell(item, 'synthesis', count)} | ${roleModes} |`,
@@ -463,9 +466,9 @@ function renderSummary(results: SummaryResults): string {
   lines.push('', '## Key Findings', '')
   lines.push('- TBD')
   lines.push('', '## Common Failure Modes', '')
-  const modes = [...new Set(results.model_probe_averages.flatMap((item) => item.failure_modes))]
+  const modes = [...new Set(results.model_probe_averages.flatMap((item: any) => item.failure_modes))]
   if (modes.length) {
-    modes.forEach((mode) => lines.push(`- ${mode}`))
+    modes.forEach((mode: any) => lines.push(`- ${mode}`))
   } else {
     lines.push('- TBD')
   }
@@ -514,9 +517,9 @@ function renderRoleSection(title: string, rec: RoleRecommendation | undefined): 
     lines.push('Backup:')
     lines.push(`- ${rec?.backup || 'TBD'}`, '')
     lines.push('Avoid:')
-    lines.push(rec?.avoid?.length ? rec.avoid.map((item) => `- ${item}`).join('\n') : '- TBD')
+    lines.push(rec?.avoid?.length ? rec.avoid.map((item: any) => `- ${item}`).join('\n') : '- TBD')
     lines.push('', 'Failure modes to watch:')
-    lines.push(rec?.failure_modes?.length ? rec.failure_modes.map((item) => `- ${item}`).join('\n') : '- TBD', '')
+    lines.push(rec?.failure_modes?.length ? rec.failure_modes.map((item: any) => `- ${item}`).join('\n') : '- TBD', '')
     lines.push('---', '')
     return lines
   }
@@ -538,15 +541,15 @@ function renderRoleSection(title: string, rec: RoleRecommendation | undefined): 
   lines.push('Backup:')
   lines.push(`- ${rec.backup || 'TBD'}`, '')
   lines.push('Avoid:')
-  lines.push(rec.avoid.length ? rec.avoid.map((item) => `- ${item}`).join('\n') : '- TBD')
+  lines.push(rec.avoid.length ? rec.avoid.map((item: any) => `- ${item}`).join('\n') : '- TBD')
   lines.push('', 'Failure modes to watch:')
-  lines.push(rec.failure_modes?.length ? rec.failure_modes.map((item) => `- ${item}`).join('\n') : '- TBD')
+  lines.push(rec.failure_modes?.length ? rec.failure_modes.map((item: any) => `- ${item}`).join('\n') : '- TBD')
   lines.push('', '---', '')
   return lines
 }
 
 function renderRoleMap(results: SummaryResults): string {
-  const byRole = Object.fromEntries(results.role_recommendations.map((rec) => [rec.role, rec])) as Partial<
+  const byRole = Object.fromEntries(results.role_recommendations.map((rec: any) => [rec.role, rec])) as Partial<
     Record<RoleName, RoleRecommendation>
   >
   const lines: string[] = []

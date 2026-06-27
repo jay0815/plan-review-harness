@@ -13,7 +13,7 @@ function readSchema() {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function typeOf(value) {
+function typeOf(value: any) {
   if (Array.isArray(value)) {
     return 'array'
   }
@@ -26,7 +26,7 @@ function typeOf(value) {
   return typeof value
 }
 
-function typeMatches(value, expected) {
+function typeMatches(value: any, expected: any) {
   const actual = typeOf(value)
   if (expected === 'number') {
     return actual === 'number' || actual === 'integer'
@@ -34,7 +34,7 @@ function typeMatches(value, expected) {
   return actual === expected
 }
 
-function resolveRef(ref, rootSchema) {
+function resolveRef(ref: any, rootSchema: any) {
   if (!ref || typeof ref !== 'string' || !ref.startsWith('#/')) {
     return null
   }
@@ -49,7 +49,7 @@ function resolveRef(ref, rootSchema) {
   return current || null
 }
 
-export function validateSchema(value: any, schema: any, path = '$', errors: any[] = [], rootSchema: any = null) {
+export function validateSchema(value: any, schema: any, path: any = '$', errors: any[] = [], rootSchema: any = null) {
   if (!schema || typeof schema !== 'object') {
     return errors
   }
@@ -71,7 +71,7 @@ export function validateSchema(value: any, schema: any, path = '$', errors: any[
   if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
     errors.push({
       path,
-      message: `expected one of ${schema.enum.map((item) => JSON.stringify(item)).join(', ')}`,
+      message: `expected one of ${schema.enum.map((item: any) => JSON.stringify(item)).join(', ')}`,
     })
   }
 
@@ -115,7 +115,9 @@ export function validateSchema(value: any, schema: any, path = '$', errors: any[
       errors.push({ path, message: `expected at most ${schema.maxItems} item(s), got ${value.length}` })
     }
     if (schema.items) {
-      value.forEach((item, index) => validateSchema(item, schema.items, `${path}[${index}]`, errors, rootSchema))
+      value.forEach((item: any, index: any) =>
+        validateSchema(item, schema.items, `${path}[${index}]`, errors, rootSchema),
+      )
     }
   }
 
@@ -155,7 +157,7 @@ function errorContext(text: string, error: any) {
   }
 }
 
-export function validateJsonText(candidateText: any, schema = readSchema()) {
+export function validateJsonText(candidateText: any, schema: any = readSchema()) {
   if (typeof candidateText !== 'string') {
     return {
       valid: false,
@@ -212,7 +214,7 @@ export function validateJsonText(candidateText: any, schema = readSchema()) {
   }
 }
 
-function appendLog(entry) {
+function appendLog(entry: any) {
   const file = process.env.MODEL_ROLE_CALIBRATION_VALIDATOR_LOG
   if (!file) {
     return
@@ -230,15 +232,15 @@ function appendLog(entry) {
   }
 }
 
-function errorSummary(errors) {
-  return (errors || []).slice(0, 5).map((error) => ({
+function errorSummary(errors: any) {
+  return (errors || []).slice(0, 5).map((error: any) => ({
     path: error.path,
     message: error.message,
     context: error.context,
   }))
 }
 
-function logValidation(requestId, candidateText, result) {
+function logValidation(requestId: any, candidateText: any, result: any) {
   appendLog({
     event: 'tool_call',
     request_id: requestId,
@@ -284,11 +286,11 @@ export function toolList() {
   ]
 }
 
-function response(id, result) {
+function response(id: any, result: any) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 }
 
-function errorResponse(id, code, message) {
+function errorResponse(id: any, code: any, message: any) {
   process.stdout.write(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -298,7 +300,7 @@ function errorResponse(id, code, message) {
   )
 }
 
-function handle(message) {
+function handle(message: any) {
   if (message.method === 'initialize') {
     appendLog({
       event: 'initialize',
@@ -331,7 +333,7 @@ function handle(message) {
     appendLog({
       event: 'tools_list',
       request_id: message.id,
-      tools: toolList().map((tool) => tool.name),
+      tools: toolList().map((tool: any) => tool.name),
     })
     response(message.id, { tools: toolList() })
     return
@@ -375,7 +377,7 @@ function main() {
   })
   let buffer = ''
   process.stdin.setEncoding('utf8')
-  process.stdin.on('data', (chunk) => {
+  process.stdin.on('data', (chunk: any) => {
     buffer += chunk
     let index
     while ((index = buffer.indexOf('\n')) !== -1) {

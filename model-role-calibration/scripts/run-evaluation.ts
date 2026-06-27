@@ -157,7 +157,7 @@ export function positiveInteger(value: unknown, name: string): number {
 }
 
 export function runProcess(command: string, args: string[], options: RunProcessOptions): Promise<RunProcessResult> {
-  return new Promise((resolve) => {
+  return new Promise((resolve: any) => {
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
     let outputBytes = 0
@@ -188,12 +188,12 @@ export function runProcess(command: string, args: string[], options: RunProcessO
 
     child.stdout!.on('data', (chunk: Buffer) => append(stdout, chunk))
     child.stderr!.on('data', (chunk: Buffer) => append(stderr, chunk))
-    child.on('error', (spawnError) => {
+    child.on('error', (spawnError: any) => {
       if (!error) {
         error = spawnError
       }
     })
-    child.on('close', (status, signal) => {
+    child.on('close', (status: any, signal: any) => {
       clearTimeout(timeout)
       resolve({
         status,
@@ -334,7 +334,7 @@ async function main(): Promise<void> {
   assertProbe(probe)
 
   const config = loadConfig<CalibrationConfig>()
-  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
   for (const model of models) {
     if (!config.models.includes(model)) {
       throw new Error(`Invalid model "${model}". Expected one of: ${config.models.join(', ')}`)

@@ -7,7 +7,7 @@ import { isMainScript, loadConfig, parseArgs, requireArg } from './lib.js'
 function parseModels(value: string): string[] {
   return String(value || '')
     .split(',')
-    .map((item) => item.trim().toLowerCase())
+    .map((item: any) => item.trim().toLowerCase())
     .filter(Boolean)
 }
 

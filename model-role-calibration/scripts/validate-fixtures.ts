@@ -50,8 +50,8 @@ function listDirectories(dir: string): string[] {
   }
   return fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
+    .filter((entry: any) => entry.isDirectory())
+    .map((entry: any) => entry.name)
     .sort()
 }
 
@@ -75,7 +75,7 @@ function assertSchema(value: unknown, schemaFile: string, label: string): void {
   if (!validation.valid) {
     const details = (validation.errors || [])
       .slice(0, 5)
-      .map((item) => `${item.path}: ${item.message}`)
+      .map((item: any) => `${item.path}: ${item.message}`)
       .join('; ')
     throw new Error(`${label} does not match schema: ${details || validation.stage}`)
   }
@@ -83,8 +83,8 @@ function assertSchema(value: unknown, schemaFile: string, label: string): void {
 
 function validateSynthesisFixture(caseId: string, input: string): void {
   const blocks = jsonCodeBlocks(input, caseId)
-  const reviewerOutputs = blocks.filter((item) => SYNTHESIS_SOURCE_BY_PROBE[item?.probe])
-  const factCheck = blocks.find((item) => item?.probe === 'fact_check')
+  const reviewerOutputs = blocks.filter((item: any) => SYNTHESIS_SOURCE_BY_PROBE[item?.probe])
+  const factCheck = blocks.find((item: any) => item?.probe === 'fact_check')
   if (!reviewerOutputs.length) {
     throw new Error(`Missing Reviewer JSON blocks in ${caseId} synthesis input`)
   }
@@ -97,7 +97,7 @@ function validateSynthesisFixture(caseId: string, input: string): void {
   }
   assertSchema(factCheck, path.join(ROOT, 'schemas', 'fact-check-output.schema.json'), `${caseId}/fact_check`)
 
-  const expectedIssues = reviewerOutputs.flatMap((output) => {
+  const expectedIssues = reviewerOutputs.flatMap((output: any) => {
     const source = SYNTHESIS_SOURCE_BY_PROBE[output.probe]
     return (output.issues || []).map((issue: JsonObject, index: number) => ({
       issue_id: `${slug(source)}-${String(index + 1).padStart(3, '0')}`,
@@ -109,7 +109,7 @@ function validateSynthesisFixture(caseId: string, input: string): void {
   if (checkedIssues.length !== expectedIssues.length) {
     throw new Error(`${caseId} Fact Check covers ${checkedIssues.length} issue(s), expected ${expectedIssues.length}`)
   }
-  const checkedById = new Map<string, JsonObject>(checkedIssues.map((item) => [item.issue_id, item]))
+  const checkedById = new Map<string, JsonObject>(checkedIssues.map((item: any) => [item.issue_id, item]))
   for (const expected of expectedIssues) {
     const checked = checkedById.get(expected.issue_id)
     if (!checked) {
@@ -120,21 +120,21 @@ function validateSynthesisFixture(caseId: string, input: string): void {
     }
   }
 
-  for (const source of new Set(expectedIssues.map((item) => item.source))) {
+  for (const source of new Set(expectedIssues.map((item: any) => item.source))) {
     const sourceIssues = checkedIssues.filter((item: JsonObject) => item.source === source)
     const summary = (factCheck.source_summaries || []).find((item: JsonObject) => item.source === source)
     if (!summary) {
       throw new Error(`${caseId} Fact Check missing source summary for ${source}`)
     }
     const statusCounts = Object.fromEntries(
-      ['verified', 'partially_verified', 'unsupported', 'contradicted', 'unverifiable'].map((status) => [
+      ['verified', 'partially_verified', 'unsupported', 'contradicted', 'unverifiable'].map((status: any) => [
         status,
         sourceIssues.filter((item: JsonObject) => item.status === status).length,
       ]),
     )
     if (
       summary.total_issues !== sourceIssues.length ||
-      Object.entries(statusCounts).some(([status, count]) => summary[status] !== count)
+      Object.entries(statusCounts).some(([status, count]: any) => summary[status] !== count)
     ) {
       throw new Error(`${caseId} Fact Check source summary mismatch for ${source}`)
     }
@@ -145,7 +145,7 @@ function main(): void {
   const schemaDir = path.join(ROOT, 'schemas')
   const schemaFiles = fs
     .readdirSync(schemaDir)
-    .filter((file) => file.endsWith('.json'))
+    .filter((file: any) => file.endsWith('.json'))
     .sort()
   for (const file of schemaFiles) {
     parseJsonFile(path.join(schemaDir, file))

@@ -10,7 +10,7 @@ export const FACT_CHECK_ROOT = process.env.MODEL_ROLE_CALIBRATION_FACT_CHECK_ROO
   ? path.resolve(process.env.MODEL_ROLE_CALIBRATION_FACT_CHECK_ROOT)
   : path.join(ROOT, 'fact-check-calibration')
 const DEFAULT_WORKSPACE_RUNS_DIR = path.join(os.homedir(), '.claude', 'plan-review-harness', 'mcp', 'workspace-runs')
-const REVIEWER_SOURCE_BY_ROLE = {
+const REVIEWER_SOURCE_BY_ROLE: Record<string, string> = {
   risk: 'Risk Reviewer',
   architecture: 'Architecture Reviewer',
   execution: 'Execution Reviewer',
@@ -40,13 +40,13 @@ const EVIDENCE_STATUSES = new Set([
 ])
 const CLAIM_SUPPORTS = new Set(['direct', 'partial', 'none', 'contradicted', 'unverifiable'])
 
-export function assertFactCheckCaseId(caseId) {
+export function assertFactCheckCaseId(caseId: any) {
   if (!/^[A-Za-z0-9_-]+$/.test(caseId)) {
     throw new Error(`Invalid fact-check calibration case id: ${caseId}`)
   }
 }
 
-export function resolveWorkspaceRunDir({ runId, runDir }) {
+export function resolveWorkspaceRunDir({ runId, runDir }: any) {
   if (runId && runDir) {
     throw new Error('Use either --run-id or --run-dir, not both.')
   }
@@ -62,16 +62,16 @@ export function resolveWorkspaceRunDir({ runId, runDir }) {
   return path.join(DEFAULT_WORKSPACE_RUNS_DIR, runId)
 }
 
-function caseDir(caseId) {
+function caseDir(caseId: any) {
   assertFactCheckCaseId(caseId)
   return path.join(FACT_CHECK_ROOT, 'cases', caseId)
 }
 
-export function caseFile(caseId) {
+export function caseFile(caseId: any) {
   return path.join(caseDir(caseId), 'case.json')
 }
 
-export function loadCase(caseId): JsonObject {
+export function loadCase(caseId: any): JsonObject {
   const file = caseFile(caseId)
   if (!fs.existsSync(file)) {
     throw new Error(`Unknown fact-check calibration case: ${file}`)
@@ -79,32 +79,32 @@ export function loadCase(caseId): JsonObject {
   return parseJsonFile<JsonObject>(file)
 }
 
-function runCaseDir(run, caseId) {
+function runCaseDir(run: any, caseId: any) {
   assertFactCheckCaseId(caseId)
   return path.join(FACT_CHECK_ROOT, 'runs', run, caseId)
 }
 
-export function normalizedOutputFile(run, caseId, model) {
+export function normalizedOutputFile(run: any, caseId: any, model: any) {
   return path.join(runCaseDir(run, caseId), 'outputs', 'normalized', `${slug(model)}.json`)
 }
 
-function scoreFile(run, caseId, model) {
+function scoreFile(run: any, caseId: any, model: any) {
   return path.join(runCaseDir(run, caseId), 'scores', `${slug(model)}.score.json`)
 }
 
-function normalizeSource(source) {
+function normalizeSource(source: any) {
   const value = String(source || '').trim()
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '')
   return SOURCE_ALIAS_BY_NORMALIZED.get(normalized) || value
 }
 
-function checkedIssueKey(source, title) {
+function checkedIssueKey(source: any, title: any) {
   return `${normalizeSource(source)}\u0000${title}`
 }
 
 function reviewerOutputsFromReport(report: any): Record<string, any> {
   return Object.fromEntries(
-    (Object.entries(report.reviewers || {}) as Array<[string, any]>).map(([role, item]) => [
+    (Object.entries(report.reviewers || {}) as Array<[string, any]>).map(([role, item]: any) => [
       REVIEWER_SOURCE_BY_ROLE[role] || role,
       item.output,
     ]),
@@ -113,15 +113,17 @@ function reviewerOutputsFromReport(report: any): Record<string, any> {
 
 function issueRowsFromReviewers(reviewerOutputs: Record<string, any>, factCheckOutput: any): any[] {
   const factRowsById = new Map<string, any>(
-    (factCheckOutput?.checked_issues || []).filter((item) => item.issue_id).map((item) => [item.issue_id, item]),
+    (factCheckOutput?.checked_issues || [])
+      .filter((item: any) => item.issue_id)
+      .map((item: any) => [item.issue_id, item]),
   )
   const factRowsByText = new Map<string, any>(
-    (factCheckOutput?.checked_issues || []).map((item) => [checkedIssueKey(item.source, item.issue_title), item]),
+    (factCheckOutput?.checked_issues || []).map((item: any) => [checkedIssueKey(item.source, item.issue_title), item]),
   )
   const rows: any[] = []
   for (const [source, output] of Object.entries(reviewerOutputs)) {
     const issues = Array.isArray(output?.issues) ? output.issues : []
-    issues.forEach((issue, index) => {
+    issues.forEach((issue: any, index: any) => {
       const id = `${slug(source)}-${String(index + 1).padStart(3, '0')}`
       const fact = factRowsById.get(id) || factRowsByText.get(checkedIssueKey(source, issue.title))
       rows.push({
@@ -142,7 +144,7 @@ function issueRowsFromReviewers(reviewerOutputs: Record<string, any>, factCheckO
   return rows
 }
 
-export function createCaseFromWorkspaceRun({ runId, runDir, caseId }) {
+export function createCaseFromWorkspaceRun({ runId, runDir, caseId }: any) {
   assertFactCheckCaseId(caseId)
   const absoluteRunDir = resolveWorkspaceRunDir({ runId, runDir })
   const requestFile = path.join(absoluteRunDir, 'request.json')
@@ -190,15 +192,15 @@ export function createCaseFromWorkspaceRun({ runId, runDir, caseId }) {
   }
 }
 
-function renderFactCheckInput(fixture) {
-  const issueIds = (fixture.issues || []).map((item) => ({
+function renderFactCheckInput(fixture: any) {
+  const issueIds = (fixture.issues || []).map((item: any) => ({
     issue_id: item.id,
     source: item.source,
     issue_title: item.issue_title,
     reviewer_issue_index: item.reviewer_issue_index,
   }))
   const sourceSections = Object.entries(fixture.reviewer_outputs || {})
-    .map(([source, output]) => [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'))
+    .map(([source, output]: any) => [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'))
     .join('\n\n')
   return [
     '# Fact Check Calibration Case',
@@ -234,12 +236,12 @@ function renderFactCheckInput(fixture) {
     .join('\n')
 }
 
-export function renderFactCheckPrompt(fixture) {
+export function renderFactCheckPrompt(fixture: any) {
   const template = readText(path.join(ROOT, 'prompts', 'probe-fact_check.md'))
   return template.replace('{{INPUT}}', renderFactCheckInput(fixture))
 }
 
-export function generatePrompts({ run, caseId, models }) {
+export function generatePrompts({ run, caseId, models }: any) {
   const fixture = loadCase(caseId)
   const prompt = renderFactCheckPrompt(fixture)
   const promptDir = path.join(runCaseDir(run, caseId), 'prompts')
@@ -253,7 +255,7 @@ export function generatePrompts({ run, caseId, models }) {
   }
 }
 
-export function ingestOutput({ run, caseId, model, file }) {
+export function ingestOutput({ run, caseId, model, file }: any) {
   const absoluteFile = path.resolve(file)
   if (!fs.existsSync(absoluteFile)) {
     throw new Error(`Input file does not exist: ${absoluteFile}`)
@@ -293,7 +295,7 @@ export function ingestOutput({ run, caseId, model, file }) {
   }
 }
 
-function validateFactCheckOutput(output) {
+function validateFactCheckOutput(output: any) {
   if (!output || typeof output !== 'object' || Array.isArray(output)) {
     throw new Error('Fact Check output must be a JSON object')
   }
@@ -322,18 +324,18 @@ function validateFactCheckOutput(output) {
   }
 }
 
-function textIssueKey(item) {
+function textIssueKey(item: any) {
   return checkedIssueKey(item.source, item.issue_title)
 }
 
-function expectedIssues(fixture) {
-  const missing = fixture.issues.filter((item) => !item.expected_status)
+function expectedIssues(fixture: any) {
+  const missing = fixture.issues.filter((item: any) => !item.expected_status)
   if (missing.length) {
     throw new Error(
       [
         `Fact-check calibration case has ${missing.length} unlabeled issue(s).`,
         'Fill expected_status before scoring.',
-        ...missing.slice(0, 10).map((item) => `- ${item.id}: ${item.source} / ${item.issue_title}`),
+        ...missing.slice(0, 10).map((item: any) => `- ${item.id}: ${item.source} / ${item.issue_title}`),
       ].join('\n'),
     )
   }
@@ -351,21 +353,21 @@ function expectedIssues(fixture) {
   return fixture.issues
 }
 
-export function scoreOutput({ run, caseId, model }) {
+export function scoreOutput({ run, caseId, model }: any) {
   const fixture = loadCase(caseId)
   const expected = expectedIssues(fixture)
   const normalized = parseJsonFile<JsonObject>(normalizedOutputFile(run, caseId, model))
   const output = normalized.output
   validateFactCheckOutput(output)
   const actualById = new Map<string, any>(
-    output.checked_issues.filter((item) => item.issue_id).map((item) => [item.issue_id, item]),
+    output.checked_issues.filter((item: any) => item.issue_id).map((item: any) => [item.issue_id, item]),
   )
   const actualLegacyByText = new Map<string, any>(
-    output.checked_issues.filter((item) => !item.issue_id).map((item) => [textIssueKey(item), item]),
+    output.checked_issues.filter((item: any) => !item.issue_id).map((item: any) => [textIssueKey(item), item]),
   )
-  const expectedIds = new Set(expected.map((item) => item.id))
+  const expectedIds = new Set(expected.map((item: any) => item.id))
   const expectedTextKeys = new Set(expected.map(textIssueKey))
-  const rows = expected.map((item) => {
+  const rows = expected.map((item: any) => {
     const actual = actualById.get(item.id) || actualLegacyByText.get(textIssueKey(item))
     return {
       id: item.id,
@@ -386,24 +388,24 @@ export function scoreOutput({ run, caseId, model }) {
       reason: actual?.reason || '',
     }
   })
-  const extra = output.checked_issues.filter((item) => {
+  const extra = output.checked_issues.filter((item: any) => {
     if (item.issue_id) {
       return !expectedIds.has(item.issue_id)
     }
     return !expectedTextKeys.has(textIssueKey(item))
   })
-  const challengedExpected = rows.filter((item) => item.expected_status !== 'verified')
+  const challengedExpected = rows.filter((item: any) => item.expected_status !== 'verified')
   const challengedHits = challengedExpected.filter(
-    (item) => item.actual_status !== 'verified' && item.actual_status !== 'missing',
+    (item: any) => item.actual_status !== 'verified' && item.actual_status !== 'missing',
   )
-  const falseVerified = challengedExpected.filter((item) => item.actual_status === 'verified')
+  const falseVerified = challengedExpected.filter((item: any) => item.actual_status === 'verified')
   const overChallenged = rows.filter(
-    (item) => item.expected_status === 'verified' && !['verified', 'missing'].includes(item.actual_status),
+    (item: any) => item.expected_status === 'verified' && !['verified', 'missing'].includes(item.actual_status),
   )
-  const missing = rows.filter((item) => item.actual_status === 'missing')
-  const statusMatches = rows.filter((item) => item.status_match).length
-  const evidenceLabeled = rows.filter((item) => item.expected_evidence_status)
-  const claimLabeled = rows.filter((item) => item.expected_claim_support)
+  const missing = rows.filter((item: any) => item.actual_status === 'missing')
+  const statusMatches = rows.filter((item: any) => item.status_match).length
+  const evidenceLabeled = rows.filter((item: any) => item.expected_evidence_status)
+  const claimLabeled = rows.filter((item: any) => item.expected_claim_support)
   const score = {
     run,
     case_id: caseId,
@@ -427,17 +429,19 @@ export function scoreOutput({ run, caseId, model }) {
         : null,
       evidence_status_accuracy: evidenceLabeled.length
         ? Number(
-            (evidenceLabeled.filter((item) => item.evidence_status_match).length / evidenceLabeled.length).toFixed(4),
+            (evidenceLabeled.filter((item: any) => item.evidence_status_match).length / evidenceLabeled.length).toFixed(
+              4,
+            ),
           )
         : null,
       claim_support_accuracy: claimLabeled.length
-        ? Number((claimLabeled.filter((item) => item.claim_support_match).length / claimLabeled.length).toFixed(4))
+        ? Number((claimLabeled.filter((item: any) => item.claim_support_match).length / claimLabeled.length).toFixed(4))
         : null,
       extra_rate: output.checked_issues.length ? Number((extra.length / output.checked_issues.length).toFixed(4)) : 0,
       missing_rate: rows.length ? Number((missing.length / rows.length).toFixed(4)) : null,
     },
     rows,
-    extra_issues: extra.map((item) => ({
+    extra_issues: extra.map((item: any) => ({
       issue_id: item.issue_id || null,
       source: item.source,
       issue_title: item.issue_title,
@@ -449,7 +453,7 @@ export function scoreOutput({ run, caseId, model }) {
   return score
 }
 
-export function summarizeRun(run) {
+export function summarizeRun(run: any) {
   const runRoot = path.join(FACT_CHECK_ROOT, 'runs', run)
   const scores: JsonObject[] = []
   if (fs.existsSync(runRoot)) {
@@ -468,25 +472,27 @@ export function summarizeRun(run) {
       }
     }
   }
-  const models = [...new Set<string>(scores.map((item) => item.model))].sort()
+  const models = [...new Set<string>(scores.map((item: any) => item.model))].sort()
   const model_summaries = models
-    .map((model) => {
-      const rows = scores.filter((item) => item.model === model)
+    .map((model: any) => {
+      const rows = scores.filter((item: any) => item.model === model)
       return {
         model,
-        cases: rows.map((item) => item.case_id).sort(),
-        avg_status_accuracy: average(rows.map((item) => item.metrics.status_accuracy).filter((item) => item !== null)),
-        avg_challenge_recall: average(
-          rows.map((item) => item.metrics.challenge_recall).filter((item) => item !== null),
+        cases: rows.map((item: any) => item.case_id).sort(),
+        avg_status_accuracy: average(
+          rows.map((item: any) => item.metrics.status_accuracy).filter((item: any) => item !== null),
         ),
-        total_false_verified: rows.reduce((sum, item) => sum + item.totals.false_verified, 0),
-        total_over_challenged: rows.reduce((sum, item) => sum + item.totals.over_challenged, 0),
-        total_extra: rows.reduce((sum, item) => sum + item.totals.extra, 0),
-        total_missing: rows.reduce((sum, item) => sum + item.totals.missing, 0),
+        avg_challenge_recall: average(
+          rows.map((item: any) => item.metrics.challenge_recall).filter((item: any) => item !== null),
+        ),
+        total_false_verified: rows.reduce((sum: any, item: any) => sum + item.totals.false_verified, 0),
+        total_over_challenged: rows.reduce((sum: any, item: any) => sum + item.totals.over_challenged, 0),
+        total_extra: rows.reduce((sum: any, item: any) => sum + item.totals.extra, 0),
+        total_missing: rows.reduce((sum: any, item: any) => sum + item.totals.missing, 0),
       }
     })
     .sort(
-      (a, b) =>
+      (a: any, b: any) =>
         (b.avg_status_accuracy ?? -1) - (a.avg_status_accuracy ?? -1) ||
         (b.avg_challenge_recall ?? -1) - (a.avg_challenge_recall ?? -1) ||
         a.total_false_verified - b.total_false_verified,
@@ -507,14 +513,14 @@ function average(values: any[]) {
   if (!values.length) {
     return null
   }
-  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(4))
+  return Number((values.reduce((sum: any, value: any) => sum + value, 0) / values.length).toFixed(4))
 }
 
 function pct(value: any) {
   return value === null || value === undefined ? '-' : `${Math.round(value * 100)}%`
 }
 
-function renderSummary(summary) {
+function renderSummary(summary: any) {
   const lines: string[] = []
   lines.push('# Fact Check Calibration Summary', '')
   lines.push(`- Run ID: ${summary.run}`)

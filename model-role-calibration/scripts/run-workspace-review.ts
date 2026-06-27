@@ -77,11 +77,11 @@ const EXECUTION_REQUIRED_BOUNDARIES = Object.freeze([
   'plan_bloat',
 ])
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   writeGenerated(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-function writeRoleMetadata(runDir, roleDir, metadata) {
+function writeRoleMetadata(runDir: any, roleDir: any, metadata: any) {
   const metadataFile = path.join(roleDir, 'metadata.json')
   writeJson(metadataFile, metadata)
   recordResolvedExecution(runDir, metadata, {
@@ -94,7 +94,7 @@ function reviewerSeverityByIssueId(reviewerOutputs: any = {}) {
   const severities = new Map<string, any>()
   for (const [source, reviewerOutput] of Object.entries(reviewerOutputs || {}) as [string, any][]) {
     const issues = Array.isArray(reviewerOutput?.issues) ? reviewerOutput.issues : []
-    issues.forEach((issue, index) => {
+    issues.forEach((issue: any, index: any) => {
       const issueId = `${slug(source)}-${String(index + 1).padStart(3, '0')}`
       if (issue?.severity) {
         severities.set(issueId, issue.severity)
@@ -104,7 +104,7 @@ function reviewerSeverityByIssueId(reviewerOutputs: any = {}) {
   return severities
 }
 
-function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: any = {}) {
+function validateSynthesisSemantics(output: any, factCheckOutput: any, reviewerOutputs: any = {}) {
   const findings = Array.isArray(output?.source_findings) ? output.source_findings : []
   const byId = new Map<string, any>()
   const byIssueId = new Map<string, any>()
@@ -184,8 +184,8 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: an
     }
   }
 
-  const referencedIds = (items, field = 'source_finding_ids') =>
-    (Array.isArray(items) ? items : []).flatMap((item) => item?.[field] || [])
+  const referencedIds = (items: any, field: any = 'source_finding_ids') =>
+    (Array.isArray(items) ? items : []).flatMap((item: any) => item?.[field] || [])
   const activeIds = [
     ...referencedIds(output.consensus_issues),
     ...referencedIds(output.disagreements),
@@ -226,8 +226,8 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: an
     )
   }
   const issueTitles = new Set<string>([
-    ...(output.consensus_issues || []).map((item) => item.title),
-    ...(output.disagreements || []).map((item) => item.title),
+    ...(output.consensus_issues || []).map((item: any) => item.title),
+    ...(output.disagreements || []).map((item: any) => item.title),
   ])
   for (const node of processNodes) {
     for (const title of node.related_issue_titles || []) {
@@ -249,7 +249,7 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: an
   }
 
   for (const item of output.consensus_issues || []) {
-    const sources = new Set<string>(item.source_finding_ids.map((id) => byId.get(id)?.source).filter(Boolean))
+    const sources = new Set<string>(item.source_finding_ids.map((id: any) => byId.get(id)?.source).filter(Boolean))
     const mergedFrom = new Set<string>(item.merged_from || [])
     for (const source of sources) {
       if (!mergedFrom.has(source)) {
@@ -282,7 +282,7 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: an
         continue
       }
       const reviewerRank = SEVERITY_RANK[reviewerSeverity] || 0
-      const linkedConsensus = (output.consensus_issues || []).filter((item) =>
+      const linkedConsensus = (output.consensus_issues || []).filter((item: any) =>
         (item.source_finding_ids || []).includes(id),
       )
       for (const consensus of linkedConsensus) {
@@ -306,7 +306,7 @@ function validateSynthesisSemantics(output, factCheckOutput, reviewerOutputs: an
   }
 }
 
-function validateExecutionSemantics(output) {
+function validateExecutionSemantics(output: any) {
   const reviewed = output?.coverage_declaration?.reviewed_boundaries || []
   const coveredBoundaries = new Set<string>()
   const declaredBoundaries = new Set<string>()
@@ -329,7 +329,7 @@ function validateExecutionSemantics(output) {
       throw new Error(`Execution semantic validation failed: preference issue "${issue.title}" cannot block execution`)
     }
     const expected = EXECUTION_BOUNDARIES_BY_ISSUE_TYPE[issue.type] || []
-    if (!expected.some((boundary) => coveredBoundaries.has(boundary))) {
+    if (!expected.some((boundary: any) => coveredBoundaries.has(boundary))) {
       throw new Error(
         `Execution semantic validation failed: issue "${issue.title}" type ${issue.type} ` +
           `is not covered by coverage_declaration`,
@@ -338,12 +338,12 @@ function validateExecutionSemantics(output) {
   }
 }
 
-function validateWorkspaceOutput(role, output, context: any = {}) {
+function validateWorkspaceOutput(role: any, output: any, context: any = {}) {
   const validation = validateJsonText(JSON.stringify(output), parseJsonFile<any>(workspaceSchemaForRole(role)))
   if (!validation.valid) {
     const details = (validation.errors || [])
       .slice(0, 5)
-      .map((item) => `${item.path}: ${item.message}`)
+      .map((item: any) => `${item.path}: ${item.message}`)
       .join('; ')
     throw new Error(`Schema validation failed for ${role}: ${details || validation.stage}`)
   }
@@ -355,8 +355,8 @@ function validateWorkspaceOutput(role, output, context: any = {}) {
   }
 }
 
-function materializeProposedArtifacts(runDir, artifacts: any[] = []) {
-  return artifacts.map((artifact) => {
+function materializeProposedArtifacts(runDir: any, artifacts: any[] = []) {
+  return artifacts.map((artifact: any) => {
     const relativePath = artifact.relative_path
     if (
       typeof relativePath !== 'string' ||
@@ -379,7 +379,7 @@ function materializeProposedArtifacts(runDir, artifacts: any[] = []) {
   })
 }
 
-function countBy(items, key) {
+function countBy(items: any, key: any) {
   const counts: any = {}
   for (const item of items || []) {
     const value = item?.[key] || 'unknown'
@@ -388,7 +388,7 @@ function countBy(items, key) {
   return counts
 }
 
-function summarizeFactCheckOutput(output) {
+function summarizeFactCheckOutput(output: any) {
   const checkedIssues = Array.isArray(output?.checked_issues) ? output.checked_issues : []
   const statusCounts = countBy(checkedIssues, 'status')
   const scopeStatusCounts = countBy(checkedIssues, 'scope_status')
@@ -396,7 +396,7 @@ function summarizeFactCheckOutput(output) {
   const claimSupportCounts = countBy(checkedIssues, 'claim_support')
   const total = checkedIssues.length
   const challenged = ['partially_verified', 'unsupported', 'contradicted', 'unverifiable'].reduce(
-    (sum, key) => sum + (statusCounts[key] || 0),
+    (sum: any, key: any) => sum + (statusCounts[key] || 0),
     0,
   )
   const verified = statusCounts.verified || 0
@@ -413,9 +413,15 @@ function summarizeFactCheckOutput(output) {
   }
 }
 
-function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors, authoringLint: any = null) {
+function summarizeReviewOutcome(
+  reviewerResults: any,
+  factCheck: any,
+  synthesis: any,
+  infraErrors: any,
+  authoringLint: any = null,
+) {
   const reviewerIssueCount = reviewerResults.reduce(
-    (sum, item) => sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0),
+    (sum: any, item: any) => sum + (Array.isArray(item.output?.issues) ? item.output.issues.length : 0),
     0,
   )
   const consensusCount = Array.isArray(synthesis.output?.consensus_issues)
@@ -491,14 +497,14 @@ function summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErro
   }
 }
 
-function readJsonIfExists(file): any {
+function readJsonIfExists(file: any): any {
   if (!fs.existsSync(file)) {
     return null
   }
   return parseJsonFile<any>(file)
 }
 
-function completedReviewerResult(runDir, role): any {
+function completedReviewerResult(runDir: any, role: any): any {
   const roleDir = path.join(runDir, 'roles', role)
   const outputFile = path.join(roleDir, 'output.json')
   const metadataFile = path.join(roleDir, 'metadata.json')
@@ -517,8 +523,8 @@ function completedReviewerResult(runDir, role): any {
   }
 }
 
-function loadCompletedReviewerResults(runDir, roles, retryStage = 'synthesis') {
-  return roles.map((role) => {
+function loadCompletedReviewerResults(runDir: any, roles: any, retryStage: any = 'synthesis') {
+  return roles.map((role: any) => {
     const result = completedReviewerResult(runDir, role)
     if (!result) {
       throw new Error(`Cannot retry ${retryStage}: reviewer ${role} is not completed`)
@@ -527,7 +533,7 @@ function loadCompletedReviewerResults(runDir, roles, retryStage = 'synthesis') {
   })
 }
 
-function loadCompletedFactCheckResult(runDir, retryStage = 'synthesis'): any {
+function loadCompletedFactCheckResult(runDir: any, retryStage: any = 'synthesis'): any {
   const roleDir = path.join(runDir, 'roles', FACT_CHECK_ROLE)
   const outputFile = path.join(roleDir, 'output.json')
   const summaryFile = path.join(roleDir, 'fact-check-summary.json')
@@ -555,7 +561,7 @@ function loadCompletedFactCheckResult(runDir, retryStage = 'synthesis'): any {
   }
 }
 
-function loadRequestForRun(config, runDir): any {
+function loadRequestForRun(config: any, runDir: any): any {
   const requestFile = path.join(runDir, 'request.json')
   if (!fs.existsSync(requestFile)) {
     throw new Error(`Missing workspace review request: ${requestFile}`)
@@ -598,7 +604,14 @@ function loadRequestForRun(config, runDir): any {
   return { request, roles }
 }
 
-function writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synthesis, infraErrors: any[] = []) {
+function writeWorkspaceReport(
+  runDir: any,
+  request: any,
+  reviewerResults: any,
+  factCheck: any,
+  synthesis: any,
+  infraErrors: any[] = [],
+) {
   const outcome = summarizeReviewOutcome(reviewerResults, factCheck, synthesis, infraErrors, request.authoring_lint)
   const report = {
     run_id: request.run_id,
@@ -608,7 +621,7 @@ function writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synth
     authoring_lint: request.authoring_lint,
     outcome,
     reviewers: Object.fromEntries(
-      reviewerResults.map((item) => [
+      reviewerResults.map((item: any) => [
         item.role,
         {
           model: item.model,
@@ -635,7 +648,7 @@ function writeWorkspaceReport(runDir, request, reviewerResults, factCheck, synth
   return report
 }
 
-function extractFinalOutputText(stdout) {
+function extractFinalOutputText(stdout: any) {
   const lines = String(stdout || '')
     .trim()
     .split(/\n/)
@@ -663,7 +676,7 @@ function extractFinalOutputText(stdout) {
   return ''
 }
 
-function reviewerInfraError(role, model, error, runDir) {
+function reviewerInfraError(role: any, model: any, error: any, runDir: any) {
   return {
     role,
     model,
@@ -675,7 +688,7 @@ function reviewerInfraError(role, model, error, runDir) {
   }
 }
 
-function prepareReadBoundary(config, request, runDir, role, readScope) {
+function prepareReadBoundary(config: any, request: any, runDir: any, role: any, readScope: any) {
   if (config.execution.isolate_reviewers === false) {
     return {
       promptRoot: request.project_root,
@@ -710,7 +723,7 @@ function prepareReadBoundary(config, request, runDir, role, readScope) {
   }
 }
 
-async function runRole(config, request, role, runDir) {
+async function runRole(config: any, request: any, role: any, runDir: any) {
   const model = config.roles[role]
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
@@ -872,14 +885,14 @@ async function runRole(config, request, role, runDir) {
   }
 }
 
-async function runFactCheck(config, request, reviewerResults, runDir) {
+async function runFactCheck(config: any, request: any, reviewerResults: any, runDir: any) {
   const role = FACT_CHECK_ROLE
   const model = config.roles[role]
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
   fs.mkdirSync(roleDir, { recursive: true })
   const reviewerOutputs = Object.fromEntries(
-    reviewerResults.map((item) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
+    reviewerResults.map((item: any) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
   )
   const readScope = buildFactCheckReadScope(request.project_root, reviewerOutputs, {
     maxFiles: config.execution.read_scope_max_files,
@@ -1051,7 +1064,7 @@ async function runFactCheck(config, request, reviewerResults, runDir) {
   }
 }
 
-async function runWithConcurrency(items, concurrency, worker): Promise<any[]> {
+async function runWithConcurrency(items: any, concurrency: any, worker: any): Promise<any[]> {
   const results: any[] = new Array(items.length)
   let nextIndex = 0
   async function consume() {
@@ -1068,8 +1081,8 @@ async function runWithConcurrency(items, concurrency, worker): Promise<any[]> {
   return results
 }
 
-async function runReviewers(config, request, roles, runDir) {
-  const settled = await runWithConcurrency(roles, config.execution.max_concurrency, async (role) => {
+async function runReviewers(config: any, request: any, roles: any, runDir: any) {
+  const settled = await runWithConcurrency(roles, config.execution.max_concurrency, async (role: any) => {
     const model = config.roles[role]
     try {
       return {
@@ -1084,19 +1097,19 @@ async function runReviewers(config, request, roles, runDir) {
     }
   })
   return {
-    reviewerResults: settled.filter((item) => item.ok).map((item) => item.result),
-    infraErrors: settled.filter((item) => !item.ok).map((item) => item.error),
+    reviewerResults: settled.filter((item: any) => item.ok).map((item: any) => item.result),
+    infraErrors: settled.filter((item: any) => !item.ok).map((item: any) => item.error),
   }
 }
 
-function reviewerStageError(reviewerResults, infraErrors) {
+function reviewerStageError(reviewerResults: any, infraErrors: any) {
   if (!infraErrors.length) {
     return null
   }
-  const completedRoles = reviewerResults.map((item) => item.role).filter(Boolean)
-  const failedRoles = infraErrors.map((item) => item.role).filter(Boolean)
+  const completedRoles = reviewerResults.map((item: any) => item.role).filter(Boolean)
+  const failedRoles = infraErrors.map((item: any) => item.role).filter(Boolean)
   const detail = infraErrors
-    .map((item) => {
+    .map((item: any) => {
       const roleModel = [item.role, item.model].filter(Boolean).join('/')
       return `${roleModel || 'reviewer'}: ${item.message || item.type || 'failed'}`
     })
@@ -1108,14 +1121,14 @@ function reviewerStageError(reviewerResults, infraErrors) {
   return error
 }
 
-async function runSynthesis(config, request, reviewerResults, factCheckResult, runDir) {
+async function runSynthesis(config: any, request: any, reviewerResults: any, factCheckResult: any, runDir: any) {
   const role = 'synthesis'
   const model = config.roles.synthesis
   const startedMs = Date.now()
   const roleDir = path.join(runDir, 'roles', role)
   fs.mkdirSync(roleDir, { recursive: true })
   const reviewerOutputs = Object.fromEntries(
-    reviewerResults.map((item) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
+    reviewerResults.map((item: any) => [SOURCE_NAME_BY_ROLE[item.role], item.output]),
   )
   const prompt = buildWorkspacePrompt(
     role,
@@ -1252,7 +1265,7 @@ async function runSynthesis(config, request, reviewerResults, factCheckResult, r
   }
 }
 
-function archiveRoleAttempt(runDir, role) {
+function archiveRoleAttempt(runDir: any, role: any) {
   const roleDir = path.join(runDir, 'roles', role)
   if (!fs.existsSync(roleDir)) {
     return null
@@ -1275,7 +1288,7 @@ function archiveRoleAttempt(runDir, role) {
   return archivedRoleDir
 }
 
-function normalizedRetryCounts(state) {
+function normalizedRetryCounts(state: any) {
   const counts: any = {}
   for (const role of [...REVIEW_ROLES, FACT_CHECK_ROLE, 'synthesis']) {
     const value = Number(state.retry_counts?.[role] || 0)
@@ -1284,14 +1297,16 @@ function normalizedRetryCounts(state) {
   return counts
 }
 
-function assertRetryAvailable(retryCounts, executors) {
-  const exhausted = [...new Set<any>(executors)].filter((executor) => retryCounts[executor] >= MAX_EXECUTOR_RETRIES)
+function assertRetryAvailable(retryCounts: any, executors: any) {
+  const exhausted = [...new Set<any>(executors)].filter(
+    (executor: any) => retryCounts[executor] >= MAX_EXECUTOR_RETRIES,
+  )
   if (exhausted.length) {
     throw new Error(`Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(', ')}`)
   }
 }
 
-function consumeExecutorRetries(runDir, retryCounts, executors) {
+function consumeExecutorRetries(runDir: any, retryCounts: any, executors: any) {
   for (const executor of [...new Set<any>(executors)]) {
     retryCounts[executor] += 1
   }
@@ -1305,7 +1320,7 @@ function consumeExecutorRetries(runDir, retryCounts, executors) {
   })
 }
 
-function updateRunRetryManifest(runDir, stage, retryRoles) {
+function updateRunRetryManifest(runDir: any, stage: any, retryRoles: any) {
   updateRunManifest(runDir, {
     retry_stage: stage,
     retry_roles: retryRoles,
@@ -1313,7 +1328,7 @@ function updateRunRetryManifest(runDir, stage, retryRoles) {
   })
 }
 
-async function retryWorkspaceReviewStage(config, runDir, stage, options: any = {}) {
+async function retryWorkspaceReviewStage(config: any, runDir: any, stage: any, options: any = {}) {
   if (!['reviewers', FACT_CHECK_ROLE, 'synthesis'].includes(stage)) {
     throw new Error(`Unsupported retry stage: ${stage}. Expected reviewers, ${FACT_CHECK_ROLE}, or synthesis.`)
   }
@@ -1331,11 +1346,11 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options: any = {
   const runSynthesisStage = options.runSynthesis || runSynthesis
   const completedReviewers = new Map<string, any>(
     roles
-      .map((role) => completedReviewerResult(absoluteRunDir, role))
-      .filter((result): result is any => Boolean(result))
-      .map((result) => [result.role, result]),
+      .map((role: any) => completedReviewerResult(absoluteRunDir, role))
+      .filter((result: any): result is any => Boolean(result))
+      .map((result: any) => [result.role, result]),
   )
-  const retryRoles = stage === 'reviewers' ? roles.filter((role) => !completedReviewers.has(role)) : []
+  const retryRoles = stage === 'reviewers' ? roles.filter((role: any) => !completedReviewers.has(role)) : []
   if (stage === 'reviewers' && !retryRoles.length) {
     throw new Error('Cannot retry reviewers: all requested reviewers are already completed')
   }
@@ -1386,7 +1401,7 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options: any = {
     let reviewerResults
     if (stage === 'reviewers') {
       consumeExecutorRetries(absoluteRunDir, retryCounts, retryRoles)
-      const settled = await runWithConcurrency(retryRoles, config.execution.max_concurrency, async (role) => {
+      const settled = await runWithConcurrency(retryRoles, config.execution.max_concurrency, async (role: any) => {
         try {
           return {
             ok: true,
@@ -1400,16 +1415,16 @@ async function retryWorkspaceReviewStage(config, runDir, stage, options: any = {
           }
         }
       })
-      const failures = settled.filter((item) => !item.ok)
+      const failures = settled.filter((item: any) => !item.ok)
       if (failures.length) {
         throw new Error(
-          `Reviewer retry failed: ${failures.map((item) => `${item.role}: ${item.error.message}`).join('; ')}`,
+          `Reviewer retry failed: ${failures.map((item: any) => `${item.role}: ${item.error.message}`).join('; ')}`,
         )
       }
       for (const item of settled) {
         completedReviewers.set(item.result.role, item.result)
       }
-      reviewerResults = roles.map((role) => completedReviewers.get(role))
+      reviewerResults = roles.map((role: any) => completedReviewers.get(role))
       archivedAttempts[FACT_CHECK_ROLE] = archiveRoleAttempt(absoluteRunDir, FACT_CHECK_ROLE)
       archivedAttempts.synthesis = archiveRoleAttempt(absoluteRunDir, 'synthesis')
       appendExecutionLog(absoluteRunDir, 'stage_retry_downstream_invalidated', {
@@ -1599,7 +1614,7 @@ async function main() {
 }
 
 if (isMainScript(__filename)) {
-  main().catch((error) => {
+  main().catch((error: any) => {
     console.error(error.stack || error.message)
     process.exitCode = 1
   })

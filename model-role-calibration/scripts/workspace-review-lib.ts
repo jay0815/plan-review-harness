@@ -21,7 +21,7 @@ const DEFAULT_MODEL_FILES = {
   glm: 'glm.json',
   qwen: 'qwen.json',
 }
-const DEFAULT_MODEL_REQUIRED_ENV = {
+const DEFAULT_MODEL_REQUIRED_ENV: Record<string, string[]> = {
   kimi: ['ANTHROPIC_BASE_URL'],
   deepseek: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL'],
   glm: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL'],
@@ -66,7 +66,7 @@ const SKIP_SCOPE_DIRS = new Set([
 ])
 const EXISTING_CODE_REFS_HEADING_PATTERN = /(?:\bexisting\s+code\s+refs?(?:erences?)?\b|现有代码(?:引用|映射))/i
 
-const CODE_BLOCK_EXTENSION_BY_LANGUAGE = {
+const CODE_BLOCK_EXTENSION_BY_LANGUAGE: Record<string, string> = {
   cjs: '.cjs',
   css: '.css',
   html: '.html',
@@ -84,13 +84,13 @@ const CODE_BLOCK_EXTENSION_BY_LANGUAGE = {
   yml: '.yaml',
 }
 
-function assertWorkspaceRole(role) {
+function assertWorkspaceRole(role: any) {
   if (!WORKSPACE_ROLES.includes(role)) {
     throw new Error(`Invalid workspace review role "${role}". Expected one of: ${WORKSPACE_ROLES.join(', ')}`)
   }
 }
 
-function expandHome(value) {
+function expandHome(value: any) {
   if (value === '~') {
     return os.homedir()
   }
@@ -100,19 +100,19 @@ function expandHome(value) {
   return value
 }
 
-function resolveConfiguredPath(value, configDir) {
+function resolveConfiguredPath(value: any, configDir: any) {
   const expanded = expandHome(String(value))
   return path.isAbsolute(expanded) ? path.normalize(expanded) : path.resolve(configDir, expanded)
 }
 
-function positiveInteger(value, label) {
+function positiveInteger(value: any, label: any) {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${label} must be a positive integer`)
   }
   return value
 }
 
-function assertNonPlaceholder(value, label) {
+function assertNonPlaceholder(value: any, label: any) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} must be a non-empty string`)
   }
@@ -121,7 +121,7 @@ function assertNonPlaceholder(value, label) {
   }
 }
 
-function validateSettingsFile(model, modelConfig, configDir) {
+function validateSettingsFile(model: any, modelConfig: any, configDir: any) {
   if (!modelConfig || typeof modelConfig !== 'object' || Array.isArray(modelConfig)) {
     throw new Error(`models.${model} must be an object`)
   }
@@ -178,7 +178,7 @@ function validateSettingsFile(model, modelConfig, configDir) {
   }
 }
 
-function validateClaudeBinary(command) {
+function validateClaudeBinary(command: any) {
   const result = spawnSync(command, ['--version'], {
     encoding: 'utf8',
     timeout: 10000,
@@ -191,7 +191,7 @@ function validateClaudeBinary(command) {
   return (result.stdout || result.stderr || '').trim()
 }
 
-function normalizeWorkspaceReviewConfig(raw, source, options: any = {}) {
+function normalizeWorkspaceReviewConfig(raw: any, source: any, options: any = {}) {
   if (raw.version !== 1) {
     throw new Error(`Unsupported workspace review config version: ${raw.version}`)
   }
@@ -265,7 +265,7 @@ function normalizeWorkspaceReviewConfig(raw, source, options: any = {}) {
   return normalized
 }
 
-function loadWorkspaceReviewConfig(configFile, options: any = {}) {
+function loadWorkspaceReviewConfig(configFile: any, options: any = {}) {
   const absoluteConfigFile = path.resolve(expandHome(configFile))
   if (!fs.existsSync(absoluteConfigFile)) {
     throw new Error(`Workspace review config does not exist: ${absoluteConfigFile}`)
@@ -287,7 +287,7 @@ function loadWorkspaceReviewConfig(configFile, options: any = {}) {
   )
 }
 
-function loadWorkspaceReviewSettingsDirectory(settingsDir, options: any = {}) {
+function loadWorkspaceReviewSettingsDirectory(settingsDir: any, options: any = {}) {
   const absoluteSettingsDir = path.resolve(expandHome(settingsDir))
   if (!fs.existsSync(absoluteSettingsDir)) {
     throw new Error(`Settings directory does not exist: ${absoluteSettingsDir}`)
@@ -299,7 +299,7 @@ function loadWorkspaceReviewSettingsDirectory(settingsDir, options: any = {}) {
   fs.accessSync(absoluteSettingsDir, fs.constants.R_OK)
 
   const models = Object.fromEntries(
-    Object.entries(DEFAULT_MODEL_FILES).map(([model, filename]) => [
+    Object.entries(DEFAULT_MODEL_FILES).map(([model, filename]: any) => [
       model,
       {
         settings_file: path.join(absoluteSettingsDir, filename),
@@ -329,7 +329,7 @@ function loadWorkspaceReviewSettingsDirectory(settingsDir, options: any = {}) {
   )
 }
 
-function loadWorkspaceReviewFromArgs(args, options: any = {}) {
+function loadWorkspaceReviewFromArgs(args: any, options: any = {}) {
   const configFile = args.config && args.config !== true ? String(args.config) : null
   const settingsDir = args['settings-dir'] && args['settings-dir'] !== true ? String(args['settings-dir']) : null
   if (configFile && settingsDir) {
@@ -347,7 +347,7 @@ function loadWorkspaceReviewFromArgs(args, options: any = {}) {
   throw new Error('Missing required argument: --settings-dir')
 }
 
-function configSummary(config) {
+function configSummary(config: any) {
   return {
     config_file: config.config_file,
     settings_dir: config.settings_dir,
@@ -357,7 +357,7 @@ function configSummary(config) {
     roles: config.roles,
     role_route_source: DEFAULT_ROLE_ROUTE_SOURCE,
     models: Object.fromEntries(
-      (Object.entries(config.models) as [string, any][]).map(([model, value]) => [
+      (Object.entries(config.models) as [string, any][]).map(([model, value]: any) => [
         model,
         {
           settings_file: value.settings_file,
@@ -370,7 +370,7 @@ function configSummary(config) {
   }
 }
 
-function validateProjectRoot(projectRoot) {
+function validateProjectRoot(projectRoot: any) {
   const resolved = path.resolve(expandHome(projectRoot))
   if (!fs.existsSync(resolved)) {
     throw new Error(`Project root does not exist: ${resolved}`)
@@ -382,12 +382,12 @@ function validateProjectRoot(projectRoot) {
   return resolved
 }
 
-function isInsidePath(parent, child) {
+function isInsidePath(parent: any, child: any) {
   const relative = path.relative(parent, child)
   return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
-function normalizeProjectRelativePath(projectRoot, candidate) {
+function normalizeProjectRelativePath(projectRoot: any, candidate: any) {
   let value = String(candidate || '').trim()
   if (!value) {
     return null
@@ -426,12 +426,12 @@ function normalizeProjectRelativePath(projectRoot, candidate) {
   }
 }
 
-function candidatePathVariants(value) {
+function candidatePathVariants(value: any) {
   const normalized = String(value || '')
     .split(path.sep)
     .join('/')
   const variants: string[] = []
-  const add = (candidate) => {
+  const add = (candidate: any) => {
     const next = String(candidate || '')
       .split(path.sep)
       .join('/')
@@ -452,7 +452,7 @@ function candidatePathVariants(value) {
   return variants
 }
 
-function resolveProjectRelativeCandidate(projectRoot, value) {
+function resolveProjectRelativeCandidate(projectRoot: any, value: any) {
   for (const variant of candidatePathVariants(value)) {
     const absolute = path.resolve(projectRoot, variant)
     if (isInsidePath(projectRoot, absolute) && fs.existsSync(absolute)) {
@@ -466,10 +466,10 @@ function resolveProjectRelativeCandidate(projectRoot, value) {
   return path.resolve(projectRoot, value)
 }
 
-function findUniqueProjectFileBySuffix(projectRoot, value) {
+function findUniqueProjectFileBySuffix(projectRoot: any, value: any) {
   const suffixVariants = candidatePathVariants(value)
-    .map((variant) => variant.replace(/^src\//, ''))
-    .filter((variant) => variant.includes('/') || /\.[A-Za-z0-9]+$/.test(variant))
+    .map((variant: any) => variant.replace(/^src\//, ''))
+    .filter((variant: any) => variant.includes('/') || /\.[A-Za-z0-9]+$/.test(variant))
   if (!suffixVariants.length) {
     return null
   }
@@ -489,7 +489,7 @@ function findUniqueProjectFileBySuffix(projectRoot, value) {
         const withoutSrc = relative.replace(/^src\//, '')
         if (
           suffixVariants.some(
-            (suffix) =>
+            (suffix: any) =>
               relative === suffix ||
               relative.endsWith(`/${suffix}`) ||
               withoutSrc === suffix ||
@@ -507,7 +507,7 @@ function findUniqueProjectFileBySuffix(projectRoot, value) {
   return matches.length === 1 ? matches[0] : null
 }
 
-function existingCodeRefPaths(text) {
+function existingCodeRefPaths(text: any) {
   const lines = String(text || '').split('\n')
   const paths: string[] = []
   let inSection = false
@@ -541,16 +541,16 @@ function existingCodeRefPaths(text) {
   return paths
 }
 
-function hasExistingCodeRefsSection(text) {
+function hasExistingCodeRefsSection(text: any) {
   return String(text || '')
     .split('\n')
-    .some((line) => {
+    .some((line: any) => {
       const heading = line.match(/^#{1,6}\s+(.+?)\s*$/)
       return heading && EXISTING_CODE_REFS_HEADING_PATTERN.test(heading[1].trim())
     })
 }
 
-function collectPathCandidates(text) {
+function collectPathCandidates(text: any) {
   const candidates = new Set<string>()
   const input = String(text || '')
   const lineRef = '(?::\\d+(?::\\d+)?(?:-\\d+(?::\\d+)?)?)?'
@@ -577,7 +577,7 @@ function collectPathCandidates(text) {
   return [...candidates]
 }
 
-function stripLineRefSuffix(value) {
+function stripLineRefSuffix(value: any) {
   return String(value || '')
     .trim()
     .replace(/^["'`(<[]+/, '')
@@ -585,7 +585,7 @@ function stripLineRefSuffix(value) {
     .replace(LINE_REF_SUFFIX_PATTERN, '')
 }
 
-function lineRefSuffix(value) {
+function lineRefSuffix(value: any) {
   const match = String(value || '')
     .trim()
     .match(LINE_REF_SUFFIX_PATTERN)
@@ -594,8 +594,8 @@ function lineRefSuffix(value) {
 
 function normalizeProposedArtifacts(artifacts: any[] = []) {
   return (Array.isArray(artifacts) ? artifacts : [])
-    .filter((artifact) => artifact && typeof artifact.relative_path === 'string')
-    .map((artifact) => ({
+    .filter((artifact: any) => artifact && typeof artifact.relative_path === 'string')
+    .map((artifact: any) => ({
       relative_path: artifact.relative_path.split(path.sep).join('/'),
       source_file: artifact.source_file || null,
       language: artifact.language || '',
@@ -607,7 +607,7 @@ function normalizeProposedArtifacts(artifacts: any[] = []) {
       expected_completeness: artifact.expected_completeness || 'not_compile_target',
       content: artifact.content || null,
     }))
-    .filter((artifact) => {
+    .filter((artifact: any) => {
       const relative = artifact.relative_path
       return (
         relative.startsWith(`${PROPOSED_CODE_DIR}/`) && !relative.includes('\0') && !relative.split('/').includes('..')
@@ -615,12 +615,12 @@ function normalizeProposedArtifacts(artifacts: any[] = []) {
     })
 }
 
-function addProposedArtifactToScope(artifact, files, proposedArtifacts) {
+function addProposedArtifactToScope(artifact: any, files: any, proposedArtifacts: any) {
   files.add(artifact.relative_path)
   proposedArtifacts.set(artifact.relative_path, artifact)
 }
 
-function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts: any[] = []) {
+function createPlanReferenceManifest(projectRoot: any, plan: any, proposedArtifacts: any[] = []) {
   const existingRefsByKey = new Map<string, any>()
   const existingRefDirsByKey = new Map<string, any>()
   const blockedRefs = new Set<string>()
@@ -658,7 +658,7 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts: any[]
       original_ref: String(candidate),
     })
   }
-  const normalizedArtifacts = normalizeProposedArtifacts(proposedArtifacts).map((artifact) => ({
+  const normalizedArtifacts = normalizeProposedArtifacts(proposedArtifacts).map((artifact: any) => ({
     path: artifact.relative_path,
     line_ref: `1-${artifact.line_count || '?'}`,
     language: artifact.language || '',
@@ -678,10 +678,10 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts: any[]
       generated_review_plan: true,
       generated_ref_json: true,
     },
-    existing_code_refs: [...existingRefsByKey.values()].sort((a, b) =>
+    existing_code_refs: [...existingRefsByKey.values()].sort((a: any, b: any) =>
       `${a.path}:${a.line_ref || ''}`.localeCompare(`${b.path}:${b.line_ref || ''}`),
     ),
-    existing_code_ref_dirs: [...existingRefDirsByKey.values()].sort((a, b) =>
+    existing_code_ref_dirs: [...existingRefDirsByKey.values()].sort((a: any, b: any) =>
       `${a.path}:${a.line_ref || ''}`.localeCompare(`${b.path}:${b.line_ref || ''}`),
     ),
     proposed_code_artifacts: normalizedArtifacts,
@@ -690,11 +690,11 @@ function createPlanReferenceManifest(projectRoot, plan, proposedArtifacts: any[]
   }
 }
 
-function shouldSkipScopePath(relativePath) {
-  return relativePath.split('/').some((part) => SKIP_SCOPE_DIRS.has(part))
+function shouldSkipScopePath(relativePath: any) {
+  return relativePath.split('/').some((part: any) => SKIP_SCOPE_DIRS.has(part))
 }
 
-function addFileToScope(projectRoot, relativePath, files, skippedRefs) {
+function addFileToScope(projectRoot: any, relativePath: any, files: any, skippedRefs: any) {
   if (shouldSkipScopePath(relativePath)) {
     skippedRefs.add(relativePath)
     return
@@ -712,7 +712,7 @@ function addFileToScope(projectRoot, relativePath, files, skippedRefs) {
   files.add(relativePath)
 }
 
-function expandDirectoryToScope(projectRoot, relativeDir, files, skippedRefs, maxFiles) {
+function expandDirectoryToScope(projectRoot: any, relativeDir: any, files: any, skippedRefs: any, maxFiles: any) {
   if (files.size >= maxFiles || shouldSkipScopePath(relativeDir)) {
     skippedRefs.add(relativeDir)
     return
@@ -746,14 +746,14 @@ function expandDirectoryToScope(projectRoot, relativeDir, files, skippedRefs, ma
   }
 }
 
-function buildReadScopeFromText(role, projectRoot, text, options: any = {}) {
+function buildReadScopeFromText(role: any, projectRoot: any, text: any, options: any = {}) {
   const maxFiles = options.maxFiles || DEFAULT_READ_SCOPE_MAX_FILES
   const files = new Set<string>()
   const blockedRefs = new Set<string>()
   const skippedRefs = new Set<string>()
   const proposedArtifacts = new Map<string, any>()
   const artifactsByPath = new Map<string, any>(
-    normalizeProposedArtifacts(options.proposedArtifacts).map((artifact) => [artifact.relative_path, artifact]),
+    normalizeProposedArtifacts(options.proposedArtifacts).map((artifact: any) => [artifact.relative_path, artifact]),
   )
   if (!options.existingRefsOnly && options.includeCommonFiles !== false) {
     for (const common of COMMON_PROJECT_FILES) {
@@ -806,8 +806,8 @@ function buildReadScopeFromText(role, projectRoot, text, options: any = {}) {
     max_files: maxFiles,
     files: [...files].sort(),
     proposed_artifacts: [...proposedArtifacts.values()]
-      .sort((a, b) => a.relative_path.localeCompare(b.relative_path))
-      .map((artifact) => ({
+      .sort((a: any, b: any) => a.relative_path.localeCompare(b.relative_path))
+      .map((artifact: any) => ({
         relative_path: artifact.relative_path,
         source_file: artifact.source_file || null,
         language: artifact.language || '',
@@ -819,11 +819,11 @@ function buildReadScopeFromText(role, projectRoot, text, options: any = {}) {
         expected_completeness: artifact.expected_completeness || 'not_compile_target',
       })),
     blocked_refs: [...blockedRefs].sort(),
-    skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort(),
+    skipped_refs: [...skippedRefs].filter((item: any) => !files.has(item)).sort(),
   }
 }
 
-function buildRoleReadScope(role, projectRoot, plan, options: any = {}) {
+function buildRoleReadScope(role: any, projectRoot: any, plan: any, options: any = {}) {
   const scope: any = buildReadScopeFromText(role, projectRoot, plan, {
     ...options,
     includeAllProposedArtifacts: true,
@@ -838,7 +838,7 @@ function buildRoleReadScope(role, projectRoot, plan, options: any = {}) {
   return scope
 }
 
-function mergeReadScopes(role, scopes, options: any = {}) {
+function mergeReadScopes(role: any, scopes: any, options: any = {}) {
   const maxFiles = options.maxFiles || DEFAULT_READ_SCOPE_MAX_FILES
   const files = new Set<string>()
   const proposedArtifacts = new Map<string, any>()
@@ -873,19 +873,19 @@ function mergeReadScopes(role, scopes, options: any = {}) {
     max_files: maxFiles,
     files: [...files].sort(),
     proposed_artifacts: [...proposedArtifacts.values()]
-      .filter((artifact) => files.has(artifact.relative_path))
-      .sort((a, b) => a.relative_path.localeCompare(b.relative_path)),
+      .filter((artifact: any) => files.has(artifact.relative_path))
+      .sort((a: any, b: any) => a.relative_path.localeCompare(b.relative_path)),
     blocked_refs: [...blockedRefs].sort(),
-    skipped_refs: [...skippedRefs].filter((item) => !files.has(item)).sort(),
+    skipped_refs: [...skippedRefs].filter((item: any) => !files.has(item)).sort(),
   }
 }
 
-function buildFactCheckReadScope(projectRoot, reviewerOutputs: any, options: any = {}) {
+function buildFactCheckReadScope(projectRoot: any, reviewerOutputs: any, options: any = {}) {
   const text = (Object.values(reviewerOutputs || {}) as any[])
-    .flatMap((output) =>
+    .flatMap((output: any) =>
       (Array.isArray(output?.issues) ? output.issues : [])
-        .map((issue) => issue?.evidence)
-        .filter((evidence) => typeof evidence === 'string' && evidence.trim()),
+        .map((issue: any) => issue?.evidence)
+        .filter((evidence: any) => typeof evidence === 'string' && evidence.trim()),
     )
     .join('\n')
   const evidenceScope = buildReadScopeFromText(FACT_CHECK_ROLE, projectRoot, text, {
@@ -910,12 +910,12 @@ function buildFactCheckReadScope(projectRoot, reviewerOutputs: any, options: any
   return scope
 }
 
-function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
+function copyScopedWorkspace(projectRoot: any, readScope: any, workspaceParent: any) {
   const exposedRoot = path.join(workspaceParent, 'project')
   fs.mkdirSync(exposedRoot, { recursive: true })
   const copied: string[] = []
   const proposedByPath = new Map<string, any>(
-    (readScope.proposed_artifacts || []).map((artifact) => [artifact.relative_path, artifact]),
+    (readScope.proposed_artifacts || []).map((artifact: any) => [artifact.relative_path, artifact]),
   )
   for (const relative of readScope.files || []) {
     if (proposedByPath.has(relative)) {
@@ -947,7 +947,7 @@ function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
     source_root: projectRoot,
     exposed_root: exposedRoot,
     files: copied.sort(),
-    proposed_artifacts: (readScope.proposed_artifacts || []).map((artifact) => ({
+    proposed_artifacts: (readScope.proposed_artifacts || []).map((artifact: any) => ({
       relative_path: artifact.relative_path,
       source_file: artifact.source_file || null,
       language: artifact.language || '',
@@ -963,7 +963,7 @@ function copyScopedWorkspace(projectRoot, readScope, workspaceParent) {
   }
 }
 
-function readBoundarySection(readBoundary) {
+function readBoundarySection(readBoundary: any) {
   if (!readBoundary) {
     return ''
   }
@@ -977,29 +977,31 @@ function readBoundarySection(readBoundary) {
     `模式：${readBoundary.mode || 'prompt_only'}`,
     readBoundary.description ? `说明：${readBoundary.description}` : null,
     '只能将下列相对路径作为工程事实 evidence 来源；如果需要的文件不在列表中，写入 missing_questions，不要猜测。',
-    files.length ? files.map((file) => `- ${file}`).join('\n') : '- （无可读取工程文件）',
+    files.length ? files.map((file: any) => `- ${file}`).join('\n') : '- （无可读取工程文件）',
     proposedArtifacts.length
       ? [
           '',
           '兼容保留的未来代码草案（仅说明计划文本设想，不得作为现有工程事实或实现完备性依据）：',
           ...proposedArtifacts.map(
-            (artifact) =>
+            (artifact: any) =>
               `- ${artifact.relative_path}:1-${artifact.line_count || '?'} ` +
               `(semantics=${artifact.review_semantics || 'plan_draft'}, ` +
               `expected=${artifact.expected_completeness || 'not_compile_target'})`,
           ),
         ].join('\n')
       : null,
-    blockedRefs.length ? ['', '已阻止的外部路径引用：', ...blockedRefs.map((item) => `- ${item}`)].join('\n') : null,
+    blockedRefs.length
+      ? ['', '已阻止的外部路径引用：', ...blockedRefs.map((item: any) => `- ${item}`)].join('\n')
+      : null,
     skippedRefs.length
-      ? ['', '未暴露或不存在的计划引用：', ...skippedRefs.slice(0, 20).map((item) => `- ${item}`)].join('\n')
+      ? ['', '未暴露或不存在的计划引用：', ...skippedRefs.slice(0, 20).map((item: any) => `- ${item}`)].join('\n')
       : null,
   ]
     .filter(Boolean)
     .join('\n')
 }
 
-function compactList(values: any[], limit = 8) {
+function compactList(values: any[], limit: any = 8) {
   const unique = [...new Set(values.filter(Boolean))]
   if (unique.length <= limit) {
     return unique
@@ -1007,7 +1009,7 @@ function compactList(values: any[], limit = 8) {
   return [...unique.slice(0, limit), `... 另有 ${unique.length - limit} 项`]
 }
 
-function extractCodeSignals(code) {
+function extractCodeSignals(code: any) {
   const lines = code.split('\n')
   const declarations: string[] = []
   const tests: string[] = []
@@ -1043,12 +1045,12 @@ function extractCodeSignals(code) {
   }
 }
 
-function codeBlockExtension(language) {
+function codeBlockExtension(language: any) {
   const normalized = String(language || '').toLowerCase()
   return CODE_BLOCK_EXTENSION_BY_LANGUAGE[normalized] || '.txt'
 }
 
-function proposedArtifactForCodeBlock(language, code, blockIndex) {
+function proposedArtifactForCodeBlock(language: any, code: any, blockIndex: any) {
   const extension = codeBlockExtension(language)
   const relativePath = path
     .join(PROPOSED_CODE_DIR, `block-${String(blockIndex).padStart(3, '0')}${extension}`)
@@ -1068,7 +1070,7 @@ function proposedArtifactForCodeBlock(language, code, blockIndex) {
   }
 }
 
-function compactCodeBlock(language, code, blockIndex, artifact: any = null) {
+function compactCodeBlock(language: any, code: any, blockIndex: any, artifact: any = null) {
   const lines = code.split('\n')
   const signals = extractCodeSignals(code)
   const pseudo = [
@@ -1085,9 +1087,9 @@ function compactCodeBlock(language, code, blockIndex, artifact: any = null) {
     signals.declarations.length ? `声明/入口：${signals.declarations.join(', ')}` : null,
     signals.tests.length ? `测试意图：${signals.tests.join('；')}` : null,
     signals.effects.length
-      ? ['关键伪流程：', ...signals.effects.map((item, index) => `${index + 1}. ${item}`)].join('\n')
+      ? ['关键伪流程：', ...signals.effects.map((item: any, index: any) => `${index + 1}. ${item}`)].join('\n')
       : '关键伪流程：根据该代码块前后的任务描述实现，避免逐字复制长代码。',
-    signals.todos.length ? ['显式标记：', ...signals.todos.map((item) => `- ${item}`)].join('\n') : null,
+    signals.todos.length ? ['显式标记：', ...signals.todos.map((item: any) => `- ${item}`)].join('\n') : null,
     '```',
   ]
     .filter(Boolean)
@@ -1095,7 +1097,7 @@ function compactCodeBlock(language, code, blockIndex, artifact: any = null) {
   return pseudo
 }
 
-function compactPlanForReview(plan, options: any = {}) {
+function compactPlanForReview(plan: any, options: any = {}) {
   const lineThreshold = options.lineThreshold || COMPACT_CODE_BLOCK_LINE_THRESHOLD
   const charThreshold = options.charThreshold || COMPACT_CODE_BLOCK_CHAR_THRESHOLD
   const originalPlan = String(plan)
@@ -1105,7 +1107,7 @@ function compactPlanForReview(plan, options: any = {}) {
   let implementationDetailChars = 0
   let implementationDetailLines = 0
   const artifacts: any[] = []
-  const compacted = originalPlan.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (match, rawLanguage, code) => {
+  const compacted = originalPlan.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (match: any, rawLanguage: any, code: any) => {
     codeBlocks += 1
     const language = String(rawLanguage || '')
       .trim()
@@ -1166,13 +1168,13 @@ function compactPlanForReview(plan, options: any = {}) {
       implementation_detail_ratio: implementationDetailRatio,
       plan_bloat_warning: planBloatWarning,
       proposed_artifact_count: artifacts.length,
-      proposed_artifact_chars: artifacts.reduce((sum, artifact) => sum + artifact.char_count, 0),
+      proposed_artifact_chars: artifacts.reduce((sum: any, artifact: any) => sum + artifact.char_count, 0),
     },
     artifacts,
   }
 }
 
-const ACCESS_NOTES = {
+const ACCESS_NOTES: Record<string, string[]> = {
   reviewer: [
     '你可以使用 Read、Glob、Grep 只读检查该目录。不要修改文件，不要执行 Bash。',
     '涉及已存在代码的工程事实，evidence 必须包含现有工程文件的相对路径和行号。',
@@ -1191,7 +1193,13 @@ const ACCESS_NOTES = {
   ],
 }
 
-function workspaceReviewInput(projectRoot, plan, context = '', accessMode = 'reviewer', readBoundary: any = null) {
+function workspaceReviewInput(
+  projectRoot: any,
+  plan: any,
+  context: any = '',
+  accessMode: any = 'reviewer',
+  readBoundary: any = null,
+) {
   const accessNotes = ACCESS_NOTES[accessMode] || ACCESS_NOTES.reviewer
   return [
     '# 工程评审输入',
@@ -1214,9 +1222,9 @@ function workspaceReviewInput(projectRoot, plan, context = '', accessMode = 'rev
 }
 
 function reviewerIssueIds(reviewerOutputs: any = {}) {
-  return (Object.entries(reviewerOutputs) as [string, any][]).flatMap(([source, output]) => {
+  return (Object.entries(reviewerOutputs) as [string, any][]).flatMap(([source, output]: any) => {
     const issues = Array.isArray(output?.issues) ? output.issues : []
-    return issues.map((issue, index) => ({
+    return issues.map((issue: any, index: any) => ({
       issue_id: `${slug(source)}-${String(index + 1).padStart(3, '0')}`,
       source,
       issue_title: String(issue?.title || ''),
@@ -1226,10 +1234,10 @@ function reviewerIssueIds(reviewerOutputs: any = {}) {
 }
 
 function buildWorkspacePrompt(
-  role,
-  projectRoot,
-  plan,
-  context = '',
+  role: any,
+  projectRoot: any,
+  plan: any,
+  context: any = '',
   reviewerOutputs: any = null,
   factCheckOutput: any = null,
   readBoundary: any = null,
@@ -1248,7 +1256,9 @@ function buildWorkspacePrompt(
   if (role === 'synthesis') {
     template = template.replace('请阅读下面三组审查意见', '请阅读下面多组审查意见')
     const sourceSections = Object.entries(reviewerOutputs || {})
-      .map(([source, output]) => [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'))
+      .map(([source, output]: any) =>
+        [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'),
+      )
       .join('\n\n')
     const factCheckSection = factCheckOutput
       ? ['# Fact Check 报告', '', '```json', JSON.stringify(factCheckOutput, null, 2), '```'].join('\n')
@@ -1266,7 +1276,9 @@ function buildWorkspacePrompt(
   if (role === FACT_CHECK_ROLE) {
     const issueIds = reviewerIssueIds(reviewerOutputs)
     const sourceSections = Object.entries(reviewerOutputs || {})
-      .map(([source, output]) => [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'))
+      .map(([source, output]: any) =>
+        [`## ${source}`, '', '```json', JSON.stringify(output, null, 2), '```'].join('\n'),
+      )
       .join('\n\n')
     const input = [
       workspaceReviewInput(projectRoot, plan, context, 'fact_check', readBoundary),
@@ -1288,7 +1300,7 @@ function buildWorkspacePrompt(
   return template.replace('{{INPUT}}', workspaceReviewInput(projectRoot, plan, context, 'reviewer', readBoundary))
 }
 
-function workspaceSchemaForRole(role) {
+function workspaceSchemaForRole(role: any) {
   assertWorkspaceRole(role)
   if (role === FACT_CHECK_ROLE) {
     return path.join(ROOT, 'schemas', 'fact-check-output.schema.json')
@@ -1296,7 +1308,7 @@ function workspaceSchemaForRole(role) {
   return schemaForProbe(role)
 }
 
-function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options: any = {}) {
+function buildClaudeWorkspaceArgs(config: any, model: any, role: any, projectRoot: any, options: any = {}) {
   const modelConfig = config.models[model]
   if (!modelConfig) {
     throw new Error(`No validated model configuration for "${model}"`)
@@ -1379,21 +1391,21 @@ function buildClaudeWorkspaceArgs(config, model, role, projectRoot, options: any
   return args
 }
 
-function runDirectory(config, runId) {
+function runDirectory(config: any, runId: any) {
   if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
     throw new Error(`Invalid workspace review run id: ${runId}`)
   }
   return path.join(config.workspace_runs_dir, runId)
 }
 
-function executionLogPath(runDir) {
+function executionLogPath(runDir: any) {
   return path.join(runDir, 'execution.log')
 }
 
-function appendExecutionLog(runDir, event, details: any = {}) {
+function appendExecutionLog(runDir: any, event: any, details: any = {}) {
   const fields = Object.entries(details)
-    .filter(([, value]) => value !== undefined && value !== null)
-    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .filter(([, value]: any) => value !== undefined && value !== null)
+    .map(([key, value]: any) => `${key}=${JSON.stringify(value)}`)
     .join(' ')
   fs.appendFileSync(
     executionLogPath(runDir),
@@ -1402,7 +1414,7 @@ function appendExecutionLog(runDir, event, details: any = {}) {
   )
 }
 
-function updateState(runDir, patch) {
+function updateState(runDir: any, patch: any) {
   const stateFile = path.join(runDir, 'state.json')
   let current: any = {}
   if (fs.existsSync(stateFile)) {
@@ -1417,7 +1429,7 @@ function updateState(runDir, patch) {
   return next
 }
 
-function redactedSettingsWarnings(config) {
+function redactedSettingsWarnings(config: any) {
   const warnings: string[] = []
   for (const [model, value] of Object.entries(config.models) as [string, any][]) {
     const mode = fs.statSync(value.settings_file).mode & 0o777
@@ -1428,7 +1440,7 @@ function redactedSettingsWarnings(config) {
   return warnings
 }
 
-function withoutAnthropicApiKey(env = process.env) {
+function withoutAnthropicApiKey(env: any = process.env) {
   const sanitized: any = {}
   for (const key of Object.keys(env)) {
     if (key === 'ANTHROPIC_API_KEY') {

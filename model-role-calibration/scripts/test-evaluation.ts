@@ -17,7 +17,7 @@ import {
 
 const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (score: any, expected: any) => any
 
-function runNode(script, args, env = {}) {
+function runNode(script: any, args: any, env: any = {}) {
   return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
@@ -29,13 +29,13 @@ function runNode(script, args, env = {}) {
   })
 }
 
-function requireSuccess(result, label) {
+function requireSuccess(result: any, label: any) {
   if (result.status !== 0) {
     throw new Error(`${label} failed:\n${result.stdout}\n${result.stderr}`)
   }
 }
 
-function scoreFixture(model = 'kimi', probe = 'planner') {
+function scoreFixture(model: any = 'kimi', probe: any = 'planner') {
   const dimensions = {
     hit_rate: 4,
     contract_closure: 4,
@@ -50,7 +50,7 @@ function scoreFixture(model = 'kimi', probe = 'planner') {
     score: dimensions,
     total: 20,
     dimension_assessments: Object.fromEntries(
-      Object.entries(dimensions).map(([name, score]) => [
+      Object.entries(dimensions).map(([name, score]: any) => [
         name,
         {
           score,
@@ -90,7 +90,7 @@ function main() {
     path.join(ROOT, 'outputs', 'model-role-map.md'),
   ]
   const outputBackups = new Map(
-    generatedOutputs.map((file) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]),
+    generatedOutputs.map((file: any) => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]),
   )
 
   try {
@@ -226,7 +226,7 @@ process.stdout.write(JSON.stringify({ type: "result", status: "completed" }) + "
     requireSuccess(result, 'promote confirmed evaluation')
     assert(fs.existsSync(paths.formalFile))
     assert.equal(parseJsonFile<any>(paths.formalFile).total, 20)
-    const decisions = fs.readdirSync(paths.decisionsDir).filter((file) => file.endsWith('.json'))
+    const decisions = fs.readdirSync(paths.decisionsDir).filter((file: any) => file.endsWith('.json'))
     assert.equal(decisions.length, 1)
     assert.equal(parseJsonFile<any>(path.join(paths.decisionsDir, decisions[0])).decision, 'human_confirmed')
 

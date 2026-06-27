@@ -26,14 +26,14 @@ const STATUS_POLL_MS = 1000
 const PROGRESS_INTERVAL_MS = 5000
 const MAX_PLAN_BYTES = 2 * 1024 * 1024
 
-function compactTimestamp(date = new Date()) {
+function compactTimestamp(date: any = new Date()) {
   return date
     .toISOString()
     .replace(/[-:]/g, '')
     .replace(/\.\d{3}Z$/, 'Z')
 }
 
-function uniqueRunId(config, date = new Date()) {
+function uniqueRunId(config: any, date: any = new Date()) {
   const base = `workspace-review-${compactTimestamp(date)}`
   let runId = base
   let index = 2
@@ -207,7 +207,7 @@ function toolList() {
   ]
 }
 
-function textResult(value, isError = false) {
+function textResult(value: any, isError: any = false) {
   return {
     content: [
       {
@@ -219,7 +219,7 @@ function textResult(value, isError = false) {
   }
 }
 
-function resolvePlanInput(input) {
+function resolvePlanInput(input: any) {
   const hasPlan = typeof input.plan === 'string'
   const hasPlanFile = typeof input.plan_file === 'string'
   if (hasPlan === hasPlanFile) {
@@ -263,7 +263,7 @@ function resolvePlanInput(input) {
   }
 }
 
-function startPlanReview(config, input: any) {
+function startPlanReview(config: any, input: any) {
   const planInput = resolvePlanInput(input)
   const projectRoot = validateProjectRoot(input.project_root || process.env.CLAUDE_PROJECT_DIR)
   const roles: string[] = input.roles?.length ? [...new Set<string>(input.roles)] : REVIEW_ROLES
@@ -324,7 +324,7 @@ function startPlanReview(config, input: any) {
       env: withoutAnthropicApiKey(process.env),
     },
   )
-  child.on('error', (error) => {
+  child.on('error', (error: any) => {
     appendExecutionLog(runDir, 'runner_start_failed', {
       run_id: runId,
     })
@@ -365,7 +365,7 @@ function startPlanReview(config, input: any) {
   }
 }
 
-function retryPlanReviewStage(config, input: any) {
+function retryPlanReviewStage(config: any, input: any) {
   const runId = String(input.run_id || '')
   if (!/^[A-Za-z0-9_-]+$/.test(runId)) {
     throw new Error(`Invalid run_id: ${runId}`)
@@ -385,7 +385,7 @@ function retryPlanReviewStage(config, input: any) {
     )
   }
   const roles = Array.isArray(state.roles) && state.roles.length ? state.roles : REVIEW_ROLES
-  const reviewerCompleted = (role) => {
+  const reviewerCompleted = (role: any) => {
     const outputFile = path.join(runDir, 'roles', role, 'output.json')
     const metadataFile = path.join(runDir, 'roles', role, 'metadata.json')
     if (!fs.existsSync(outputFile) || !fs.existsSync(metadataFile)) {
@@ -393,7 +393,7 @@ function retryPlanReviewStage(config, input: any) {
     }
     return parseJsonFile<any>(metadataFile).status === 'completed'
   }
-  const incompleteReviewers = roles.filter((role) => !reviewerCompleted(role))
+  const incompleteReviewers = roles.filter((role: any) => !reviewerCompleted(role))
   if (input.stage === 'reviewers' && !incompleteReviewers.length) {
     throw new Error('Cannot retry reviewers: all requested reviewers are already completed')
   }
@@ -406,7 +406,7 @@ function retryPlanReviewStage(config, input: any) {
       'roles/fact_check/fact-check-summary.json',
       'roles/fact_check/metadata.json',
     ]
-    const missing = requiredFiles.filter((file) => !fs.existsSync(path.join(runDir, file)))
+    const missing = requiredFiles.filter((file: any) => !fs.existsSync(path.join(runDir, file)))
     if (missing.length) {
       throw new Error(`Cannot retry synthesis; missing prerequisite artifact(s): ${missing.join(', ')}`)
     }
@@ -423,7 +423,7 @@ function retryPlanReviewStage(config, input: any) {
         ? ['fact_check', 'synthesis']
         : ['synthesis']
   const exhausted = [...new Set(plannedExecutors)].filter(
-    (executor) => Number(retryCounts[executor] || 0) >= MAX_EXECUTOR_RETRIES,
+    (executor: any) => Number(retryCounts[executor] || 0) >= MAX_EXECUTOR_RETRIES,
   )
   if (exhausted.length) {
     throw new Error(`Retry limit reached (${MAX_EXECUTOR_RETRIES}) for executor(s): ${exhausted.join(', ')}`)
@@ -464,7 +464,7 @@ function retryPlanReviewStage(config, input: any) {
       env: withoutAnthropicApiKey(process.env),
     },
   )
-  child.on('error', (error) => {
+  child.on('error', (error: any) => {
     appendExecutionLog(runDir, 'stage_retry_start_failed', {
       stage: input.stage,
     })
@@ -505,12 +505,12 @@ function retryPlanReviewStage(config, input: any) {
   }
 }
 
-function parseExecutionLogLine(line): any {
+function parseExecutionLogLine(line: any): any {
   const match = /^\[[^\]]+\]\s+(\S+)(?:\s+(.*))?$/.exec(line)
   if (!match) {
     return null
   }
-  const details = {}
+  const details: Record<string, any> = {}
   const fieldPattern = /(\w+)=("(?:\\.|[^"])*"|\[[^\]]*\]|\{[^}]*\}|[^\s]+)/g
   let field
   while ((field = fieldPattern.exec(match[2] || '')) !== null) {
@@ -526,9 +526,9 @@ function parseExecutionLogLine(line): any {
   }
 }
 
-function progressSnapshot(config, runDir, state: any) {
+function progressSnapshot(config: any, runDir: any, state: any) {
   const reviewers: any = Object.fromEntries(
-    (state.roles || []).map((role) => [
+    (state.roles || []).map((role: any) => [
       role,
       {
         model: config.roles[role],
@@ -549,7 +549,7 @@ function progressSnapshot(config, runDir, state: any) {
     const events = fs
       .readFileSync(logFile, 'utf8')
       .split('\n')
-      .filter((event): event is any => Boolean(event))
+      .filter((event: any): event is any => Boolean(event))
       .map(parseExecutionLogLine)
       .filter(Boolean)
     for (const event of events) {
@@ -615,10 +615,10 @@ function progressSnapshot(config, runDir, state: any) {
   }
 
   const reviewerValues = Object.values(reviewers) as any[]
-  const completedReviewers = reviewerValues.filter((item) => item.status === 'completed').length
+  const completedReviewers = reviewerValues.filter((item: any) => item.status === 'completed').length
   const active = (Object.entries(reviewers) as [string, any][])
-    .filter(([, item]) => item.status === 'running')
-    .map(([role, item]) => `${role}/${item.model}`)
+    .filter(([, item]: any) => item.status === 'running')
+    .map(([role, item]: any) => `${role}/${item.model}`)
   if (factCheck.status === 'running') {
     active.push(`fact_check/${factCheck.model}`)
   }
@@ -650,7 +650,7 @@ function progressSnapshot(config, runDir, state: any) {
   }
 }
 
-function planReviewResult(config, input: any) {
+function planReviewResult(config: any, input: any) {
   const runDir = runDirectory(config, input.run_id)
   const stateFile = path.join(runDir, 'state.json')
   if (!fs.existsSync(stateFile)) {
@@ -674,7 +674,7 @@ function planReviewResult(config, input: any) {
   return result
 }
 
-function waitDuration(input) {
+function waitDuration(input: any) {
   const value = input.wait_ms === undefined ? DEFAULT_WAIT_MS : Number(input.wait_ms)
   if (!Number.isInteger(value) || value < 0 || value > MAX_WAIT_MS) {
     throw new Error(`wait_ms must be an integer between 0 and ${MAX_WAIT_MS}`)
@@ -682,11 +682,11 @@ function waitDuration(input) {
   return value
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function delay(ms: any) {
+  return new Promise((resolve: any) => setTimeout(resolve, ms))
 }
 
-async function getPlanReview(config, input, onProgress: any = null) {
+async function getPlanReview(config: any, input: any, onProgress: any = null) {
   const waitMs = waitDuration(input)
   const startedAt = Date.now()
   let lastNotificationAt = 0
@@ -738,7 +738,7 @@ async function getPlanReview(config, input, onProgress: any = null) {
   }
 }
 
-function createHandler(config) {
+function createHandler(config: any) {
   return async function handle(message: any, sendNotification: any = null) {
     if (message.method === 'initialize') {
       return {
@@ -789,7 +789,7 @@ function createHandler(config) {
         const progressToken = message.params?._meta?.progressToken
         const notifyProgress: any =
           sendNotification && (typeof progressToken === 'string' || typeof progressToken === 'number')
-            ? (progress) =>
+            ? (progress: any) =>
                 sendNotification('notifications/progress', {
                   progressToken,
                   ...progress,
@@ -803,15 +803,15 @@ function createHandler(config) {
   }
 }
 
-function response(id, result) {
+function response(id: any, result: any) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n')
 }
 
-function notification(method, params) {
+function notification(method: any, params: any) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
 }
 
-function errorResponse(id, code, message) {
+function errorResponse(id: any, code: any, message: any) {
   process.stdout.write(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -863,7 +863,7 @@ function main() {
   }
   let buffer = ''
   process.stdin.setEncoding('utf8')
-  process.stdin.on('data', (chunk) => {
+  process.stdin.on('data', (chunk: any) => {
     buffer += chunk
     let index
     while ((index = buffer.indexOf('\n')) !== -1) {

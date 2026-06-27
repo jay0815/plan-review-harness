@@ -212,9 +212,9 @@ function nextAttempt(paths: ArtifactPaths): AttemptPaths {
   ensureDir(paths.attemptsDir)
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name) => /^attempt-(\d+)\.meta\.json$/.exec(name))
-    .filter((match): match is RegExpExecArray => Boolean(match))
-    .map((match) => Number(match[1]))
+    .map((name: any) => /^attempt-(\d+)\.meta\.json$/.exec(name))
+    .filter((match: any): match is RegExpExecArray => Boolean(match))
+    .map((match: any) => Number(match[1]))
   const number = attempts.length ? Math.max(...attempts) + 1 : 1
   const label = `attempt-${String(number).padStart(3, '0')}`
   return {
@@ -239,13 +239,15 @@ function log(message: string): void {
 
 function renderScopedPrompt(fixture: JsonObject, projectRoot: string, readBoundary: ReadBoundary): string {
   const fileList = readBoundary.files?.length
-    ? readBoundary.files.map((file) => `- ${file}`).join('\n')
+    ? readBoundary.files.map((file: any) => `- ${file}`).join('\n')
     : '- （无可读取工程文件）'
   const blocked = readBoundary.blocked_refs?.length
-    ? ['', '已阻止的外部路径引用：', ...readBoundary.blocked_refs.map((item) => `- ${item}`)].join('\n')
+    ? ['', '已阻止的外部路径引用：', ...readBoundary.blocked_refs.map((item: any) => `- ${item}`)].join('\n')
     : ''
   const skipped = readBoundary.skipped_refs?.length
-    ? ['', '未暴露或不存在的引用：', ...readBoundary.skipped_refs.slice(0, 30).map((item) => `- ${item}`)].join('\n')
+    ? ['', '未暴露或不存在的引用：', ...readBoundary.skipped_refs.slice(0, 30).map((item: any) => `- ${item}`)].join(
+        '\n',
+      )
     : ''
   return [
     '# 工程读取能力',
@@ -366,7 +368,7 @@ export class FactCheckExecutor {
     return {
       promptDir,
       promptHash: sha256(prompt),
-      prompts: models.map((model) => ({
+      prompts: models.map((model: any) => ({
         model,
         probe: CALIBRATION_PROBE,
         file: path.join(promptDir, `${slug(model)}-fact_check.md`),
@@ -375,7 +377,7 @@ export class FactCheckExecutor {
   }
 
   buildJobs({ run, caseId, models }: { run: string; caseId: string; models: string[] }): FactCheckJob[] {
-    return models.map((model) => ({
+    return models.map((model: any) => ({
       run,
       caseId,
       model,

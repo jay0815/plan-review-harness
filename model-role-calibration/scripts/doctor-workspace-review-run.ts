@@ -8,22 +8,22 @@ import { resolveRunDir, verifyRun } from './verify-workspace-review-run.js'
 
 const REVIEWER_ROLES = new Set(['risk', 'architecture', 'execution', 'rebuttal'])
 
-function readJsonIfExists(file) {
+function readJsonIfExists(file: any) {
   if (!fs.existsSync(file)) {
     return null
   }
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function artifactPath(runDir, file) {
+function artifactPath(runDir: any, file: any) {
   return path.join(runDir, file)
 }
 
-function countArray(value) {
+function countArray(value: any) {
   return Array.isArray(value) ? value.length : 0
 }
 
-function summarizeLint(runDir) {
+function summarizeLint(runDir: any) {
   const file = artifactPath(runDir, 'plan-authoring-lint.json')
   const lint = readJsonIfExists(file)
   if (!lint) {
@@ -49,7 +49,7 @@ function summarizeLint(runDir) {
   }
 }
 
-function summarizeRefs(runDir) {
+function summarizeRefs(runDir: any) {
   const file = artifactPath(runDir, 'review-plan-refs.json')
   const refs = readJsonIfExists(file)
   if (!refs) {
@@ -76,7 +76,7 @@ function summarizeRefs(runDir) {
   }
 }
 
-function summarizeSynthesis(runDir) {
+function summarizeSynthesis(runDir: any) {
   const file = path.join(runDir, 'roles', 'synthesis', 'output.json')
   const output = readJsonIfExists(file)
   if (!output) {
@@ -99,10 +99,10 @@ function summarizeSynthesis(runDir) {
   }
 }
 
-function summarizeFactCheck(verifyResult) {
+function summarizeFactCheck(verifyResult: any) {
   const role = verifyResult.timings.roles.fact_check || {}
-  const strictness = verifyResult.checks.find((item) => item.id === 'fact_check.strictness_signal')
-  const summary = verifyResult.checks.find((item) => item.id === 'fact_check.summary_present')?.details || null
+  const strictness = verifyResult.checks.find((item: any) => item.id === 'fact_check.strictness_signal')
+  const summary = verifyResult.checks.find((item: any) => item.id === 'fact_check.summary_present')?.details || null
   return {
     present: Boolean(verifyResult.timings.roles.fact_check),
     model: role.model || null,
@@ -116,7 +116,7 @@ function summarizeFactCheck(verifyResult) {
   }
 }
 
-function retryStageForInfraError(error) {
+function retryStageForInfraError(error: any) {
   const role = error?.role
   if (REVIEWER_ROLES.has(role)) {
     return 'reviewers'
@@ -130,7 +130,7 @@ function retryStageForInfraError(error) {
   return null
 }
 
-function shellQuote(value) {
+function shellQuote(value: any) {
   const text = String(value)
   if (/^[A-Za-z0-9_./:-]+$/.test(text)) {
     return text
@@ -138,11 +138,11 @@ function shellQuote(value) {
   return `'${text.replace(/'/g, "'\\''")}'`
 }
 
-function shellCommand(parts) {
+function shellCommand(parts: any) {
   return parts.map(shellQuote).join(' ')
 }
 
-function retryCommand(runDir, stage) {
+function retryCommand(runDir: any, stage: any) {
   return shellCommand([
     'node',
     ...runtimeNodeScriptArgs('retry-workspace-review-stage'),
@@ -153,12 +153,12 @@ function retryCommand(runDir, stage) {
   ])
 }
 
-function addAction(actions, action) {
+function addAction(actions: any, action: any) {
   actions.push(action)
 }
 
-function buildActions({ runDir, verification, lint, refs, synthesis }) {
-  const actions = []
+function buildActions({ runDir, verification, lint, refs, synthesis }: any) {
+  const actions: any[] = []
   if (['queued', 'running'].includes(verification.run_status)) {
     addAction(actions, {
       priority: 'P0',
@@ -168,7 +168,7 @@ function buildActions({ runDir, verification, lint, refs, synthesis }) {
     return actions
   }
 
-  const manifestCheck = verification.checks.find((item) => item.id === 'manifest.present')
+  const manifestCheck = verification.checks.find((item: any) => item.id === 'manifest.present')
   if (manifestCheck?.status === 'fail' && manifestCheck.details?.backfill_command) {
     addAction(actions, {
       priority: 'P0',
@@ -274,14 +274,14 @@ function buildActions({ runDir, verification, lint, refs, synthesis }) {
   return actions
 }
 
-function healthFrom({ verification, actions }) {
+function healthFrom({ verification, actions }: any) {
   if (['queued', 'running'].includes(verification.run_status)) {
     return 'pending'
   }
   if (verification.infra_errors.length || !verification.valid) {
     return 'fail'
   }
-  if (actions.some((item) => item.priority === 'P0' || item.priority === 'P1')) {
+  if (actions.some((item: any) => item.priority === 'P0' || item.priority === 'P1')) {
     return 'warn'
   }
   if (verification.counts.warn > 0) {
@@ -290,20 +290,20 @@ function healthFrom({ verification, actions }) {
   return 'pass'
 }
 
-function actionLevelFrom(actions) {
-  if (actions.some((item) => item.priority === 'P0')) {
+function actionLevelFrom(actions: any) {
+  if (actions.some((item: any) => item.priority === 'P0')) {
     return 'P0'
   }
-  if (actions.some((item) => item.priority === 'P1')) {
+  if (actions.some((item: any) => item.priority === 'P1')) {
     return 'P1'
   }
-  if (actions.some((item) => item.priority === 'P2')) {
+  if (actions.some((item: any) => item.priority === 'P2')) {
     return 'P2'
   }
   return 'none'
 }
 
-export function doctorWorkspaceReviewRun(runDir) {
+export function doctorWorkspaceReviewRun(runDir: any) {
   const absoluteRunDir = path.resolve(runDir)
   const verification = verifyRun(absoluteRunDir)
   const lint = summarizeLint(absoluteRunDir)
@@ -339,7 +339,7 @@ export function doctorWorkspaceReviewRun(runDir) {
   }
 }
 
-function printText(result) {
+function printText(result: any) {
   console.log(`# Plan Review Doctor: ${result.run_id}`)
   console.log('')
   console.log(`Run dir: ${result.run_dir}`)

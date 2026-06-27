@@ -30,7 +30,7 @@ const CALIBRATION_SYSTEM_PROMPT = [
 ].join(' ')
 const HEARTBEAT_MS = 30000
 
-function extractJsonObjects(text): string[] {
+function extractJsonObjects(text: any): string[] {
   const objects: string[] = []
   let start = -1
   let depth = 0
@@ -73,7 +73,7 @@ function extractJsonObjects(text): string[] {
   return objects
 }
 
-function parseJsonEnvelope(stdout): any {
+function parseJsonEnvelope(stdout: any): any {
   const text = String(stdout || '').trim()
   let parseError: any
   try {
@@ -107,7 +107,7 @@ function parseJsonEnvelope(stdout): any {
   throw new Error(`Claude Code output does not contain a valid JSON object${detail}${context}`)
 }
 
-function parseOutputValue(value) {
+function parseOutputValue(value: any) {
   if (value && typeof value === 'object') {
     return value
   }
@@ -121,7 +121,7 @@ function parseOutputValue(value) {
   return parseJsonEnvelope(result)
 }
 
-function findOutputCandidate(value, probe): any {
+function findOutputCandidate(value: any, probe: any): any {
   if (!value || typeof value !== 'object') {
     return null
   }
@@ -190,12 +190,12 @@ function findOutputCandidate(value, probe): any {
   return null
 }
 
-function parseToolResultBlock(block): any {
+function parseToolResultBlock(block: any): any {
   if (!block || block.type !== 'tool_result' || !block.tool_use_id) {
     return null
   }
   const content = Array.isArray(block.content)
-    ? block.content.map((item) => (typeof item?.text === 'string' ? item.text : '')).join('\n')
+    ? block.content.map((item: any) => (typeof item?.text === 'string' ? item.text : '')).join('\n')
     : String(block.content || '')
   if (!content.trim()) {
     return null
@@ -210,7 +210,7 @@ function parseToolResultBlock(block): any {
   }
 }
 
-function validatedToolUseIds(envelope) {
+function validatedToolUseIds(envelope: any) {
   const ids = new Set()
   for (const item of envelope) {
     const content = item?.message?.content
@@ -227,7 +227,7 @@ function validatedToolUseIds(envelope) {
   return ids
 }
 
-function findValidatedToolCandidate(envelope, probe) {
+function findValidatedToolCandidate(envelope: any, probe: any) {
   const validIds = validatedToolUseIds(envelope)
   if (!validIds.size) {
     return null
@@ -257,7 +257,7 @@ function findValidatedToolCandidate(envelope, probe) {
   return null
 }
 
-function parseArrayEnvelope(envelope, probe): any {
+function parseArrayEnvelope(envelope: any, probe: any): any {
   let fallback: any = null
   let parseError: any = null
   for (let index = envelope.length - 1; index >= 0; index -= 1) {
@@ -293,7 +293,7 @@ function parseArrayEnvelope(envelope, probe): any {
   return null
 }
 
-function parseAssistantOutput(stdout, probe): any {
+function parseAssistantOutput(stdout: any, probe: any): any {
   const envelope = parseJsonEnvelope(stdout)
   let output
 
@@ -323,7 +323,7 @@ function parseAssistantOutput(stdout, probe): any {
   return { envelope, output }
 }
 
-function resolveWrapperCommand(shell, model, timeoutMs, maxBuffer) {
+function resolveWrapperCommand(shell: any, model: any, timeoutMs: any, maxBuffer: any) {
   const resolver = [
     'alias_value=${aliases[$MODEL]-}',
     'if [[ -z $alias_value ]]; then',
@@ -365,13 +365,13 @@ function resolveWrapperCommand(shell, model, timeoutMs, maxBuffer) {
   }
 }
 
-function nextAttempt(paths) {
+function nextAttempt(paths: any) {
   ensureDir(paths.attemptsDir)
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name) => /^attempt-(\d+)\.meta\.json$/.exec(name))
-    .filter((match): match is RegExpExecArray => Boolean(match))
-    .map((match) => Number(match[1]))
+    .map((name: any) => /^attempt-(\d+)\.meta\.json$/.exec(name))
+    .filter((match: any): match is RegExpExecArray => Boolean(match))
+    .map((match: any) => Number(match[1]))
   const number = attempts.length ? Math.max(...attempts) + 1 : 1
   const label = `attempt-${String(number).padStart(3, '0')}`
   return {
@@ -385,7 +385,7 @@ function nextAttempt(paths) {
   }
 }
 
-function attemptFiles(paths, label) {
+function attemptFiles(paths: any, label: any) {
   if (!/^attempt-\d{3}$/.test(label)) {
     throw new Error(`Invalid attempt label "${label}". Expected attempt-001.`)
   }
@@ -398,7 +398,7 @@ function attemptFiles(paths, label) {
   }
 }
 
-function positiveInteger(value, name) {
+function positiveInteger(value: any, name: any) {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(`${name} must be a positive integer`)
@@ -406,7 +406,7 @@ function positiveInteger(value, name) {
   return parsed
 }
 
-function buildCliArgs(wrapperArgs, schema, options) {
+function buildCliArgs(wrapperArgs: any, schema: any, options: any) {
   const maxTurns = options.jsonValidator ? '4' : '1'
   const tools = options.tools === undefined ? '' : options.tools
   const cliArgs = [
@@ -476,18 +476,18 @@ function buildCliArgs(wrapperArgs, schema, options) {
   return cliArgs
 }
 
-function logProgress(message) {
+function logProgress(message: any) {
   console.error(`[run-model] ${new Date().toISOString()} ${message}`)
 }
 
-function durationLabel(ms) {
+function durationLabel(ms: any) {
   const seconds = Math.floor(ms / 1000)
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
   return minutes ? `${minutes}m${String(remainder).padStart(2, '0')}s` : `${remainder}s`
 }
 
-function validatorLogSummary(file) {
+function validatorLogSummary(file: any) {
   if (!file) {
     return ''
   }
@@ -523,7 +523,7 @@ function validatorLogSummary(file) {
   }
 }
 
-function summarizeArgs(args) {
+function summarizeArgs(args: any) {
   const redactedValueFlags = new Set(['--json-schema', '--system-prompt', '--mcp-config'])
   const summary: string[] = []
   for (let index = 0; index < args.length; index += 1) {
@@ -537,8 +537,8 @@ function summarizeArgs(args) {
   return summary.join(' ')
 }
 
-function runCommand(command, args, options): Promise<any> {
-  return new Promise((resolve) => {
+function runCommand(command: any, args: any, options: any): Promise<any> {
+  return new Promise((resolve: any) => {
     const stdoutChunks: Buffer[] = []
     const stderrChunks: Buffer[] = []
     let stdoutBytes = 0
@@ -571,7 +571,7 @@ function runCommand(command, args, options): Promise<any> {
       child.kill(options.killSignal)
     }, options.timeoutMs)
 
-    function appendChunk(target, chunk) {
+    function appendChunk(target: any, chunk: any) {
       if (target === 'stdout') {
         stdoutChunks.push(chunk)
         stdoutBytes += chunk.length
@@ -589,14 +589,14 @@ function runCommand(command, args, options): Promise<any> {
       }
     }
 
-    child.stdout.on('data', (chunk) => appendChunk('stdout', chunk))
-    child.stderr.on('data', (chunk) => appendChunk('stderr', chunk))
-    child.on('error', (spawnError) => {
+    child.stdout.on('data', (chunk: any) => appendChunk('stdout', chunk))
+    child.stderr.on('data', (chunk: any) => appendChunk('stderr', chunk))
+    child.on('error', (spawnError: any) => {
       if (!error) {
         error = spawnError
       }
     })
-    child.on('close', (code, signal) => {
+    child.on('close', (code: any, signal: any) => {
       clearInterval(heartbeat)
       clearTimeout(timeout)
       const validatorStatus = validatorLogSummary(options.validatorLogFile)
@@ -623,7 +623,7 @@ function runCommand(command, args, options): Promise<any> {
   })
 }
 
-function writeCompletedArtifacts(paths, attempt, metadata, envelope, output) {
+function writeCompletedArtifacts(paths: any, attempt: any, metadata: any, envelope: any, output: any) {
   metadata.status = 'completed'
   metadata.error = null
   writeFileNew(attempt.rawJsonFile, JSON.stringify(envelope, null, 2) + '\n')
@@ -634,7 +634,7 @@ function writeCompletedArtifacts(paths, attempt, metadata, envelope, output) {
   writeGenerated(paths.resultFile, JSON.stringify(output, null, 2) + '\n')
 }
 
-function reparseAttempt(paths, sourceLabel, newAttempt, metadataBase, probe) {
+function reparseAttempt(paths: any, sourceLabel: any, newAttempt: any, metadataBase: any, probe: any) {
   const source = attemptFiles(paths, sourceLabel)
   const sourceRawFile = fs.existsSync(source.rawTextFile) ? source.rawTextFile : source.rawJsonFile
   if (!fs.existsSync(sourceRawFile)) {
@@ -850,7 +850,7 @@ async function main() {
 }
 
 if (isMainScript(__filename)) {
-  main().catch((error) => {
+  main().catch((error: any) => {
     console.error(error.stack || error.message)
     process.exitCode = 1
   })

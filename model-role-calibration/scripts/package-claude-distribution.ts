@@ -28,7 +28,7 @@ export const RUNTIME_SCRIPT_SOURCES = [
   'scripts/doctor-workspace-review-run.ts',
   'scripts/backfill-workspace-run-manifest.ts',
 ]
-const RUNTIME_SCRIPT_OUTPUTS = RUNTIME_SCRIPT_SOURCES.map((file) => file.replace(/\.ts$/, '.js'))
+const RUNTIME_SCRIPT_OUTPUTS = RUNTIME_SCRIPT_SOURCES.map((file: any) => file.replace(/\.ts$/, '.js'))
 const RUNTIME_ASSET_FILES = [
   'default-role-routes.json',
   'claude-plan-authoring.md',
@@ -402,7 +402,7 @@ Reviewer、Fact Check 和 Synthesizer 使用 \`review-plan.md\`。
 `
 }
 
-function copyFile(source, destination) {
+function copyFile(source: any, destination: any) {
   if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
     throw new Error(`Distribution source file does not exist: ${source}`)
   }
@@ -410,12 +410,12 @@ function copyFile(source, destination) {
   fs.copyFileSync(source, destination)
 }
 
-function writeExecutable(file, content) {
+function writeExecutable(file: any, content: any) {
   fs.writeFileSync(file, content, 'utf8')
   fs.chmodSync(file, 0o755)
 }
 
-function compileRuntimeScripts(packageDir) {
+function compileRuntimeScripts(packageDir: any) {
   const configFile = path.join(packageDir, '.tsconfig.runtime.json')
   const config = {
     extends: path.join(ROOT, 'tsconfig.json'),
@@ -428,7 +428,7 @@ function compileRuntimeScripts(packageDir) {
       noEmitOnError: true,
       typeRoots: [path.resolve(ROOT, '..', 'node_modules', '@types')],
     },
-    files: RUNTIME_SCRIPT_SOURCES.map((file) => path.join(ROOT, file)),
+    files: RUNTIME_SCRIPT_SOURCES.map((file: any) => path.join(ROOT, file)),
   }
   fs.writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n', 'utf8')
   const tscBin = path.resolve(ROOT, '..', 'node_modules', 'typescript', 'bin', 'tsc')
@@ -448,7 +448,7 @@ function compileRuntimeScripts(packageDir) {
   }
 }
 
-function createArchive(outputDir, packageDir) {
+function createArchive(outputDir: any, packageDir: any) {
   const archiveFile = path.join(outputDir, `${PACKAGE_NAME}.tar.gz`)
   if (fs.existsSync(archiveFile)) {
     fs.rmSync(archiveFile)
@@ -491,7 +491,7 @@ export function buildDistribution(options: BuildDistributionOptions = {}) {
       skill: 'direct-copy',
     },
     files: [
-      ...RUNTIME_FILES.map((file) => `mcp/${file}`),
+      ...RUNTIME_FILES.map((file: any) => `mcp/${file}`),
       'mcp/workspace-runs/.gitkeep',
       'skill/plan-review/SKILL.md',
       'install.sh',

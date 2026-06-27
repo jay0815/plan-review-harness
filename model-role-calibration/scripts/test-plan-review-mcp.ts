@@ -31,18 +31,18 @@ import {
 import { createRunManifest, recordResolvedExecution } from './workspace-review-manifest.js'
 import { toolList, resolvePlanInput, retryPlanReviewStage, progressSnapshot, getPlanReview } from './plan-review-mcp.js'
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-function recordAttemptIfManifest(runDir, metadata) {
+function recordAttemptIfManifest(runDir: any, metadata: any) {
   if (fs.existsSync(path.join(runDir, 'run-manifest.json'))) {
     recordResolvedExecution(runDir, metadata)
   }
 }
 
-function settings(baseUrl, model: string | null = null) {
+function settings(baseUrl: any, model: string | null = null) {
   return {
     env: {
       ANTHROPIC_BASE_URL: baseUrl,
@@ -68,7 +68,7 @@ const EXECUTION_BOUNDARIES = [
 ]
 
 function executionCoverage(overrides: any = {}) {
-  return EXECUTION_BOUNDARIES.map((boundary) => ({
+  return EXECUTION_BOUNDARIES.map((boundary: any) => ({
     boundary,
     status: 'covered',
     evidence_basis: 'plan_text',
@@ -77,7 +77,7 @@ function executionCoverage(overrides: any = {}) {
   }))
 }
 
-function configFixture(tempDir) {
+function configFixture(tempDir: any) {
   const settingsDir = path.join(tempDir, 'settings')
   writeJson(path.join(settingsDir, 'kimi.json'), settings('https://kimi.example'))
   writeJson(path.join(settingsDir, 'deepseek.json'), settings('https://gateway.example', 'deepseek'))
@@ -124,7 +124,7 @@ function configFixture(tempDir) {
   return { configFile, settingsDir }
 }
 
-function writeReviewerAttempt(runDir, role, model, status = 'completed') {
+function writeReviewerAttempt(runDir: any, role: any, model: any, status: any = 'completed') {
   const roleDir = path.join(runDir, 'roles', role)
   const output: any = {
     probe: role,
@@ -149,7 +149,7 @@ function writeReviewerAttempt(runDir, role, model, status = 'completed') {
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function writeFactCheckAttempt(runDir, model, status = 'completed') {
+function writeFactCheckAttempt(runDir: any, model: any, status: any = 'completed') {
   const roleDir = path.join(runDir, 'roles', 'fact_check')
   writeJson(path.join(roleDir, 'output.json'), {
     probe: 'fact_check',
@@ -170,7 +170,7 @@ function writeFactCheckAttempt(runDir, model, status = 'completed') {
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function writeSynthesisAttempt(runDir, model, status = 'completed') {
+function writeSynthesisAttempt(runDir: any, model: any, status: any = 'completed') {
   const roleDir = path.join(runDir, 'roles', 'synthesis')
   writeJson(path.join(roleDir, 'output.json'), {
     probe: 'synthesis',
@@ -203,7 +203,7 @@ function writeSynthesisAttempt(runDir, model, status = 'completed') {
   recordAttemptIfManifest(runDir, metadata)
 }
 
-function createRetryRun(config, tempDir, runId, roles, retryCounts: any = {}) {
+function createRetryRun(config: any, tempDir: any, runId: any, roles: any, retryCounts: any = {}) {
   const projectRoot = path.join(tempDir, `${runId}-project`)
   const runDir = path.join(tempDir, `${runId}-run`)
   fs.mkdirSync(projectRoot, { recursive: true })
@@ -242,7 +242,7 @@ function createRetryRun(config, tempDir, runId, roles, retryCounts: any = {}) {
 
 function retryExecutors(calls: any) {
   return {
-    runRole: async (config, request, role, runDir) => {
+    runRole: async (config: any, request: any, role: any, runDir: any) => {
       calls.reviewers.push(role)
       const model = config.roles[role]
       writeReviewerAttempt(runDir, role, model)
@@ -258,9 +258,9 @@ function retryExecutors(calls: any) {
         output_file: path.join('roles', role, 'output.json'),
       }
     },
-    runFactCheck: async (config, request, reviewerResults, runDir) => {
+    runFactCheck: async (config: any, request: any, reviewerResults: any, runDir: any) => {
       calls.fact_check += 1
-      calls.fact_check_reviewers = reviewerResults.map((item) => item.role)
+      calls.fact_check_reviewers = reviewerResults.map((item: any) => item.role)
       const model = config.roles.fact_check
       writeFactCheckAttempt(runDir, model)
       return {
@@ -280,9 +280,9 @@ function retryExecutors(calls: any) {
         summary_file: 'roles/fact_check/fact-check-summary.json',
       }
     },
-    runSynthesis: async (config, request, reviewerResults, factCheck, runDir) => {
+    runSynthesis: async (config: any, request: any, reviewerResults: any, factCheck: any, runDir: any) => {
       calls.synthesis += 1
-      calls.synthesis_reviewers = reviewerResults.map((item) => item.role)
+      calls.synthesis_reviewers = reviewerResults.map((item: any) => item.role)
       calls.synthesis_fact_check_probe = factCheck.output.probe
       const model = config.roles.synthesis
       writeSynthesisAttempt(runDir, model)
@@ -566,7 +566,7 @@ async function main() {
       '  await context.close();',
       '  return { ok: true };',
       '}',
-      ...Array.from({ length: 30 }, (_, index) => [
+      ...Array.from({ length: 30 }, (_: any, index: any) => [
         `const step${index} = await runDetailedImplementationStep(${index});`,
         `expect(step${index}.ok).toBe(true);`,
       ]).flat(),
@@ -599,7 +599,7 @@ async function main() {
     assert(compactedPlan.stats.saved_chars > 0)
 
     const proposedArtifactDir = path.join(tempDir, 'artifact-source')
-    const proposedArtifacts = compactedPlan.artifacts.map((artifact) => {
+    const proposedArtifacts = compactedPlan.artifacts.map((artifact: any) => {
       const sourceFile = path.join(proposedArtifactDir, artifact.relative_path)
       fs.mkdirSync(path.dirname(sourceFile), { recursive: true })
       fs.writeFileSync(sourceFile, artifact.content, 'utf8')
@@ -633,7 +633,7 @@ async function main() {
     assert.equal(refs.format_status.has_existing_code_refs_section, true)
     assert.equal(refs.format_status.has_proposed_code_artifacts_section, false)
     assert.equal(refs.format_status.refs_scoped_to_existing_code_refs_section, true)
-    assert(refs.existing_code_refs.some((item) => item.path === 'src/cli.ts' && item.line_ref === '1-1'))
+    assert(refs.existing_code_refs.some((item: any) => item.path === 'src/cli.ts' && item.line_ref === '1-1'))
     assert.deepEqual(refs.existing_code_ref_dirs, [])
     assert.deepEqual(refs.proposed_code_artifacts, [])
     assert(refs.blocked_refs.includes('/outside/project.ts'))
@@ -656,15 +656,17 @@ async function main() {
     assert.equal(chineseRefs.format_status.refs_scoped_to_existing_code_refs_section, true)
     assert(
       chineseRefs.existing_code_refs.some(
-        (item) => item.path === 'src/screens/main/mine/index.tsx' && item.line_ref === '1',
+        (item: any) => item.path === 'src/screens/main/mine/index.tsx' && item.line_ref === '1',
       ),
     )
     assert(
-      chineseRefs.existing_code_refs.some((item) => item.path === 'src/navigation/index.tsx' && item.line_ref === '1'),
+      chineseRefs.existing_code_refs.some(
+        (item: any) => item.path === 'src/navigation/index.tsx' && item.line_ref === '1',
+      ),
     )
-    assert(chineseRefs.existing_code_ref_dirs.some((item) => item.path === 'src/cdp'))
+    assert(chineseRefs.existing_code_ref_dirs.some((item: any) => item.path === 'src/cdp'))
     assert(!chineseRefs.skipped_refs.includes('src/cdp'))
-    assert(!chineseRefs.existing_code_refs.some((item) => item.path === 'src/cdp/extract.ts'))
+    assert(!chineseRefs.existing_code_refs.some((item: any) => item.path === 'src/cdp/extract.ts'))
 
     const riskValidatorLog = path.join(tempDir, 'risk.validator.log')
     assert.throws(() => buildClaudeWorkspaceArgs(config, 'qwen', 'risk', tempDir), /Missing validator log file/)
@@ -1239,12 +1241,12 @@ async function main() {
     writeJson(path.join(settingsDir, 'glm.json'), settings('https://gateway.example', 'glm'))
 
     assert.deepEqual(
-      toolList().map((tool) => tool.name),
+      toolList().map((tool: any) => tool.name),
       ['configuration_status', 'start_plan_review', 'retry_plan_review_stage', 'get_plan_review'],
     )
-    const startTool: any = toolList().find((tool) => tool.name === 'start_plan_review')
-    const retryTool: any = toolList().find((tool) => tool.name === 'retry_plan_review_stage')
-    const getTool: any = toolList().find((tool) => tool.name === 'get_plan_review')
+    const startTool: any = toolList().find((tool: any) => tool.name === 'start_plan_review')
+    const retryTool: any = toolList().find((tool: any) => tool.name === 'retry_plan_review_stage')
+    const getTool: any = toolList().find((tool: any) => tool.name === 'get_plan_review')
     assert(startTool.description.includes('同一计划只调用一次'))
     assert.equal(startTool.inputSchema.oneOf.length, 2)
     assert(startTool.inputSchema.properties.plan_file.description.includes('优先使用'))
@@ -1689,7 +1691,7 @@ async function main() {
         include_report: true,
         wait_ms: 1500,
       },
-      (progress) => progressEvents.push(progress),
+      (progress: any) => progressEvents.push(progress),
     )
     assert.equal(waitedResult.status, 'completed')
     assert.equal(waitedResult.progress.completed_reviewers, 1)
@@ -1932,7 +1934,7 @@ async function main() {
     const responses = result.stdout
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line))
+      .map((line: any) => JSON.parse(line))
     assert.equal(responses.length, 2)
     assert.equal(responses[0].result.serverInfo.name, 'plan-review-harness')
     assert.equal(responses[1].result.tools.length, 4)
@@ -1979,7 +1981,7 @@ async function main() {
     const progressMessages = result.stdout
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line))
+      .map((line: any) => JSON.parse(line))
     assert.equal(progressMessages[0].method, 'notifications/progress')
     assert.equal(progressMessages[0].params.progressToken, 'progress-test')
     assert(progressMessages[0].params.message.includes('risk/qwen'))

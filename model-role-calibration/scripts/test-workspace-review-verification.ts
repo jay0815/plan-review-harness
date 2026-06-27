@@ -17,17 +17,17 @@ import {
   hashFileIfExists,
 } from './workspace-review-manifest.js'
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8')
 }
 
-function writeJsonl(file, events) {
+function writeJsonl(file: any, events: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, events.map((event) => JSON.stringify(event)).join('\n') + '\n', 'utf8')
+  fs.writeFileSync(file, events.map((event: any) => JSON.stringify(event)).join('\n') + '\n', 'utf8')
 }
 
-function writeRunManifest(runDir, runId, status, roles: any[] = []) {
+function writeRunManifest(runDir: any, runId: any, status: any, roles: any[] = []) {
   writeJson(path.join(runDir, 'run-manifest.json'), {
     version: 1,
     run_id: runId,
@@ -64,7 +64,7 @@ function writeRunManifest(runDir, runId, status, roles: any[] = []) {
       schema_set_hash: 'sha256:test-schemas',
     },
     resolved_execution: Object.fromEntries(
-      roles.map((role) => [
+      roles.map((role: any) => [
         role,
         {
           adapter: 'claude-code',
@@ -98,7 +98,7 @@ function roleEvents({ tools = ['Read'], reads = [] }: any = {}) {
       model: 'test-model',
       tools,
     },
-    ...reads.map((file, index) => ({
+    ...reads.map((file: any, index: any) => ({
       type: 'assistant',
       message: {
         content: [
@@ -209,7 +209,7 @@ const EXECUTION_BOUNDARIES = [
 ]
 
 function executionCoverage() {
-  return EXECUTION_BOUNDARIES.map((boundary) => ({
+  return EXECUTION_BOUNDARIES.map((boundary: any) => ({
     boundary,
     status: 'covered',
     evidence_basis: 'plan_text',
@@ -217,7 +217,7 @@ function executionCoverage() {
   }))
 }
 
-function createRole(runDir, role, options: any = {}) {
+function createRole(runDir: any, role: any, options: any = {}) {
   const roleDir = path.join(runDir, 'roles', role)
   fs.mkdirSync(roleDir, { recursive: true })
   const exposedRoot = path.join(runDir, 'scoped', role, 'project')
@@ -495,14 +495,14 @@ function main() {
     assert.equal(missingManifest.valid, false)
     assert(
       missingManifest.checks.some(
-        (item) =>
+        (item: any) =>
           item.id === 'manifest.present' &&
           item.status === 'fail' &&
           item.details.backfill_command.includes('backfill-workspace-run-manifest.ts'),
       ),
     )
     const legacyDoctor: any = doctorWorkspaceReviewRun(legacyRunDir)
-    assert(legacyDoctor.next_actions.some((item) => item.kind === 'backfill_run_manifest'))
+    assert(legacyDoctor.next_actions.some((item: any) => item.kind === 'backfill_run_manifest'))
     const backfilled = backfillRunManifest(legacyRunDir)
     assert.equal(backfilled.status, 'completed')
     assert.equal(backfilled.artifacts.backfilled_from, 'legacy-run-artifacts')
@@ -510,7 +510,7 @@ function main() {
     assert.equal(backfilled.resolved_execution.fact_check.model, 'glm')
     assert.equal(backfilled.resolved_execution.synthesis.output_hash.startsWith('sha256:'), true)
     const backfilledVerification = verifyRun(legacyRunDir)
-    assert(!backfilledVerification.checks.some((item) => item.id === 'manifest.present' && item.status === 'fail'))
+    assert(!backfilledVerification.checks.some((item: any) => item.id === 'manifest.present' && item.status === 'fail'))
 
     const runningRunDir = path.join(tempDir, 'workspace-review-running')
     fs.mkdirSync(runningRunDir, { recursive: true })
@@ -535,11 +535,11 @@ function main() {
     assert.equal(running.valid, null)
     assert.equal(running.counts.fail, 0)
     assert(running.counts.pending >= 1)
-    assert(!running.checks.some((item) => item.id === 'fact_check.present'))
-    assert(!running.checks.some((item) => item.id === 'synthesis.present'))
+    assert(!running.checks.some((item: any) => item.id === 'fact_check.present'))
+    assert(!running.checks.some((item: any) => item.id === 'synthesis.present'))
     const runningDoctor: any = doctorWorkspaceReviewRun(runningRunDir)
     assert.equal(runningDoctor.health, 'pending')
-    assert(runningDoctor.next_actions.some((item) => item.kind === 'wait_for_completion'))
+    assert(runningDoctor.next_actions.some((item: any) => item.kind === 'wait_for_completion'))
 
     const failedRunDir = path.join(tempDir, 'workspace-review-failed')
     fs.mkdirSync(path.join(failedRunDir, 'roles'), { recursive: true })
@@ -570,7 +570,7 @@ function main() {
     assert.equal(failedDoctor.health, 'fail')
     assert(
       failedDoctor.next_actions.some(
-        (item) =>
+        (item: any) =>
           item.kind === 'retry_stage' &&
           item.stage === 'reviewers' &&
           item.command.includes('retry-workspace-review-stage.ts'),
@@ -731,7 +731,7 @@ function main() {
     assert.equal(result.logs.execution_log, path.join(runDir, 'execution.log'))
     assert.equal(result.counts.fail, 0)
     assert(result.counts.warn >= 1)
-    assert(result.checks.some((item) => item.id === 'fact_check.strictness_signal' && item.status === 'warn'))
+    assert(result.checks.some((item: any) => item.id === 'fact_check.strictness_signal' && item.status === 'warn'))
     const doctor: any = doctorWorkspaceReviewRun(runDir)
     assert.equal(doctor.health, 'warn')
     assert.equal(doctor.action_level, 'P2')
@@ -742,7 +742,7 @@ function main() {
     assert.equal(doctor.review_plan_refs.skipped_ref_count, 1)
     assert.equal(doctor.fact_check.strictness_signal, 'all_verified')
     assert.equal(doctor.synthesis.revision_instruction_count, 0)
-    assert(doctor.next_actions.some((item) => item.kind === 'record_regression_sample'))
+    assert(doctor.next_actions.some((item: any) => item.kind === 'record_regression_sample'))
 
     writeJsonl(
       path.join(runDir, 'roles', 'risk', 'stdout.jsonl'),
@@ -755,12 +755,12 @@ function main() {
     assert.equal(failedOutOfBoundaryAttempt.valid, true)
     assert(
       failedOutOfBoundaryAttempt.checks.some(
-        (item) => item.id === 'reviewer.risk.no_out_of_boundary_reads' && item.status === 'pass',
+        (item: any) => item.id === 'reviewer.risk.no_out_of_boundary_reads' && item.status === 'pass',
       ),
     )
     assert(
       failedOutOfBoundaryAttempt.checks.some(
-        (item) => item.id === 'reviewer.risk.failed_out_of_boundary_read_attempts' && item.status === 'warn',
+        (item: any) => item.id === 'reviewer.risk.failed_out_of_boundary_read_attempts' && item.status === 'warn',
       ),
     )
     writeJsonl(
@@ -797,7 +797,7 @@ function main() {
     assert.equal(needsRevisionDoctor.health, 'warn')
     assert.equal(needsRevisionDoctor.action_level, 'P0')
     assert.equal(needsRevisionDoctor.plan_outcome.status, 'needs_revision')
-    assert(needsRevisionDoctor.next_actions.some((item) => item.kind === 'revise_plan_authoring_errors'))
+    assert(needsRevisionDoctor.next_actions.some((item: any) => item.kind === 'revise_plan_authoring_errors'))
     writeJson(path.join(runDir, 'plan-authoring-lint.json'), {
       valid: true,
       errors: [],
@@ -833,7 +833,7 @@ function main() {
     })
     const missingOutcome = verifyRun(runDir)
     assert.equal(missingOutcome.valid, false)
-    assert(missingOutcome.checks.some((item) => item.id === 'report.outcome' && item.status === 'fail'))
+    assert(missingOutcome.checks.some((item: any) => item.id === 'report.outcome' && item.status === 'fail'))
     writeJson(path.join(runDir, 'report.json'), {
       run_id: 'workspace-review-test',
       outcome: {
@@ -857,7 +857,7 @@ function main() {
     )
     const badFactCheckTools = verifyRun(runDir)
     assert.equal(badFactCheckTools.valid, false)
-    assert(badFactCheckTools.checks.some((item) => item.id === 'fact_check.read_only' && item.status === 'fail'))
+    assert(badFactCheckTools.checks.some((item: any) => item.id === 'fact_check.read_only' && item.status === 'fail'))
     writeJsonl(
       path.join(runDir, 'roles', 'fact_check', 'stdout.jsonl'),
       roleEvents({
@@ -871,7 +871,9 @@ function main() {
     writeJson(path.join(runDir, 'roles', 'risk', 'metadata.json'), riskMetadata)
     const failed = verifyRun(runDir)
     assert.equal(failed.valid, false)
-    assert(failed.checks.some((item) => item.id === 'reviewer.risk.no_out_of_boundary_reads' && item.status === 'fail'))
+    assert(
+      failed.checks.some((item: any) => item.id === 'reviewer.risk.no_out_of_boundary_reads' && item.status === 'fail'),
+    )
 
     console.log('Workspace review verification tests passed.')
   } finally {

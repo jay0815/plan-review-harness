@@ -25,21 +25,21 @@ import {
 
 const MAX_CONCURRENCY = 3
 
-function parseList(value, fallback) {
+function parseList(value: any, fallback: any) {
   if (!value || value === true) {
     return [...fallback]
   }
   return String(value)
     .split(',')
-    .map((item) => item.trim())
+    .map((item: any) => item.trim())
     .filter(Boolean)
 }
 
-function jobKey(job) {
+function jobKey(job: any) {
   return `${job.model}/${job.caseId}/${job.probe}`
 }
 
-function validateSelection(cases, models, probes, config, run) {
+function validateSelection(cases: any, models: any, probes: any, config: any, run: any) {
   for (const caseId of cases) {
     assertSafeCaseId(caseId)
   }
@@ -61,7 +61,7 @@ function validateSelection(cases, models, probes, config, run) {
   }
 }
 
-function processExists(pid) {
+function processExists(pid: any) {
   try {
     process.kill(pid, 0)
     return true
@@ -70,7 +70,7 @@ function processExists(pid) {
   }
 }
 
-function acquireRunLock(lockFile) {
+function acquireRunLock(lockFile: any) {
   ensureDir(path.dirname(lockFile))
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -114,7 +114,7 @@ function acquireRunLock(lockFile) {
   throw new Error(`Unable to acquire run lock: ${lockFile}`)
 }
 
-function loadPoolIndex(indexFile) {
+function loadPoolIndex(indexFile: any) {
   if (!fs.existsSync(indexFile)) {
     return {
       version: 2,
@@ -127,12 +127,12 @@ function loadPoolIndex(indexFile) {
     return existing
   }
   const legacyJobs = [...(existing.completed || []), ...(existing.failed || [])]
-    .map((item) => ({
+    .map((item: any) => ({
       caseId: item.caseId,
       model: item.model,
       probe: item.probe,
     }))
-    .filter((item) => item.caseId && item.model && item.probe)
+    .filter((item: any) => item.caseId && item.model && item.probe)
   return {
     version: 2,
     batches: [
@@ -150,7 +150,7 @@ function loadPoolIndex(indexFile) {
   }
 }
 
-function uniqueBatchId(batchDir) {
+function uniqueBatchId(batchDir: any) {
   const base = `batch-${timestamp()}`
   let id = base
   let suffix = 2
@@ -161,7 +161,7 @@ function uniqueBatchId(batchDir) {
   return id
 }
 
-function mergeRequestedJobs(previous, current) {
+function mergeRequestedJobs(previous: any, current: any) {
   const jobs = new Map()
   for (const job of [...previous, ...current]) {
     jobs.set(jobKey(job), {
@@ -170,22 +170,22 @@ function mergeRequestedJobs(previous, current) {
       probe: job.probe,
     })
   }
-  return [...jobs.values()].sort((a, b) => jobKey(a).localeCompare(jobKey(b)))
+  return [...jobs.values()].sort((a: any, b: any) => jobKey(a).localeCompare(jobKey(b)))
 }
 
-function latestAttemptMetadata(run, job) {
+function latestAttemptMetadata(run: any, job: any) {
   const paths = agentOutputPaths(run, job.caseId, job.model, job.probe)
   if (!fs.existsSync(paths.attemptsDir)) {
     return null
   }
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name) => {
+    .map((name: any) => {
       const match = /^attempt-(\d+)\.meta\.json$/.exec(name)
       return match ? { name, number: Number(match[1]) } : null
     })
-    .filter((attempt): attempt is { name: string; number: number } => Boolean(attempt))
-    .sort((a, b) => b.number - a.number)
+    .filter((attempt: any): attempt is { name: string; number: number } => Boolean(attempt))
+    .sort((a: any, b: any) => b.number - a.number)
   for (const attempt of attempts) {
     const file = path.join(paths.attemptsDir, attempt.name)
     try {
@@ -200,8 +200,8 @@ function latestAttemptMetadata(run, job) {
   return null
 }
 
-function failureSummary(metadata, exitCode, signal, spawnError) {
-  const compactMessage = (message) => {
+function failureSummary(metadata: any, exitCode: any, signal: any, spawnError: any) {
+  const compactMessage = (message: any) => {
     const compact = String(message).replace(/\s+/g, ' ').trim()
     return compact.length > 300 ? `${compact.slice(0, 297)}...` : compact
   }
@@ -233,7 +233,7 @@ function main() {
   const run = requireArg(args, 'run')
   const config: any = loadConfig()
   const cases = parseList(args.cases, config.primary_cases)
-  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
   const probes = parseList(args.probes, PROBES)
   validateSelection(cases, models, probes, config, run)
 
@@ -313,7 +313,7 @@ function main() {
     writeFileNew(batchFile, JSON.stringify(batch, null, 2) + '\n')
 
     const allRequestedJobs = mergeRequestedJobs(poolIndex.requested_jobs || [], requestedJobs)
-    const unresolved = allRequestedJobs.filter((job) => {
+    const unresolved = allRequestedJobs.filter((job: any) => {
       const paths = agentOutputPaths(run, job.caseId, job.model, job.probe)
       return !fs.existsSync(paths.resultFile)
     })
@@ -391,25 +391,25 @@ function main() {
       active.set(id, { child, record, stdout: '', stderr: '' })
       console.log(`[start ${id}/${jobs.length}] ${label} (active=${active.size})`)
 
-      child.stdout.on('data', (chunk) => {
+      child.stdout.on('data', (chunk: any) => {
         const state = active.get(id)
         if (state) {
           state.stdout += chunk.toString()
         }
       })
-      child.stderr.on('data', (chunk) => {
+      child.stderr.on('data', (chunk: any) => {
         const state = active.get(id)
         if (state) {
           state.stderr += chunk.toString()
         }
       })
-      child.on('error', (error) => {
+      child.on('error', (error: any) => {
         const state = active.get(id)
         if (state) {
           state.spawnError = error.message
         }
       })
-      child.on('close', (code, signal) => {
+      child.on('close', (code: any, signal: any) => {
         const state = active.get(id)
         if (!state) {
           return

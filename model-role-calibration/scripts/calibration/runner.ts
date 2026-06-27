@@ -116,20 +116,20 @@ export async function runCalibration(
     positiveInteger(stage.concurrency, `job stage ${stage.label || 'unknown'} concurrency`)
   }
 
-  const showStages = stages.length > 1 || stages.some((stage) => stage.concurrency !== concurrency)
+  const showStages = stages.length > 1 || stages.some((stage: any) => stage.concurrency !== concurrency)
   const results: CalibrationJobResult[] = []
   for (const stage of stages) {
     if (showStages) {
       console.log(`[stage] ${stage.label}: ${stage.jobs.length} job(s), concurrency=${stage.concurrency}`)
     }
-    const stageResults = await runWithConcurrency(stage.jobs, stage.concurrency, (job) =>
+    const stageResults = await runWithConcurrency(stage.jobs, stage.concurrency, (job: any) =>
       executor.runJob(job, { force }),
     )
     results.push(...stageResults)
   }
 
-  const completed = results.filter((item) => item.status === 'completed' || item.status === 'skipped').length
-  const failed = results.filter((item) => item.status === 'failed').length
+  const completed = results.filter((item: any) => item.status === 'completed' || item.status === 'skipped').length
+  const failed = results.filter((item: any) => item.status === 'failed').length
 
   const summary = completed > 0 ? executor.summarizeRun(run) : null
 
@@ -141,12 +141,12 @@ export async function runCalibration(
     probes: probes.length ? probes : undefined,
     requested: jobs.length,
     force,
-    skipped: results.filter((item) => item.status === 'skipped').length,
+    skipped: results.filter((item: any) => item.status === 'skipped').length,
     completed,
     failed,
     results,
     job_stages: showStages
-      ? stages.map((stage) => ({
+      ? stages.map((stage: any) => ({
           label: stage.label,
           concurrency: stage.concurrency,
           jobs: stage.jobs.length,

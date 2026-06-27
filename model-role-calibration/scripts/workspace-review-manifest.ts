@@ -22,11 +22,11 @@ const ATTEMPT_ARTIFACT_FIELDS = [
   'read_scope_file',
 ]
 
-function sha256(value) {
+function sha256(value: any) {
   return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`
 }
 
-function stable(value) {
+function stable(value: any): any {
   if (Array.isArray(value)) {
     return value.map(stable)
   }
@@ -34,47 +34,47 @@ function stable(value) {
     return Object.fromEntries(
       Object.keys(value)
         .sort()
-        .map((key) => [key, stable(value[key])]),
+        .map((key: any) => [key, stable(value[key])]),
     )
   }
   return value
 }
 
-function stableJson(value) {
+function stableJson(value: any) {
   return JSON.stringify(stable(value))
 }
 
-function hashJson(value) {
+function hashJson(value: any) {
   return sha256(stableJson(value))
 }
 
-function hashText(value) {
+function hashText(value: any) {
   return sha256(String(value || ''))
 }
 
-function hashFileIfExists(file) {
+function hashFileIfExists(file: any) {
   if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
     return null
   }
   return sha256(fs.readFileSync(file))
 }
 
-function readJsonIfExists(file) {
+function readJsonIfExists(file: any) {
   if (!fs.existsSync(file)) {
     return null
   }
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   writeGenerated(file, JSON.stringify(value, null, 2) + '\n')
 }
 
-function manifestPath(runDir) {
+function manifestPath(runDir: any) {
   return path.join(runDir, MANIFEST_FILE)
 }
 
-function requireRunManifest(runDir) {
+function requireRunManifest(runDir: any) {
   const file = manifestPath(runDir)
   if (!fs.existsSync(file)) {
     throw new Error(`Missing required run manifest: ${file}`)
@@ -82,7 +82,7 @@ function requireRunManifest(runDir) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function git(projectRoot, args, options: any = {}) {
+function git(projectRoot: any, args: any, options: any = {}) {
   const result = spawnSync('git', args, {
     cwd: projectRoot,
     encoding: 'utf8',
@@ -95,7 +95,7 @@ function git(projectRoot, args, options: any = {}) {
   return options.trim === false ? stdout : stdout.trim()
 }
 
-function hashUntrackedFiles(projectRoot) {
+function hashUntrackedFiles(projectRoot: any) {
   const output = git(projectRoot, ['ls-files', '--others', '--exclude-standard', '-z'], {
     trim: false,
   })
@@ -105,7 +105,7 @@ function hashUntrackedFiles(projectRoot) {
       skipped: [],
     }
   }
-  const hashes = {}
+  const hashes: Record<string, any> = {}
   const skipped: any[] = []
   const relativePaths = output.split('\0').filter(Boolean).sort()
   for (const relativePath of relativePaths) {
@@ -142,7 +142,7 @@ function hashUntrackedFiles(projectRoot) {
   }
 }
 
-function workspaceSnapshot(projectRoot) {
+function workspaceSnapshot(projectRoot: any) {
   const root = path.resolve(projectRoot)
   const inside = git(root, ['rev-parse', '--is-inside-work-tree']) === 'true'
   if (!inside) {
@@ -164,7 +164,7 @@ function workspaceSnapshot(projectRoot) {
     git_available: true,
     git_head: git(root, ['rev-parse', 'HEAD']),
     dirty: dirtyEntries.length > 0,
-    dirty_files: dirtyEntries.map((line) => line.slice(3)),
+    dirty_files: dirtyEntries.map((line: any) => line.slice(3)),
     dirty_entries: dirtyEntries,
     untracked_file_hashes: untracked.hashes,
     untracked_file_hash_skipped: untracked.skipped,
@@ -175,19 +175,19 @@ function workspaceSnapshot(projectRoot) {
   }
 }
 
-function workspacePromptFile(role) {
+function workspacePromptFile(role: any) {
   return path.join(ROOT, 'prompts', `probe-${role}.md`)
 }
 
-function workspaceSchemaFile(role) {
+function workspaceSchemaFile(role: any) {
   if (role === 'fact_check') {
     return path.join(ROOT, 'schemas', 'fact-check-output.schema.json')
   }
   return path.join(ROOT, 'schemas', `${role}-output.schema.json`)
 }
 
-function hashFilesByRole(roles, resolver) {
-  const items = {}
+function hashFilesByRole(roles: any, resolver: any) {
+  const items: Record<string, any> = {}
   for (const role of roles) {
     const file = resolver(role)
     items[role] = {
@@ -201,8 +201,8 @@ function hashFilesByRole(roles, resolver) {
   }
 }
 
-function declaredRuntime(config, roles) {
-  const runtimeRoles = [...new Set([...roles, 'fact_check', 'synthesis'])].filter((role) =>
+function declaredRuntime(config: any, roles: any) {
+  const runtimeRoles = [...new Set([...roles, 'fact_check', 'synthesis'])].filter((role: any) =>
     WORKSPACE_REVIEW_ROLES.includes(role),
   )
   const promptSet = hashFilesByRole(runtimeRoles, workspacePromptFile)
@@ -231,8 +231,8 @@ function declaredRuntime(config, roles) {
   }
 }
 
-function parseExecutionLogFields(text) {
-  const details = {}
+function parseExecutionLogFields(text: any) {
+  const details: Record<string, any> = {}
   const fieldPattern = /(\w+)=("(?:\\.|[^"])*"|\[[^\]]*\]|\{[^}]*\}|[^\s]+)/g
   let field
   while ((field = fieldPattern.exec(text || '')) !== null) {
@@ -245,7 +245,7 @@ function parseExecutionLogFields(text) {
   return details
 }
 
-function executionLogEvents(runDir) {
+function executionLogEvents(runDir: any) {
   const file = path.join(runDir, 'execution.log')
   if (!fs.existsSync(file)) {
     return []
@@ -254,7 +254,7 @@ function executionLogEvents(runDir) {
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => {
+    .map((line: any) => {
       const match = /^\[([^\]]+)\]\s+(\S+)(?:\s+(.*))?$/.exec(line)
       if (!match) {
         return null
@@ -268,28 +268,30 @@ function executionLogEvents(runDir) {
     .filter(Boolean)
 }
 
-function existingArtifact(runDir, file) {
+function existingArtifact(runDir: any, file: any) {
   if (!file || !fs.existsSync(path.join(runDir, file))) {
     return null
   }
   return file
 }
 
-function activeRunRoles(request, state) {
+function activeRunRoles(request: any, state: any) {
   const reviewers =
     Array.isArray(request?.roles) && request.roles.length
       ? request.roles
       : Array.isArray(state?.roles) && state.roles.length
         ? state.roles
         : ['risk', 'architecture', 'execution', 'rebuttal']
-  return [...new Set([...reviewers, 'fact_check', 'synthesis'])].filter((role) => WORKSPACE_REVIEW_ROLES.includes(role))
+  return [...new Set([...reviewers, 'fact_check', 'synthesis'])].filter((role: any) =>
+    WORKSPACE_REVIEW_ROLES.includes(role),
+  )
 }
 
-function roleMetadata(runDir, role) {
+function roleMetadata(runDir: any, role: any) {
   return readJsonIfExists(path.join(runDir, 'roles', role, 'metadata.json'))
 }
 
-function inferredRoleRoutes(runDir, roles) {
+function inferredRoleRoutes(runDir: any, roles: any) {
   const defaultRoute = readJsonIfExists(DEFAULT_ROUTE_FILE)
   const routes = {
     ...(defaultRoute?.routes || {}),
@@ -303,7 +305,7 @@ function inferredRoleRoutes(runDir, roles) {
   return routes
 }
 
-function inferredExecution(runDir) {
+function inferredExecution(runDir: any) {
   const started: any = executionLogEvents(runDir).find((item: any) => item?.event === 'run_started')
   return {
     max_concurrency: started?.details?.max_concurrency ?? null,
@@ -317,7 +319,7 @@ function inferredExecution(runDir) {
   }
 }
 
-function backfillConfig(runDir, roles) {
+function backfillConfig(runDir: any, roles: any) {
   return {
     config_file: null,
     roles: inferredRoleRoutes(runDir, roles),
@@ -327,7 +329,7 @@ function backfillConfig(runDir, roles) {
   }
 }
 
-function backfillRunManifest(runDir, options: any = {}) {
+function backfillRunManifest(runDir: any, options: any = {}) {
   const absoluteRunDir = path.resolve(runDir)
   const file = manifestPath(absoluteRunDir)
   if (fs.existsSync(file) && !options.force) {
@@ -392,7 +394,7 @@ function backfillRunManifest(runDir, options: any = {}) {
   return requireRunManifest(absoluteRunDir)
 }
 
-function createRunManifest(config, request, runDir, options: any = {}) {
+function createRunManifest(config: any, request: any, runDir: any, options: any = {}) {
   const file = manifestPath(runDir)
   if (fs.existsSync(file)) {
     throw new Error(`Refusing to overwrite existing run manifest: ${file}`)
@@ -429,7 +431,7 @@ function createRunManifest(config, request, runDir, options: any = {}) {
   return manifest
 }
 
-function updateRunManifest(runDir, updater) {
+function updateRunManifest(runDir: any, updater: any) {
   const file = manifestPath(runDir)
   const current = requireRunManifest(runDir)
   const patch = typeof updater === 'function' ? updater(current) : updater
@@ -442,9 +444,9 @@ function updateRunManifest(runDir, updater) {
   return next
 }
 
-function markManifestRunning(runDir, request) {
+function markManifestRunning(runDir: any, request: any) {
   const reviewPlanFile = path.join(runDir, 'review-plan.md')
-  return updateRunManifest(runDir, (current) => ({
+  return updateRunManifest(runDir, (current: any) => ({
     status: 'running',
     inputs: {
       ...current.inputs,
@@ -466,38 +468,38 @@ function markManifestRunning(runDir, request) {
   }))
 }
 
-function relativeFromRun(runDir, file) {
+function relativeFromRun(runDir: any, file: any) {
   if (!file) {
     return null
   }
   return path.isAbsolute(file) ? path.relative(runDir, file) : file
 }
 
-function absoluteFromRun(runDir, file) {
+function absoluteFromRun(runDir: any, file: any) {
   if (!file) {
     return null
   }
   return path.isAbsolute(file) ? file : path.join(runDir, file)
 }
 
-function promptHash(runDir, metadata) {
+function promptHash(runDir: any, metadata: any) {
   return hashFileIfExists(absoluteFromRun(runDir, metadata.prompt_file))
 }
 
-function schemaHash(metadata) {
+function schemaHash(metadata: any) {
   const schemaFile = metadata.schema_file ? path.join(ROOT, metadata.schema_file) : workspaceSchemaFile(metadata.role)
   return hashFileIfExists(schemaFile)
 }
 
-function readScopeHash(runDir, metadata) {
+function readScopeHash(runDir: any, metadata: any) {
   return hashFileIfExists(absoluteFromRun(runDir, metadata.read_boundary?.read_scope_file))
 }
 
-function outputHash(runDir, role) {
+function outputHash(runDir: any, role: any) {
   return hashFileIfExists(path.join(runDir, 'roles', role, 'output.json'))
 }
 
-function existingRelativeFile(runDir, file) {
+function existingRelativeFile(runDir: any, file: any) {
   const relative = relativeFromRun(runDir, file)
   if (!relative) {
     return null
@@ -505,11 +507,11 @@ function existingRelativeFile(runDir, file) {
   return fs.existsSync(absoluteFromRun(runDir, relative)) ? relative : null
 }
 
-function roleFileIfExists(runDir, role, fileName) {
+function roleFileIfExists(runDir: any, role: any, fileName: any) {
   return existingRelativeFile(runDir, path.join('roles', role, fileName))
 }
 
-function attemptArtifactPaths(runDir, metadata, extra: any = {}) {
+function attemptArtifactPaths(runDir: any, metadata: any, extra: any = {}) {
   const role = metadata.role
   return {
     metadata_file: existingRelativeFile(runDir, extra.metadata_file || path.join('roles', role, 'metadata.json')),
@@ -524,14 +526,14 @@ function attemptArtifactPaths(runDir, metadata, extra: any = {}) {
   }
 }
 
-function normalizeRelPath(file) {
+function normalizeRelPath(file: any) {
   return String(file || '')
     .replace(/\\/g, '/')
     .split(path.sep)
     .join('/')
 }
 
-function relocateRolePath(file, role, archivedRoleDir) {
+function relocateRolePath(file: any, role: any, archivedRoleDir: any) {
   if (!file) {
     return file
   }
@@ -544,7 +546,7 @@ function relocateRolePath(file, role, archivedRoleDir) {
   return `${archivedPrefix}/${normalizedFile.slice(activePrefix.length)}`
 }
 
-function relocateAttemptArtifacts(attempt, role, archivedRoleDir) {
+function relocateAttemptArtifacts(attempt: any, role: any, archivedRoleDir: any) {
   const next = {
     ...attempt,
     archived_as: archivedRoleDir,
@@ -555,12 +557,12 @@ function relocateAttemptArtifacts(attempt, role, archivedRoleDir) {
   return next
 }
 
-function recordResolvedExecution(runDir, metadata, extra: any = {}) {
+function recordResolvedExecution(runDir: any, metadata: any, extra: any = {}) {
   const role = metadata.role
   if (!role) {
     throw new Error('Cannot record resolved execution without role')
   }
-  return updateRunManifest(runDir, (current) => {
+  return updateRunManifest(runDir, (current: any) => {
     const previous = current.resolved_execution?.[role] || {}
     const history = Array.isArray(previous.attempt_history) ? previous.attempt_history : []
     const artifactPaths = attemptArtifactPaths(runDir, metadata, extra)
@@ -620,11 +622,11 @@ function recordResolvedExecution(runDir, metadata, extra: any = {}) {
   })
 }
 
-function archiveResolvedExecutionAttempt(runDir, role, archivedRoleDir) {
+function archiveResolvedExecutionAttempt(runDir: any, role: any, archivedRoleDir: any) {
   if (!archivedRoleDir) {
     return null
   }
-  return updateRunManifest(runDir, (current) => {
+  return updateRunManifest(runDir, (current: any) => {
     const roleExecution = current.resolved_execution?.[role]
     if (!roleExecution) {
       return {}
@@ -635,7 +637,7 @@ function archiveResolvedExecutionAttempt(runDir, role, archivedRoleDir) {
     }
     const latestIndex = history.length - 1
     const relocatedLatest = relocateAttemptArtifacts(history[latestIndex], role, archivedRoleDir)
-    const nextHistory = history.map((attempt, index) => (index === latestIndex ? relocatedLatest : attempt))
+    const nextHistory = history.map((attempt: any, index: any) => (index === latestIndex ? relocatedLatest : attempt))
     const nextRoleExecution = {
       ...roleExecution,
       archived_as: archivedRoleDir,
@@ -653,8 +655,8 @@ function archiveResolvedExecutionAttempt(runDir, role, archivedRoleDir) {
   })
 }
 
-function markManifestFinished(runDir, status, patch: any = {}) {
-  return updateRunManifest(runDir, (current) => ({
+function markManifestFinished(runDir: any, status: any, patch: any = {}) {
+  return updateRunManifest(runDir, (current: any) => ({
     ...patch,
     status,
     finished_at: new Date().toISOString(),

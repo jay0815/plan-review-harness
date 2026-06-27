@@ -10,7 +10,7 @@ import {
   createPlanReferenceManifest,
 } from './workspace-review-lib.js'
 
-const LINE_BUDGETS = {
+const LINE_BUDGETS: Record<string, number> = {
   single_file: 50,
   feature: 200,
   cross_feature: 400,
@@ -41,7 +41,7 @@ const UNCERTAINTY_ALLOWED_SECTIONS = [
   /非阻塞问题/,
 ]
 
-function issue(code, message, details = {}) {
+function issue(code: any, message: any, details: any = {}) {
   return {
     code,
     message,
@@ -49,11 +49,11 @@ function issue(code, message, details = {}) {
   }
 }
 
-function lineNumberAt(text, index) {
+function lineNumberAt(text: any, index: any) {
   return text.slice(0, index).split('\n').length
 }
 
-export function parseSections(plan) {
+export function parseSections(plan: any) {
   const lines = String(plan).split('\n')
   const sections: any[] = []
   let current: any = {
@@ -64,7 +64,7 @@ export function parseSections(plan) {
     lines: [],
   }
   sections.push(current)
-  lines.forEach((line, index) => {
+  lines.forEach((line: any, index: any) => {
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/)
     if (heading) {
       current.end_line = index
@@ -86,13 +86,13 @@ export function parseSections(plan) {
   return sections
 }
 
-function sectionMatches(section, patterns) {
-  return patterns.some((pattern) => pattern.test(section.title))
+function sectionMatches(section: any, patterns: any) {
+  return patterns.some((pattern: any) => pattern.test(section.title))
 }
 
-function explicitSectionMappings(plan) {
+function explicitSectionMappings(plan: any) {
   const mappings = new Set()
-  const allowed = new Set(REQUIRED_SECTION_GROUPS.map((group) => group.name))
+  const allowed = new Set(REQUIRED_SECTION_GROUPS.map((group: any) => group.name))
   const pattern = /^\s*([a-z][a-z0-9_]+)\s*:\s*(?:§\s*)?(\d+(?:\.\d+)*)\b.*$/gim
   let match
   while ((match = pattern.exec(String(plan))) !== null) {
@@ -104,11 +104,11 @@ function explicitSectionMappings(plan) {
   return mappings
 }
 
-function hasRequiredSection(sections, explicitMappings, group) {
-  return explicitMappings.has(group.name) || sections.some((section) => sectionMatches(section, group.patterns))
+function hasRequiredSection(sections: any, explicitMappings: any, group: any) {
+  return explicitMappings.has(group.name) || sections.some((section: any) => sectionMatches(section, group.patterns))
 }
 
-function parseExplicitComplexity(plan, sections) {
+function parseExplicitComplexity(plan: any, sections: any) {
   const jsonMatch = String(plan).match(
     /"plan_complexity"\s*:\s*\{[\s\S]{0,300}?"level"\s*:\s*"(single_file|feature|cross_feature|architecture)"/i,
   )
@@ -119,9 +119,9 @@ function parseExplicitComplexity(plan, sections) {
       source: 'explicit',
     }
   }
-  const section = sections.find((item) => /plan\s+complexity|计划复杂度/i.test(item.title))
+  const section = sections.find((item: any) => /plan\s+complexity|计划复杂度/i.test(item.title))
   if (section) {
-    const body = section.lines.map((item) => item.text).join('\n')
+    const body = section.lines.map((item: any) => item.text).join('\n')
     const match = body.match(/\b(single_file|feature|cross_feature|architecture)\b/i)
     if (match) {
       return {
@@ -144,7 +144,7 @@ function parseExplicitComplexity(plan, sections) {
   return null
 }
 
-function existingCodeRefsSections(sections) {
+function existingCodeRefsSections(sections: any) {
   const result: any[] = []
   const seen = new Set<any>()
   for (let index = 0; index < sections.length; index += 1) {
@@ -163,22 +163,25 @@ function existingCodeRefsSections(sections) {
       }
     }
   }
-  return result.sort((a, b) => a.start_line - b.start_line)
+  return result.sort((a: any, b: any) => a.start_line - b.start_line)
 }
 
-function existingCodeRefsSection(sections) {
+function existingCodeRefsSection(sections: any) {
   return existingCodeRefsSections(sections)[0] || null
 }
 
-function sectionsToPlan(sections) {
+function sectionsToPlan(sections: any) {
   return sections
-    .filter((section) => section.title !== '__root__')
-    .sort((a, b) => a.start_line - b.start_line)
-    .flatMap((section) => [`${'#'.repeat(section.level)} ${section.title}`, ...section.lines.map((line) => line.text)])
+    .filter((section: any) => section.title !== '__root__')
+    .sort((a: any, b: any) => a.start_line - b.start_line)
+    .flatMap((section: any) => [
+      `${'#'.repeat(section.level)} ${section.title}`,
+      ...section.lines.map((line: any) => line.text),
+    ])
     .join('\n')
 }
 
-function collectCandidateLineNumbers(sections) {
+function collectCandidateLineNumbers(sections: any) {
   const lineNumbers = new Map<string, number>()
   for (const section of existingCodeRefsSections(sections)) {
     for (const entry of section.lines) {
@@ -194,25 +197,25 @@ function collectCandidateLineNumbers(sections) {
   return lineNumbers
 }
 
-function structuredRefKey(ref) {
+function structuredRefKey(ref: any) {
   return `${String(ref.path || '')
     .split(/[\\/]/)
     .join('/')}:${ref.lines || ''}`
 }
 
-function structuredRefPathKey(ref) {
+function structuredRefPathKey(ref: any) {
   return String(ref.path || '')
     .split(/[\\/]/)
     .join('/')
 }
 
-function manifestRefKey(ref) {
+function manifestRefKey(ref: any) {
   return `${String(ref.path || '')
     .split(/[\\/]/)
     .join('/')}:${ref.line_ref || ref.lines || ''}`
 }
 
-function parseStructuredExistingCodeRefs(sections) {
+function parseStructuredExistingCodeRefs(sections: any) {
   const refSections = existingCodeRefsSections(sections)
   if (!refSections.length) {
     return []
@@ -250,15 +253,15 @@ function parseStructuredExistingCodeRefs(sections) {
   return refs
 }
 
-export function parseExistingCodeRefs(sections, projectRoot = process.cwd()) {
+export function parseExistingCodeRefs(sections: any, projectRoot: any = process.cwd()) {
   const structuredRefs = parseStructuredExistingCodeRefs(sections)
   const structuredKeys = new Set(structuredRefs.map(structuredRefKey))
   const structuredPathKeys = new Set(structuredRefs.map(structuredRefPathKey))
-  const structuredOriginalRefs = new Set(structuredRefs.map((ref) => ref.original_ref || ref.path))
+  const structuredOriginalRefs = new Set(structuredRefs.map((ref: any) => ref.original_ref || ref.path))
   const candidateLineNumbers = collectCandidateLineNumbers(sections)
   const manifest = createPlanReferenceManifest(projectRoot, sectionsToPlan(sections), [])
   const inlineRefs = [
-    ...manifest.existing_code_refs.map((ref) => ({
+    ...manifest.existing_code_refs.map((ref: any) => ({
       path: ref.path,
       path_line: candidateLineNumbers.get(ref.original_ref) || null,
       lines: ref.line_ref,
@@ -268,7 +271,7 @@ export function parseExistingCodeRefs(sections, projectRoot = process.cwd()) {
       target_kind: 'file',
       original_ref: ref.original_ref,
     })),
-    ...manifest.existing_code_ref_dirs.map((ref) => ({
+    ...manifest.existing_code_ref_dirs.map((ref: any) => ({
       path: ref.path,
       path_line: candidateLineNumbers.get(ref.original_ref) || null,
       lines: ref.line_ref,
@@ -279,7 +282,7 @@ export function parseExistingCodeRefs(sections, projectRoot = process.cwd()) {
       original_ref: ref.original_ref,
     })),
   ].filter(
-    (ref) =>
+    (ref: any) =>
       !structuredKeys.has(manifestRefKey(ref)) &&
       !structuredPathKeys.has(structuredRefPathKey(ref)) &&
       !structuredOriginalRefs.has(ref.original_ref),
@@ -287,7 +290,7 @@ export function parseExistingCodeRefs(sections, projectRoot = process.cwd()) {
   return [...structuredRefs, ...inlineRefs]
 }
 
-function inferComplexity(plan, refs) {
+function inferComplexity(plan: any, refs: any) {
   const refCount = refs.length
   const text = String(plan)
   const sectionCount = (text.match(/^#{1,6}\s+/gm) || []).length
@@ -352,7 +355,7 @@ function inferComplexity(plan, refs) {
   }
 }
 
-export function parseCodeBlocks(plan) {
+export function parseCodeBlocks(plan: any) {
   const blocks: any[] = []
   const pattern = /```([^\n`]*)\n([\s\S]*?)```/g
   let match
@@ -373,26 +376,31 @@ export function parseCodeBlocks(plan) {
   return blocks
 }
 
-function precedingHeading(sections, line) {
+function precedingHeading(sections: any, line: any) {
   return (
-    sections.filter((section) => section.start_line <= line).sort((a, b) => b.start_line - a.start_line)[0]?.title || ''
+    sections
+      .filter((section: any) => section.start_line <= line)
+      .sort((a: any, b: any) => b.start_line - a.start_line)[0]?.title || ''
   )
 }
 
-function stringLeafCount(value) {
+function stringLeafCount(value: any): number {
   if (typeof value === 'string') {
     return 1
   }
   if (Array.isArray(value)) {
-    return value.reduce((sum, item) => sum + stringLeafCount(item), 0)
+    return value.reduce((sum: any, item: any) => sum + stringLeafCount(item), 0)
   }
   if (value && typeof value === 'object') {
-    return Object.values(value).reduce((sum, item) => sum + stringLeafCount(item), 0)
+    return Object.values(value as Record<string, any>).reduce(
+      (sum: number, item: any) => sum + stringLeafCount(item),
+      0,
+    )
   }
   return 0
 }
 
-function containsArrowOperator(text) {
+function containsArrowOperator(text: any) {
   let quote = null
   let lineComment = false
   let blockComment = false
@@ -441,7 +449,7 @@ function containsArrowOperator(text) {
   return false
 }
 
-function hasArrowFunctionAssignment(code) {
+function hasArrowFunctionAssignment(code: any) {
   const declaration = /(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*/g
   let match
   while ((match = declaration.exec(code)) !== null) {
@@ -470,7 +478,7 @@ function hasArrowFunctionAssignment(code) {
   return false
 }
 
-export function classifyCodeBlock(block, sectionTitle) {
+export function classifyCodeBlock(block: any, sectionTitle: any) {
   const language = block.language
   const code = block.code
   const lines = block.line_count
@@ -483,13 +491,13 @@ export function classifyCodeBlock(block, sectionTitle) {
   }
   const nonEmpty = code
     .split('\n')
-    .map((line) => line.trim())
+    .map((line: any) => line.trim())
     .filter(Boolean)
   const looksLikeTree =
     lines <= 20 &&
     nonEmpty.length > 0 &&
     nonEmpty.every(
-      (line) =>
+      (line: any) =>
         /^[│├└─\s]+[A-Za-z0-9_.@/-]+$/.test(line) ||
         /^[A-Za-z0-9_.@-]+\/?$/.test(line) ||
         /^[-*]\s+[A-Za-z0-9_.@/-]+$/.test(line),
@@ -571,9 +579,9 @@ export function classifyCodeBlock(block, sectionTitle) {
   }
 }
 
-function validateExistingCodeRefs(refs, projectRoot, errors) {
+function validateExistingCodeRefs(refs: any, projectRoot: any, errors: any) {
   const absoluteRoot = path.resolve(projectRoot)
-  for (const ref of refs.filter((item) => item.source !== 'inline')) {
+  for (const ref of refs.filter((item: any) => item.source !== 'inline')) {
     if (!ref.path || !ref.lines || !ref.symbol || !ref.reason) {
       errors.push(
         issue('existing_ref_incomplete', 'Existing Code Ref 必须包含 path、lines、symbol 和 reason', {
@@ -657,7 +665,7 @@ function validateExistingCodeRefs(refs, projectRoot, errors) {
   }
 }
 
-export function lintPlan({ plan, projectRoot }) {
+export function lintPlan({ plan, projectRoot }: any) {
   const text = String(plan)
   const sections = parseSections(text)
   const explicitMappings = explicitSectionMappings(text)
@@ -678,7 +686,7 @@ export function lintPlan({ plan, projectRoot }) {
 
   let implementationCodeBlocks = 0
   let implementationCodeLines = 0
-  const codeBlockMetrics = codeBlocks.map((block) => {
+  const codeBlockMetrics = codeBlocks.map((block: any) => {
     const sectionTitle = precedingHeading(sections, block.start_line)
     const classification = classifyCodeBlock(block, sectionTitle)
     if (!classification.allowed && classification.reliable) {
@@ -743,7 +751,7 @@ export function lintPlan({ plan, projectRoot }) {
   }
 
   for (const section of sections) {
-    const allowed = UNCERTAINTY_ALLOWED_SECTIONS.some((pattern) => pattern.test(section.title))
+    const allowed = UNCERTAINTY_ALLOWED_SECTIONS.some((pattern: any) => pattern.test(section.title))
     if (allowed) {
       continue
     }
@@ -778,8 +786,8 @@ export function lintPlan({ plan, projectRoot }) {
       total_chars: text.length,
       section_count: Math.max(0, sections.length - 1),
       existing_code_ref_count: refs.length,
-      structured_existing_code_ref_count: refs.filter((item) => item.source !== 'inline').length,
-      inline_existing_code_ref_count: refs.filter((item) => item.source === 'inline').length,
+      structured_existing_code_ref_count: refs.filter((item: any) => item.source !== 'inline').length,
+      inline_existing_code_ref_count: refs.filter((item: any) => item.source === 'inline').length,
       code_block_count: codeBlocks.length,
       implementation_code_blocks: implementationCodeBlocks,
       implementation_code_lines: implementationCodeLines,

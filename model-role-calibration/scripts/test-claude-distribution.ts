@@ -9,12 +9,12 @@ import * as path from 'node:path'
 import { isMainScript } from './lib.js'
 import { PACKAGE_NAME, RUNTIME_FILES, buildDistribution } from './package-claude-distribution.js'
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8')
 }
 
-function modelSettings(model) {
+function modelSettings(model: any) {
   return {
     env: {
       ANTHROPIC_BASE_URL: `https://${model}.example`,

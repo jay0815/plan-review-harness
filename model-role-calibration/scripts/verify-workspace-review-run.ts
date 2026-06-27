@@ -12,7 +12,7 @@ const JSON_VALIDATOR_TOOL = 'mcp__json_validator__validate_json_output'
 const INCOMPLETE_STATUSES = new Set(['queued', 'running'])
 const DEFAULT_WORKSPACE_RUNS_DIR = path.join(os.homedir(), '.claude', 'plan-review-harness', 'mcp', 'workspace-runs')
 
-export function resolveRunDir(args, options: any = {}) {
+export function resolveRunDir(args: any, options: any = {}) {
   const hasRunDir = args['run-dir'] && args['run-dir'] !== true
   const hasRunId = args['run-id'] && args['run-id'] !== true
   if (hasRunDir && hasRunId) {
@@ -31,18 +31,18 @@ export function resolveRunDir(args, options: any = {}) {
   throw new Error('Missing required argument: --run-id or --run-dir.')
 }
 
-function readJsonIfExists(file) {
+function readJsonIfExists(file: any) {
   if (!fs.existsSync(file)) {
     return null
   }
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function readTextIfExists(file) {
+function readTextIfExists(file: any) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
 }
 
-function durationMs(start, end) {
+function durationMs(start: any, end: any) {
   if (!start || !end) {
     return null
   }
@@ -50,20 +50,20 @@ function durationMs(start, end) {
   return Number.isFinite(value) ? value : null
 }
 
-function roleByName(inspectSummary) {
-  return Object.fromEntries(inspectSummary.roles.map((role) => [role.role, role]))
+function roleByName(inspectSummary: any) {
+  return Object.fromEntries(inspectSummary.roles.map((role: any) => [role.role, role]))
 }
 
-function expectedExecutionRoles(state) {
+function expectedExecutionRoles(state: any) {
   const reviewers = Array.isArray(state?.roles) && state.roles.length ? state.roles : REVIEWER_ROLES
   return [...new Set([...reviewers, 'fact_check', 'synthesis'])]
 }
 
-function metadataStatus(runDir, role) {
+function metadataStatus(runDir: any, role: any) {
   return readJsonIfExists(path.join(runDir, 'roles', role, 'metadata.json'))?.status || null
 }
 
-function check(results, id, status, message, details: any = null) {
+function check(results: any, id: any, status: any, message: any, details: any = null) {
   results.push({
     id,
     status,
@@ -72,25 +72,25 @@ function check(results, id, status, message, details: any = null) {
   })
 }
 
-function pass(results, id, message, details: any = null) {
+function pass(results: any, id: any, message: any, details: any = null) {
   check(results, id, 'pass', message, details)
 }
 
-function warn(results, id, message, details: any = null) {
+function warn(results: any, id: any, message: any, details: any = null) {
   check(results, id, 'warn', message, details)
 }
 
-function pending(results, id, message, details: any = null) {
+function pending(results: any, id: any, message: any, details: any = null) {
   check(results, id, 'pending', message, details)
 }
 
-function fail(results, id, message, details: any = null) {
+function fail(results: any, id: any, message: any, details: any = null) {
   check(results, id, 'fail', message, details)
 }
 
-function summarizeRoles(inspected) {
+function summarizeRoles(inspected: any) {
   return Object.fromEntries(
-    inspected.roles.map((role) => [
+    inspected.roles.map((role: any) => [
       role.role,
       {
         model: role.model,
@@ -104,7 +104,7 @@ function summarizeRoles(inspected) {
   )
 }
 
-function inspectIfReady(runDir) {
+function inspectIfReady(runDir: any) {
   const rolesDir = path.join(runDir, 'roles')
   if (!fs.existsSync(rolesDir)) {
     return {
@@ -116,7 +116,7 @@ function inspectIfReady(runDir) {
   return inspect(runDir)
 }
 
-function infraErrorsFrom(report, state) {
+function infraErrorsFrom(report: any, state: any) {
   if (Array.isArray(report?.infra_errors)) {
     return report.infra_errors
   }
@@ -138,7 +138,7 @@ function infraErrorsFrom(report, state) {
   return []
 }
 
-function shellQuote(value) {
+function shellQuote(value: any) {
   const text = String(value)
   if (/^[A-Za-z0-9_./:-]+$/.test(text)) {
     return text
@@ -146,20 +146,20 @@ function shellQuote(value) {
   return `'${text.replace(/'/g, "'\\''")}'`
 }
 
-function shellCommand(parts) {
+function shellCommand(parts: any) {
   return parts.map(shellQuote).join(' ')
 }
 
-function backfillManifestCommand(runDir) {
+function backfillManifestCommand(runDir: any) {
   return shellCommand(['node', ...runtimeNodeScriptArgs('backfill-workspace-run-manifest', '--run-dir', runDir)])
 }
 
-function buildResult({ absoluteRunDir, state, report, inspected, compaction, totalElapsedMs, results, ready }) {
+function buildResult({ absoluteRunDir, state, report, inspected, compaction, totalElapsedMs, results, ready }: any) {
   const counts = {
-    pass: results.filter((item) => item.status === 'pass').length,
-    warn: results.filter((item) => item.status === 'warn').length,
-    fail: results.filter((item) => item.status === 'fail').length,
-    pending: results.filter((item) => item.status === 'pending').length,
+    pass: results.filter((item: any) => item.status === 'pass').length,
+    warn: results.filter((item: any) => item.status === 'warn').length,
+    fail: results.filter((item: any) => item.status === 'fail').length,
+    pending: results.filter((item: any) => item.status === 'pending').length,
   }
   return {
     run_id: path.basename(absoluteRunDir),
@@ -185,9 +185,9 @@ function buildResult({ absoluteRunDir, state, report, inspected, compaction, tot
   }
 }
 
-export function verifyRun(runDir) {
+export function verifyRun(runDir: any) {
   const absoluteRunDir = path.resolve(runDir)
-  const results = []
+  const results: any[] = []
   const state = readJsonIfExists(path.join(absoluteRunDir, 'state.json'))
   const report = readJsonIfExists(path.join(absoluteRunDir, 'report.json'))
   const compaction = readJsonIfExists(path.join(absoluteRunDir, 'plan-compaction.json'))
@@ -248,18 +248,18 @@ export function verifyRun(runDir) {
     if (ready) {
       const resolvedExecution = manifest.resolved_execution || {}
       const expectedRoles = expectedExecutionRoles(state)
-      const missingRoles = expectedRoles.filter((role) => !resolvedExecution[role])
-      const emptyAttempts = expectedRoles.filter((role) => {
+      const missingRoles = expectedRoles.filter((role: any) => !resolvedExecution[role])
+      const emptyAttempts = expectedRoles.filter((role: any) => {
         const attempts = resolvedExecution[role]?.attempt_history
         return resolvedExecution[role] && (!Array.isArray(attempts) || attempts.length === 0)
       })
       const statusMismatches = expectedRoles
-        .map((role) => ({
+        .map((role: any) => ({
           role,
           manifest_status: resolvedExecution[role]?.latest_status || null,
           metadata_status: metadataStatus(absoluteRunDir, role),
         }))
-        .filter((item) => item.manifest_status !== item.metadata_status)
+        .filter((item: any) => item.manifest_status !== item.metadata_status)
       if (missingRoles.length || emptyAttempts.length || statusMismatches.length) {
         fail(results, 'manifest.resolved_execution', 'manifest resolved execution 与角色产物不一致', {
           expected_roles: expectedRoles,
@@ -387,10 +387,10 @@ export function verifyRun(runDir) {
       })
     }
     const grantedNonReadTools = (factCheck.tools || []).filter(
-      (name) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL,
+      (name: any) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL,
     )
     const usedToolNames = Object.keys(factCheck.tool_counts || {})
-    const usedNonReadTools = usedToolNames.filter((name) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL)
+    const usedNonReadTools = usedToolNames.filter((name: any) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL)
     if (grantedNonReadTools.length === 0 && usedNonReadTools.length === 0) {
       pass(results, 'fact_check.read_only', 'Fact Check 只获得并使用 Read 工具', {
         tools: factCheck.tools,
@@ -465,9 +465,9 @@ export function verifyRun(runDir) {
         status: synthesis.status,
       })
     }
-    const synthesisProjectTools = (synthesis.tools || []).filter((name) => name !== JSON_VALIDATOR_TOOL)
+    const synthesisProjectTools = (synthesis.tools || []).filter((name: any) => name !== JSON_VALIDATOR_TOOL)
     const synthesisProjectToolCalls = Object.keys(synthesis.tool_counts || {}).filter(
-      (name) => name !== JSON_VALIDATOR_TOOL,
+      (name: any) => name !== JSON_VALIDATOR_TOOL,
     )
     if (synthesisProjectTools.length === 0 && synthesisProjectToolCalls.length === 0) {
       pass(results, 'synthesis.no_tools', 'Synthesis 未获得工程读取工具，仅允许 JSON validator')
@@ -514,7 +514,7 @@ export function verifyRun(runDir) {
   })
 }
 
-function formatDuration(ms) {
+function formatDuration(ms: any) {
   if (!Number.isFinite(ms)) {
     return '-'
   }
@@ -524,7 +524,7 @@ function formatDuration(ms) {
   return minutes ? `${minutes}m${String(rest).padStart(2, '0')}s` : `${rest}s`
 }
 
-function printMarkdown(result) {
+function printMarkdown(result: any) {
   console.log(`# Plan Review Run Verification: ${result.run_id}`)
   console.log('')
   console.log(`Run dir: ${result.run_dir}`)

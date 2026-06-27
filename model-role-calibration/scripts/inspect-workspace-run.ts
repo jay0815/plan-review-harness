@@ -5,11 +5,11 @@ import * as path from 'node:path'
 
 import { isMainScript, parseArgs, requireArg } from './lib.js'
 
-function readJson(file) {
+function readJson(file: any) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
-function parseJsonLines(file) {
+function parseJsonLines(file: any) {
   if (!fs.existsSync(file)) {
     return []
   }
@@ -17,7 +17,7 @@ function parseJsonLines(file) {
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line, index) => {
+    .map((line: any, index: any) => {
       try {
         return JSON.parse(line)
       } catch (error: any) {
@@ -30,15 +30,15 @@ function parseJsonLines(file) {
     })
 }
 
-function usageSummary(events) {
-  const usages = events.map((event) => event.message?.usage).filter(Boolean)
+function usageSummary(events: any) {
+  const usages = events.map((event: any) => event.message?.usage).filter(Boolean)
   if (!usages.length) {
     return null
   }
   const last = usages[usages.length - 1]
   return {
     first_input_tokens: usages[0].input_tokens ?? usages[0].prompt_tokens ?? null,
-    max_input_tokens: Math.max(...usages.map((item) => item.input_tokens ?? item.prompt_tokens ?? 0)),
+    max_input_tokens: Math.max(...usages.map((item: any) => item.input_tokens ?? item.prompt_tokens ?? 0)),
     last_input_tokens: last.input_tokens ?? last.prompt_tokens ?? null,
     last_output_tokens: last.output_tokens ?? null,
     cache_read_input_tokens: last.cache_read_input_tokens ?? null,
@@ -46,7 +46,7 @@ function usageSummary(events) {
   }
 }
 
-function extractToolUses(events) {
+function extractToolUses(events: any) {
   const calls: any[] = []
   for (const event of events) {
     const content = event.message?.content
@@ -66,7 +66,7 @@ function extractToolUses(events) {
   return calls
 }
 
-function extractToolResults(events) {
+function extractToolResults(events: any) {
   const results = new Map<any, any>()
   for (const event of events) {
     const content = event.message?.content
@@ -86,11 +86,11 @@ function extractToolResults(events) {
   return results
 }
 
-function unique(values) {
+function unique(values: any) {
   return [...new Set(values.filter(Boolean))]
 }
 
-function isOutOfBoundary(file, exposedRoot) {
+function isOutOfBoundary(file: any, exposedRoot: any) {
   if (!exposedRoot) {
     return false
   }
@@ -98,7 +98,7 @@ function isOutOfBoundary(file, exposedRoot) {
   return relative.startsWith('..') || path.isAbsolute(relative)
 }
 
-function mapReadFile(file, exposedRoot, sourceRoot) {
+function mapReadFile(file: any, exposedRoot: any, sourceRoot: any) {
   if (!exposedRoot || !sourceRoot) {
     return file
   }
@@ -109,7 +109,7 @@ function mapReadFile(file, exposedRoot, sourceRoot) {
   return path.join(sourceRoot, relative)
 }
 
-function summarizeRole(roleDir) {
+function summarizeRole(roleDir: any) {
   const role = path.basename(roleDir)
   const metadataFile = path.join(roleDir, 'metadata.json')
   const stdoutFile = path.join(roleDir, 'stdout.jsonl')
@@ -119,37 +119,37 @@ function summarizeRole(roleDir) {
   const factCheckSummaryFile = path.join(roleDir, 'fact-check-summary.json')
   const factCheckSummary = fs.existsSync(factCheckSummaryFile) ? readJson(factCheckSummaryFile) : null
   const events = parseJsonLines(stdoutFile)
-  const init = events.find((event) => event.type === 'system' && event.subtype === 'init') || {}
+  const init = events.find((event: any) => event.type === 'system' && event.subtype === 'init') || {}
   const toolUses = extractToolUses(events)
   const toolResults = extractToolResults(events)
-  const toolCounts = {}
+  const toolCounts: Record<string, number> = {}
   for (const call of toolUses) {
     toolCounts[call.name] = (toolCounts[call.name] || 0) + 1
   }
   const readAttempts = toolUses
-    .filter((call) => call.name === 'Read' && call.input.file_path)
-    .map((call) => ({
+    .filter((call: any) => call.name === 'Read' && call.input.file_path)
+    .map((call: any) => ({
       id: call.id,
       file: call.input.file_path,
       result: call.id ? toolResults.get(call.id) : null,
     }))
-  const readAttemptFiles = unique(readAttempts.map((attempt) => attempt.file))
+  const readAttemptFiles = unique(readAttempts.map((attempt: any) => attempt.file))
   const successfulReadFiles = unique(
-    readAttempts.filter((attempt) => attempt.result?.is_error !== true).map((attempt) => attempt.file),
+    readAttempts.filter((attempt: any) => attempt.result?.is_error !== true).map((attempt: any) => attempt.file),
   )
   const failedReadFiles = unique(
-    readAttempts.filter((attempt) => attempt.result?.is_error === true).map((attempt) => attempt.file),
+    readAttempts.filter((attempt: any) => attempt.result?.is_error === true).map((attempt: any) => attempt.file),
   )
   const readBoundary = metadata.read_boundary || null
   const exposedRoot = readBoundary?.exposed_root ? path.resolve(readBoundary.exposed_root) : null
   const sourceRoot = readBoundary?.source_root ? path.resolve(readBoundary.source_root) : null
-  const outOfBoundaryReadFiles = successfulReadFiles.filter((file) => isOutOfBoundary(file, exposedRoot))
-  const failedOutOfBoundaryReadFiles = failedReadFiles.filter((file) => isOutOfBoundary(file, exposedRoot))
-  const mappedReadFiles = successfulReadFiles.map((file) => mapReadFile(file, exposedRoot, sourceRoot))
+  const outOfBoundaryReadFiles = successfulReadFiles.filter((file: any) => isOutOfBoundary(file, exposedRoot))
+  const failedOutOfBoundaryReadFiles = failedReadFiles.filter((file: any) => isOutOfBoundary(file, exposedRoot))
+  const mappedReadFiles = successfulReadFiles.map((file: any) => mapReadFile(file, exposedRoot, sourceRoot))
   return {
     role,
     model: metadata.model || init.model || null,
-    session_id: init.session_id || events.find((event) => event.session_id)?.session_id || null,
+    session_id: init.session_id || events.find((event: any) => event.session_id)?.session_id || null,
     status: metadata.status || null,
     elapsed_ms:
       metadata.started_at && metadata.finished_at
@@ -173,18 +173,18 @@ function summarizeRole(roleDir) {
   }
 }
 
-function printText(summary) {
+function printText(summary: any) {
   console.log(`# Workspace Run Inspect: ${summary.run_id}`)
   console.log('')
   console.log(`Run dir: ${summary.run_dir}`)
-  console.log(`Roles: ${summary.roles.map((item) => item.role).join(', ')}`)
+  console.log(`Roles: ${summary.roles.map((item: any) => item.role).join(', ')}`)
   console.log('')
   console.log('| Role | Model | Elapsed | Prompt | Output | Stdout | Tool calls | Boundary | Max input tokens |')
   console.log('|---|---|---:|---:|---:|---:|---|---|---:|')
   for (const role of summary.roles) {
     const toolCalls =
       Object.entries(role.tool_counts)
-        .map(([name, count]) => `${name}:${count}`)
+        .map(([name, count]: any) => `${name}:${count}`)
         .join(', ') || '-'
     console.log(
       [
@@ -251,7 +251,7 @@ function printText(summary) {
   }
 }
 
-export function inspect(runDir) {
+export function inspect(runDir: any) {
   const absoluteRunDir = path.resolve(runDir)
   const rolesDir = path.join(absoluteRunDir, 'roles')
   if (!fs.existsSync(rolesDir)) {
@@ -259,9 +259,9 @@ export function inspect(runDir) {
   }
   const roles = fs
     .readdirSync(rolesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => summarizeRole(path.join(rolesDir, entry.name)))
-    .sort((a, b) => a.role.localeCompare(b.role))
+    .filter((entry: any) => entry.isDirectory())
+    .map((entry: any) => summarizeRole(path.join(rolesDir, entry.name)))
+    .sort((a: any, b: any) => a.role.localeCompare(b.role))
   return {
     run_id: path.basename(absoluteRunDir),
     run_dir: absoluteRunDir,

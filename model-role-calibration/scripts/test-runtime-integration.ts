@@ -12,7 +12,7 @@ const parseJsonFile = parseJsonFileTyped as (file: string) => any
 
 const FAKE_CONCURRENCY_DELAY_MS = '250'
 
-function runNode(script, args, env: any = {}) {
+function runNode(script: any, args: any, env: any = {}) {
   return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
@@ -24,13 +24,13 @@ function runNode(script, args, env: any = {}) {
   })
 }
 
-function requireSuccess(result, label) {
+function requireSuccess(result: any, label: any) {
   if (result.status !== 0) {
     throw new Error(`${label} failed:\n${result.stdout}\n${result.stderr}`)
   }
 }
 
-function generatePrompts(run, probes) {
+function generatePrompts(run: any, probes: any) {
   const result = runNode(runtimeScript('generate-prompts'), [
     '--run',
     run,
@@ -42,18 +42,18 @@ function generatePrompts(run, probes) {
   requireSuccess(result, `generate prompts for ${run}`)
 }
 
-function maxConcurrency(logFile) {
+function maxConcurrency(logFile: any) {
   return maxConcurrencyFor(logFile, () => true)
 }
 
-function maxConcurrencyFor(logFile, predicate) {
+function maxConcurrencyFor(logFile: any, predicate: any) {
   const events = fs
     .readFileSync(logFile, 'utf8')
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .sort((a, b) => a.time - b.time || (a.event === 'start' ? -1 : 1))
+    .map((line: any) => JSON.parse(line))
+    .sort((a: any, b: any) => a.time - b.time || (a.event === 'start' ? -1 : 1))
   let active = 0
   let maximum = 0
   for (const event of events) {
@@ -375,7 +375,7 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
     assert.equal(workflowBatch.completed, 4)
     assert.equal(workflowBatch.failed, 0)
     assert.equal(workflowBatch.skipped, 4)
-    assert(workflowBatch.results.every((item) => item.status === 'skipped'))
+    assert(workflowBatch.results.every((item: any) => item.status === 'skipped'))
 
     const forceLog = path.join(tempDir, 'force-workflow.log')
     result = runNode(
@@ -441,11 +441,11 @@ else setTimeout(finish, Number(process.env.FAKE_MODEL_DELAY_MS || 0));
       { label: 'synthesis', concurrency: 1, jobs: 4 },
     ])
     assert.equal(
-      maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith('/risk')),
+      maxConcurrencyFor(synthesisStageLog, (id: any) => id.endsWith('/risk')),
       4,
     )
     assert.equal(
-      maxConcurrencyFor(synthesisStageLog, (id) => id.endsWith('/synthesis')),
+      maxConcurrencyFor(synthesisStageLog, (id: any) => id.endsWith('/synthesis')),
       1,
     )
 

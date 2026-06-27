@@ -49,19 +49,19 @@ function usage() {
   ].join('\n')
 }
 
-function rel(file) {
+function rel(file: any) {
   return path.relative(path.resolve(ROOT, '..'), file)
 }
 
-function promptFile(run, caseId, probe) {
+function promptFile(run: any, caseId: any, probe: any) {
   return path.join(ROOT, 'runs', run, caseId, 'prompts', `${probe}.md`)
 }
 
-function scoreFile(run, caseId, model, probe, scoreVersion) {
+function scoreFile(run: any, caseId: any, model: any, probe: any, scoreVersion: any) {
   return path.join(ROOT, 'runs', run, caseId, 'scores', 'versions', scoreVersion, `${slug(model)}-${probe}.score.json`)
 }
 
-function validateSelection({ cases, models, probes, config }) {
+function validateSelection({ cases, models, probes, config }: any) {
   for (const caseId of cases) {
     assertSafeCaseId(caseId)
   }
@@ -73,7 +73,7 @@ function validateSelection({ cases, models, probes, config }) {
   probes.forEach(assertProbe)
 }
 
-function collectJobs({ run, cases, models, probes, scoreVersion }) {
+function collectJobs({ run, cases, models, probes, scoreVersion }: any) {
   const jobs: any[] = []
   for (const caseId of cases) {
     for (const probe of probes) {
@@ -99,7 +99,7 @@ function collectJobs({ run, cases, models, probes, scoreVersion }) {
   return jobs
 }
 
-function byCaseAndProbe(jobs, predicate) {
+function byCaseAndProbe(jobs: any, predicate: any) {
   const grouped = new Map<string, any>()
   for (const job of jobs.filter(predicate)) {
     const key = `${job.caseId}\u0000${job.probe}`
@@ -115,20 +115,20 @@ function byCaseAndProbe(jobs, predicate) {
   return [...grouped.values()]
 }
 
-function renderStatus({ cases, probes, jobs, scoreVersion }) {
+function renderStatus({ cases, probes, jobs, scoreVersion }: any) {
   console.log(`Score version: ${scoreVersion}`)
   for (const caseId of cases) {
-    const caseJobs = jobs.filter((job) => job.caseId === caseId)
-    const promptCount = probes.filter((probe) => fs.existsSync(promptFile(caseJobs[0]?.run, caseId, probe))).length
-    const outputCount = caseJobs.filter((job) => job.outputExists).length
-    const scoreReadyJobs = caseJobs.filter((job) => job.outputExists)
-    const scoreCount = scoreReadyJobs.filter((job) => job.scoreExists).length
+    const caseJobs = jobs.filter((job: any) => job.caseId === caseId)
+    const promptCount = probes.filter((probe: any) => fs.existsSync(promptFile(caseJobs[0]?.run, caseId, probe))).length
+    const outputCount = caseJobs.filter((job: any) => job.outputExists).length
+    const scoreReadyJobs = caseJobs.filter((job: any) => job.outputExists)
+    const scoreCount = scoreReadyJobs.filter((job: any) => job.scoreExists).length
     console.log(`\n${caseId}`)
     console.log(`  prompts: ${promptCount}/${probes.length}`)
     console.log(`  outputs: ${outputCount}/${caseJobs.length}`)
     console.log(`  scores: ${scoreCount}/${scoreReadyJobs.length}`)
 
-    const missingOutputs = byCaseAndProbe(caseJobs, (job) => !job.outputExists)
+    const missingOutputs = byCaseAndProbe(caseJobs, (job: any) => !job.outputExists)
     if (missingOutputs.length) {
       console.log('  missing outputs:')
       for (const item of missingOutputs) {
@@ -136,7 +136,7 @@ function renderStatus({ cases, probes, jobs, scoreVersion }) {
       }
     }
 
-    const missingScores = byCaseAndProbe(caseJobs, (job) => job.outputExists && !job.scoreExists)
+    const missingScores = byCaseAndProbe(caseJobs, (job: any) => job.outputExists && !job.scoreExists)
     if (missingScores.length) {
       console.log('  missing scores:')
       for (const item of missingScores) {
@@ -146,9 +146,9 @@ function renderStatus({ cases, probes, jobs, scoreVersion }) {
   }
 }
 
-function preparePrompts({ run, cases, probes }) {
+function preparePrompts({ run, cases, probes }: any) {
   for (const caseId of cases) {
-    const missing = probes.filter((probe) => !fs.existsSync(promptFile(run, caseId, probe)))
+    const missing = probes.filter((probe: any) => !fs.existsSync(promptFile(run, caseId, probe)))
     if (!missing.length) {
       console.log(`${caseId}: prompts already complete`)
       continue
@@ -158,7 +158,7 @@ function preparePrompts({ run, cases, probes }) {
   }
 }
 
-function printModelCommands({ run, cases, models, probes, jobs }) {
+function printModelCommands({ run, cases, models, probes, jobs }: any) {
   console.log('# Prepare prompts first. This command does not run models.')
   console.log(
     `${TS_RUNNER} ${SCRIPT} --run ${run} --cases ${cases.join(',')} --models ${models.join(',')} ` +
@@ -167,7 +167,7 @@ function printModelCommands({ run, cases, models, probes, jobs }) {
   console.log('')
   console.log('# Run these manually when you want to start model calls.')
   for (const caseId of cases) {
-    const missing = jobs.some((job) => job.caseId === caseId && !job.outputExists)
+    const missing = jobs.some((job: any) => job.caseId === caseId && !job.outputExists)
     if (!missing) {
       console.log(`# ${caseId}: all outputs already exist`)
       continue
@@ -185,8 +185,8 @@ function printModelCommands({ run, cases, models, probes, jobs }) {
   }
 }
 
-function printScoreCommands({ run, jobs, scoreVersion }) {
-  const missing = jobs.filter((job) => job.outputExists && !job.scoreExists)
+function printScoreCommands({ run, jobs, scoreVersion }: any) {
+  const missing = jobs.filter((job: any) => job.outputExists && !job.scoreExists)
   if (!missing.length) {
     console.log('# No missing score files for completed outputs.')
     return
@@ -206,7 +206,7 @@ function printScoreCommands({ run, jobs, scoreVersion }) {
   }
 }
 
-function printSummaryCommand(run, scoreVersion) {
+function printSummaryCommand(run: any, scoreVersion: any) {
   console.log('# Summarize after scores are filled.')
   console.log(`${TS_RUNNER} ${SUMMARIZE_RESULTS} --run ${run} --score-version ${scoreVersion}`)
 }
@@ -224,7 +224,7 @@ function main() {
   }
   const action = args.action && args.action !== true ? String(args.action) : 'status'
   const cases = parseList(args.cases, config.primary_cases)
-  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
+  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
   const probes = parseList(args.probes, PROBES)
   const scoreVersion = optionalSlugArg(args, 'score-version') || DEFAULT_SCORE_VERSION
 

@@ -8,7 +8,7 @@ import * as path from 'node:path'
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fact-check-calibration-test-'))
 process.env.MODEL_ROLE_CALIBRATION_FACT_CHECK_ROOT = path.join(tempRoot, 'fact-check-calibration')
 
-function writeJson(file, value) {
+function writeJson(file: any, value: any) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8')
 }

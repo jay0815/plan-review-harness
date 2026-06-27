@@ -36,7 +36,7 @@ const EXECUTION_BOUNDARIES = [
 ]
 
 function executionCoverage() {
-  return EXECUTION_BOUNDARIES.map((boundary) => ({
+  return EXECUTION_BOUNDARIES.map((boundary: any) => ({
     boundary,
     status: 'covered',
     evidence_basis: 'plan_text',
@@ -44,7 +44,7 @@ function executionCoverage() {
   }))
 }
 
-function modelStats(model, plannerCases) {
+function modelStats(model: any, plannerCases: any) {
   return {
     model,
     byProbeCase: {
@@ -111,7 +111,7 @@ function main() {
     total: 20,
     dimension_assessments: Object.fromEntries(
       ['hit_rate', 'contract_closure', 'actionability', 'evidence_discipline', 'false_positive_cost'].map(
-        (dimension) => [
+        (dimension: any) => [
           dimension,
           {
             score: 4,
@@ -479,7 +479,7 @@ function main() {
   assert.deepEqual(wrappedFactCheckEnvelope.output.checked_issues, [])
 
   const largeStream = [
-    ...Array.from({ length: 140 }, (_, index) =>
+    ...Array.from({ length: 140 }, (_: any, index: any) =>
       JSON.stringify({
         type: 'assistant',
         sequence: index,

@@ -69,8 +69,8 @@ function main(): void {
   }
 
   const config = loadConfig<CalibrationConfig>()
-  const models = parseList(args.models, config.models).map((item) => item.toLowerCase())
-  const pending: PendingPromotion[] = models.map((model) => {
+  const models = parseList(args.models, config.models).map((item: any) => item.toLowerCase())
+  const pending: PendingPromotion[] = models.map((model: any) => {
     if (!config.models.includes(model)) {
       throw new Error(`Invalid model "${model}". Expected one of: ${config.models.join(', ')}`)
     }
@@ -98,7 +98,7 @@ function main(): void {
     probe,
     promoted_at: promotedAt,
     decision: 'human_confirmed',
-    models: pending.map((item) => ({
+    models: pending.map((item: any) => ({
       model: item.model,
       total: item.score.total,
       draft_file: path.relative(ROOT, item.paths.draftFile),

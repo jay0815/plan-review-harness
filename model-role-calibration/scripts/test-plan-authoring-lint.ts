@@ -15,7 +15,7 @@ function requiredPlan({
   tasks = '- Implement the decided contract.',
   blocking = 'None',
   appendix = '',
-} = {}) {
+}: any = {}) {
   return [
     '# Plan',
     '',
@@ -51,13 +51,13 @@ function requiredPlan({
     'None',
     appendix,
   ]
-    .filter((line) => line !== '')
+    .filter((line: any) => line !== '')
     .join('\n')
 }
 
-function padToLines(plan, targetLines) {
+function padToLines(plan: any, targetLines: any) {
   const lines = plan.split('\n')
-  const headingIndex = lines.findIndex((line) => line === '## Tasks and Dependencies')
+  const headingIndex = lines.findIndex((line: any) => line === '## Tasks and Dependencies')
   const insertAt = headingIndex + 1
   while (lines.length < targetLines) {
     lines.splice(insertAt, 0, `- Decision-preserving task note ${lines.length}.`)
@@ -65,10 +65,10 @@ function padToLines(plan, targetLines) {
   return lines.join('\n')
 }
 
-function codes(result) {
+function codes(result: any) {
   return {
-    errors: result.errors.map((item) => item.code),
-    warnings: result.warnings.map((item) => item.code),
+    errors: result.errors.map((item: any) => item.code),
+    warnings: result.warnings.map((item: any) => item.code),
   }
 }
 
@@ -298,8 +298,8 @@ function main() {
     assert.equal(chineseMappingRefs.metrics.existing_code_ref_count, 3)
     assert.equal(chineseMappingRefs.metrics.inline_existing_code_ref_count, 3)
     assert.equal(chineseMappingRefs.metrics.structured_existing_code_ref_count, 0)
-    assert(parsedChineseRefs.some((ref) => ref.path === 'src/screens/main/mine/index.tsx' && ref.lines === '1'))
-    assert(parsedChineseRefs.some((ref) => ref.path === 'src/screens/credit/ocr/index.tsx' && ref.lines === '1'))
+    assert(parsedChineseRefs.some((ref: any) => ref.path === 'src/screens/main/mine/index.tsx' && ref.lines === '1'))
+    assert(parsedChineseRefs.some((ref: any) => ref.path === 'src/screens/credit/ocr/index.tsx' && ref.lines === '1'))
 
     const mappedChineseRequiredPlan = [
       '# 中文计划',
@@ -369,7 +369,7 @@ function main() {
       'complete arrow function should be flagged regardless of line count',
     )
     assert(
-      arrowResult.metrics.code_blocks.some((b) => b.kind === 'arrow_function_implementation'),
+      arrowResult.metrics.code_blocks.some((b: any) => b.kind === 'arrow_function_implementation'),
       'arrow function should be classified as arrow_function_implementation',
     )
 
@@ -504,7 +504,7 @@ function main() {
         `${item.name} should be flagged as implementation_code_block`,
       )
       assert(
-        result.metrics.code_blocks.some((block) => block.kind === 'arrow_function_implementation'),
+        result.metrics.code_blocks.some((block: any) => block.kind === 'arrow_function_implementation'),
         `${item.name} should be classified as arrow_function_implementation`,
       )
     }
