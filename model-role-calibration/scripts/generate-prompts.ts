@@ -70,7 +70,7 @@ export function generatePrompts({ run, caseId, probes, force = false }: Generate
 
   return {
     promptDir,
-    prompts: probes.map((probe: any) => ({
+    prompts: probes.map((probe) => ({
       probe,
       file: path.join(promptDir, `${probe}.md`),
     })),
@@ -80,7 +80,7 @@ export function generatePrompts({ run, caseId, probes, force = false }: Generate
 function parseProbes(value: string): string[] {
   return value
     .split(',')
-    .map((item: any) => item.trim())
+    .map((item) => item.trim())
     .filter(Boolean)
 }
 
