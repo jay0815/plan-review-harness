@@ -17,7 +17,7 @@ const LINE_BUDGETS: Record<string, number> = {
   architecture: 600,
 }
 
-const REQUIRED_SECTION_GROUPS = [
+const REQUIRED_SECTION_GROUPS: RequiredSectionGroup[] = [
   { name: 'scope_non_goals', patterns: [/\bscope\b/i, /\bnon[- ]?goals?\b/i] },
   { name: 'requirements_mapping', patterns: [/\brequirements?\s+mapping\b/i, /需求映射/] },
   { name: 'existing_code_refs', patterns: [EXISTING_CODE_REFS_HEADING_PATTERN] },
@@ -41,7 +41,117 @@ const UNCERTAINTY_ALLOWED_SECTIONS = [
   /非阻塞问题/,
 ]
 
-function issue(code: any, message: any, details: any = {}) {
+type PlanComplexityLevel = 'single_file' | 'feature' | 'cross_feature' | 'architecture'
+type ComplexitySource = 'explicit' | 'inferred'
+type ExistingRefSource = 'structured' | 'inline'
+
+interface RequiredSectionGroup {
+  name: string
+  patterns: RegExp[]
+}
+
+interface LintIssue {
+  [key: string]: unknown
+  code: string
+  message: string
+}
+
+interface PlanLine {
+  number: number
+  text: string
+}
+
+interface PlanSection {
+  title: string
+  level: number
+  start_line: number
+  end_line: number
+  lines: PlanLine[]
+}
+
+interface PlanComplexity {
+  level: PlanComplexityLevel
+  reason: string
+  source: ComplexitySource
+}
+
+interface ExistingCodeRef {
+  path: string
+  path_line: number | null
+  lines: string | null
+  symbol: string | null
+  reason: string | null
+  source: ExistingRefSource
+  original_ref: string
+  target_kind?: 'file' | 'directory'
+}
+
+interface ManifestCodeRef {
+  path: string
+  line_ref: string
+  lines?: string
+  original_ref: string
+}
+
+interface CodeBlock {
+  index: number
+  language: string
+  code: string
+  start_line: number
+  line_count: number
+  char_count: number
+}
+
+interface CodeBlockClassification {
+  kind: string
+  allowed: boolean
+  reliable?: boolean
+  limit?: number
+}
+
+interface CodeBlockMetric {
+  index: number
+  line: number
+  language: string | null
+  line_count: number
+  kind: string
+  allowed: boolean
+}
+
+interface LintPlanOptions {
+  plan: unknown
+  projectRoot: string
+}
+
+interface LintPlanResult {
+  complexity: PlanComplexity
+  budgets: {
+    line_budget: number
+    max_code_blocks: number
+    allowed_code_block_shapes: {
+      interface_signature_lines: number
+      data_flow_or_mermaid_lines: number
+      file_tree_lines: number
+    }
+  }
+  metrics: {
+    total_lines: number
+    total_chars: number
+    section_count: number
+    existing_code_ref_count: number
+    structured_existing_code_ref_count: number
+    inline_existing_code_ref_count: number
+    code_block_count: number
+    implementation_code_blocks: number
+    implementation_code_lines: number
+    line_budget_exceeded: boolean
+    code_blocks: CodeBlockMetric[]
+  }
+  errors: LintIssue[]
+  warnings: LintIssue[]
+}
+
+function issue(code: string, message: string, details: Record<string, unknown> = {}): LintIssue {
   return {
     code,
     message,
@@ -49,14 +159,18 @@ function issue(code: any, message: any, details: any = {}) {
   }
 }
 
-function lineNumberAt(text: any, index: any) {
+function parseComplexityLevel(value: string): PlanComplexityLevel {
+  return value.toLowerCase() as PlanComplexityLevel
+}
+
+function lineNumberAt(text: string, index: number): number {
   return text.slice(0, index).split('\n').length
 }
 
-export function parseSections(plan: any) {
+export function parseSections(plan: unknown): PlanSection[] {
   const lines = String(plan).split('\n')
-  const sections: any[] = []
-  let current: any = {
+  const sections: PlanSection[] = []
+  let current: PlanSection = {
     title: '__root__',
     level: 0,
     start_line: 1,
@@ -64,7 +178,7 @@ export function parseSections(plan: any) {
     lines: [],
   }
   sections.push(current)
-  lines.forEach((line: any, index: any) => {
+  lines.forEach((line, index) => {
     const heading = line.match(/^(#{1,6})\s+(.+?)\s*$/)
     if (heading) {
       current.end_line = index
@@ -86,15 +200,15 @@ export function parseSections(plan: any) {
   return sections
 }
 
-function sectionMatches(section: any, patterns: any) {
-  return patterns.some((pattern: any) => pattern.test(section.title))
+function sectionMatches(section: PlanSection, patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => pattern.test(section.title))
 }
 
-function explicitSectionMappings(plan: any) {
-  const mappings = new Set()
-  const allowed = new Set(REQUIRED_SECTION_GROUPS.map((group: any) => group.name))
+function explicitSectionMappings(plan: unknown): Set<string> {
+  const mappings = new Set<string>()
+  const allowed = new Set(REQUIRED_SECTION_GROUPS.map((group) => group.name))
   const pattern = /^\s*([a-z][a-z0-9_]+)\s*:\s*(?:§\s*)?(\d+(?:\.\d+)*)\b.*$/gim
-  let match
+  let match: RegExpExecArray | null
   while ((match = pattern.exec(String(plan))) !== null) {
     const name = match[1]
     if (allowed.has(name)) {
@@ -104,28 +218,32 @@ function explicitSectionMappings(plan: any) {
   return mappings
 }
 
-function hasRequiredSection(sections: any, explicitMappings: any, group: any) {
-  return explicitMappings.has(group.name) || sections.some((section: any) => sectionMatches(section, group.patterns))
+function hasRequiredSection(
+  sections: PlanSection[],
+  explicitMappings: Set<string>,
+  group: RequiredSectionGroup,
+): boolean {
+  return explicitMappings.has(group.name) || sections.some((section) => sectionMatches(section, group.patterns))
 }
 
-function parseExplicitComplexity(plan: any, sections: any) {
+function parseExplicitComplexity(plan: unknown, sections: PlanSection[]): PlanComplexity | null {
   const jsonMatch = String(plan).match(
     /"plan_complexity"\s*:\s*\{[\s\S]{0,300}?"level"\s*:\s*"(single_file|feature|cross_feature|architecture)"/i,
   )
   if (jsonMatch) {
     return {
-      level: jsonMatch[1].toLowerCase(),
+      level: parseComplexityLevel(jsonMatch[1]),
       reason: '计划中的 plan_complexity.level',
       source: 'explicit',
     }
   }
-  const section = sections.find((item: any) => /plan\s+complexity|计划复杂度/i.test(item.title))
+  const section = sections.find((item) => /plan\s+complexity|计划复杂度/i.test(item.title))
   if (section) {
-    const body = section.lines.map((item: any) => item.text).join('\n')
+    const body = section.lines.map((item) => item.text).join('\n')
     const match = body.match(/\b(single_file|feature|cross_feature|architecture)\b/i)
     if (match) {
       return {
-        level: match[1].toLowerCase(),
+        level: parseComplexityLevel(match[1]),
         reason: `章节 ${section.title}`,
         source: 'explicit',
       }
@@ -136,7 +254,7 @@ function parseExplicitComplexity(plan: any, sections: any) {
   )
   if (inlineMatch) {
     return {
-      level: inlineMatch[1].toLowerCase(),
+      level: parseComplexityLevel(inlineMatch[1]),
       reason: '计划中的复杂度标记',
       source: 'explicit',
     }
@@ -144,9 +262,9 @@ function parseExplicitComplexity(plan: any, sections: any) {
   return null
 }
 
-function existingCodeRefsSections(sections: any) {
-  const result: any[] = []
-  const seen = new Set<any>()
+function existingCodeRefsSections(sections: PlanSection[]): PlanSection[] {
+  const result: PlanSection[] = []
+  const seen = new Set<number>()
   for (let index = 0; index < sections.length; index += 1) {
     const section = sections[index]
     if (!EXISTING_CODE_REFS_HEADING_PATTERN.test(section.title)) {
@@ -163,25 +281,22 @@ function existingCodeRefsSections(sections: any) {
       }
     }
   }
-  return result.sort((a: any, b: any) => a.start_line - b.start_line)
+  return result.sort((a, b) => a.start_line - b.start_line)
 }
 
-function existingCodeRefsSection(sections: any) {
+function existingCodeRefsSection(sections: PlanSection[]): PlanSection | null {
   return existingCodeRefsSections(sections)[0] || null
 }
 
-function sectionsToPlan(sections: any) {
+function sectionsToPlan(sections: PlanSection[]): string {
   return sections
-    .filter((section: any) => section.title !== '__root__')
-    .sort((a: any, b: any) => a.start_line - b.start_line)
-    .flatMap((section: any) => [
-      `${'#'.repeat(section.level)} ${section.title}`,
-      ...section.lines.map((line: any) => line.text),
-    ])
+    .filter((section) => section.title !== '__root__')
+    .sort((a, b) => a.start_line - b.start_line)
+    .flatMap((section) => [`${'#'.repeat(section.level)} ${section.title}`, ...section.lines.map((line) => line.text)])
     .join('\n')
 }
 
-function collectCandidateLineNumbers(sections: any) {
+function collectCandidateLineNumbers(sections: PlanSection[]): Map<string, number> {
   const lineNumbers = new Map<string, number>()
   for (const section of existingCodeRefsSections(sections)) {
     for (const entry of section.lines) {
@@ -197,31 +312,32 @@ function collectCandidateLineNumbers(sections: any) {
   return lineNumbers
 }
 
-function structuredRefKey(ref: any) {
+function structuredRefKey(ref: ExistingCodeRef): string {
   return `${String(ref.path || '')
     .split(/[\\/]/)
     .join('/')}:${ref.lines || ''}`
 }
 
-function structuredRefPathKey(ref: any) {
+function structuredRefPathKey(ref: ExistingCodeRef): string {
   return String(ref.path || '')
     .split(/[\\/]/)
     .join('/')
 }
 
-function manifestRefKey(ref: any) {
+function manifestRefKey(ref: ExistingCodeRef | ManifestCodeRef): string {
+  const lineRef = 'line_ref' in ref ? ref.line_ref : ref.lines
   return `${String(ref.path || '')
     .split(/[\\/]/)
-    .join('/')}:${ref.line_ref || ref.lines || ''}`
+    .join('/')}:${lineRef || ''}`
 }
 
-function parseStructuredExistingCodeRefs(sections: any) {
+function parseStructuredExistingCodeRefs(sections: PlanSection[]): ExistingCodeRef[] {
   const refSections = existingCodeRefsSections(sections)
   if (!refSections.length) {
     return []
   }
-  const refs: any[] = []
-  let current: any = null
+  const refs: ExistingCodeRef[] = []
+  let current: ExistingCodeRef | null = null
   for (const section of refSections) {
     current = null
     for (const entry of section.lines) {
@@ -242,7 +358,8 @@ function parseStructuredExistingCodeRefs(sections: any) {
       }
       const field = entry.text.match(/^\s*(?:-\s*)?(lines|symbol|reason)\s*:\s*(.*?)\s*$/i)
       if (current && field) {
-        current[field[1].toLowerCase()] = field[2].trim().replace(/^`|`$/g, '')
+        const key = field[1].toLowerCase() as 'lines' | 'symbol' | 'reason'
+        current[key] = field[2].trim().replace(/^`|`$/g, '')
         continue
       }
       if (entry.text.match(/^\s*(?:-\s*)?(lines|symbol|reason)\s*:/i)) {
@@ -253,36 +370,36 @@ function parseStructuredExistingCodeRefs(sections: any) {
   return refs
 }
 
-export function parseExistingCodeRefs(sections: any, projectRoot: any = process.cwd()) {
+export function parseExistingCodeRefs(sections: PlanSection[], projectRoot: string = process.cwd()): ExistingCodeRef[] {
   const structuredRefs = parseStructuredExistingCodeRefs(sections)
   const structuredKeys = new Set(structuredRefs.map(structuredRefKey))
   const structuredPathKeys = new Set(structuredRefs.map(structuredRefPathKey))
-  const structuredOriginalRefs = new Set(structuredRefs.map((ref: any) => ref.original_ref || ref.path))
+  const structuredOriginalRefs = new Set(structuredRefs.map((ref) => ref.original_ref || ref.path))
   const candidateLineNumbers = collectCandidateLineNumbers(sections)
   const manifest = createPlanReferenceManifest(projectRoot, sectionsToPlan(sections), [])
-  const inlineRefs = [
-    ...manifest.existing_code_refs.map((ref: any) => ({
+  const inlineRefs: ExistingCodeRef[] = [
+    ...(manifest.existing_code_refs as ManifestCodeRef[]).map((ref) => ({
       path: ref.path,
       path_line: candidateLineNumbers.get(ref.original_ref) || null,
       lines: ref.line_ref,
       symbol: null,
       reason: null,
-      source: 'inline',
-      target_kind: 'file',
+      source: 'inline' as const,
+      target_kind: 'file' as const,
       original_ref: ref.original_ref,
     })),
-    ...manifest.existing_code_ref_dirs.map((ref: any) => ({
+    ...(manifest.existing_code_ref_dirs as ManifestCodeRef[]).map((ref) => ({
       path: ref.path,
       path_line: candidateLineNumbers.get(ref.original_ref) || null,
       lines: ref.line_ref,
       symbol: null,
       reason: null,
-      source: 'inline',
-      target_kind: 'directory',
+      source: 'inline' as const,
+      target_kind: 'directory' as const,
       original_ref: ref.original_ref,
     })),
   ].filter(
-    (ref: any) =>
+    (ref) =>
       !structuredKeys.has(manifestRefKey(ref)) &&
       !structuredPathKeys.has(structuredRefPathKey(ref)) &&
       !structuredOriginalRefs.has(ref.original_ref),
@@ -290,7 +407,7 @@ export function parseExistingCodeRefs(sections: any, projectRoot: any = process.
   return [...structuredRefs, ...inlineRefs]
 }
 
-function inferComplexity(plan: any, refs: any) {
+function inferComplexity(plan: unknown, refs: ExistingCodeRef[]): PlanComplexity {
   const refCount = refs.length
   const text = String(plan)
   const sectionCount = (text.match(/^#{1,6}\s+/gm) || []).length
@@ -355,11 +472,12 @@ function inferComplexity(plan: any, refs: any) {
   }
 }
 
-export function parseCodeBlocks(plan: any) {
-  const blocks: any[] = []
+export function parseCodeBlocks(plan: unknown): CodeBlock[] {
+  const text = String(plan)
+  const blocks: CodeBlock[] = []
   const pattern = /```([^\n`]*)\n([\s\S]*?)```/g
-  let match
-  while ((match = pattern.exec(String(plan))) !== null) {
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
     const code = match[2]
     blocks.push({
       index: blocks.length + 1,
@@ -368,7 +486,7 @@ export function parseCodeBlocks(plan: any) {
         .split(/\s+/)[0]
         .toLowerCase(),
       code,
-      start_line: lineNumberAt(plan, match.index),
+      start_line: lineNumberAt(text, match.index),
       line_count: code.endsWith('\n') ? code.split('\n').length - 1 : code.split('\n').length,
       char_count: code.length,
     })
@@ -376,32 +494,30 @@ export function parseCodeBlocks(plan: any) {
   return blocks
 }
 
-function precedingHeading(sections: any, line: any) {
+function precedingHeading(sections: PlanSection[], line: number): string {
   return (
-    sections
-      .filter((section: any) => section.start_line <= line)
-      .sort((a: any, b: any) => b.start_line - a.start_line)[0]?.title || ''
+    sections.filter((section) => section.start_line <= line).sort((a, b) => b.start_line - a.start_line)[0]?.title || ''
   )
 }
 
-function stringLeafCount(value: any): number {
+function stringLeafCount(value: unknown): number {
   if (typeof value === 'string') {
     return 1
   }
   if (Array.isArray(value)) {
-    return value.reduce((sum: any, item: any) => sum + stringLeafCount(item), 0)
+    return value.reduce((sum: number, item: unknown) => sum + stringLeafCount(item), 0)
   }
   if (value && typeof value === 'object') {
-    return Object.values(value as Record<string, any>).reduce(
-      (sum: number, item: any) => sum + stringLeafCount(item),
+    return Object.values(value as Record<string, unknown>).reduce(
+      (sum: number, item: unknown) => sum + stringLeafCount(item),
       0,
     )
   }
   return 0
 }
 
-function containsArrowOperator(text: any) {
-  let quote = null
+function containsArrowOperator(text: string): boolean {
+  let quote: string | null = null
   let lineComment = false
   let blockComment = false
   for (let index = 0; index < text.length; index += 1) {
@@ -449,9 +565,9 @@ function containsArrowOperator(text: any) {
   return false
 }
 
-function hasArrowFunctionAssignment(code: any) {
+function hasArrowFunctionAssignment(code: string): boolean {
   const declaration = /(?:^|\n)\s*(?:export\s+)?(?:const|let|var)\s+[A-Za-z_$][\w$]*/g
-  let match
+  let match: RegExpExecArray | null
   while ((match = declaration.exec(code)) !== null) {
     const remainder = code.slice(declaration.lastIndex)
     let assignmentIndex = -1
@@ -478,7 +594,7 @@ function hasArrowFunctionAssignment(code: any) {
   return false
 }
 
-export function classifyCodeBlock(block: any, sectionTitle: any) {
+export function classifyCodeBlock(block: CodeBlock, sectionTitle: string): CodeBlockClassification {
   const language = block.language
   const code = block.code
   const lines = block.line_count
@@ -491,13 +607,13 @@ export function classifyCodeBlock(block: any, sectionTitle: any) {
   }
   const nonEmpty = code
     .split('\n')
-    .map((line: any) => line.trim())
+    .map((line) => line.trim())
     .filter(Boolean)
   const looksLikeTree =
     lines <= 20 &&
     nonEmpty.length > 0 &&
     nonEmpty.every(
-      (line: any) =>
+      (line) =>
         /^[│├└─\s]+[A-Za-z0-9_.@/-]+$/.test(line) ||
         /^[A-Za-z0-9_.@-]+\/?$/.test(line) ||
         /^[-*]\s+[A-Za-z0-9_.@/-]+$/.test(line),
@@ -579,9 +695,9 @@ export function classifyCodeBlock(block: any, sectionTitle: any) {
   }
 }
 
-function validateExistingCodeRefs(refs: any, projectRoot: any, errors: any) {
+function validateExistingCodeRefs(refs: ExistingCodeRef[], projectRoot: string, errors: LintIssue[]): void {
   const absoluteRoot = path.resolve(projectRoot)
-  for (const ref of refs.filter((item: any) => item.source !== 'inline')) {
+  for (const ref of refs.filter((item) => item.source !== 'inline')) {
     if (!ref.path || !ref.lines || !ref.symbol || !ref.reason) {
       errors.push(
         issue('existing_ref_incomplete', 'Existing Code Ref 必须包含 path、lines、symbol 和 reason', {
@@ -665,7 +781,7 @@ function validateExistingCodeRefs(refs: any, projectRoot: any, errors: any) {
   }
 }
 
-export function lintPlan({ plan, projectRoot }: any) {
+export function lintPlan({ plan, projectRoot }: LintPlanOptions): LintPlanResult {
   const text = String(plan)
   const sections = parseSections(text)
   const explicitMappings = explicitSectionMappings(text)
@@ -675,8 +791,8 @@ export function lintPlan({ plan, projectRoot }: any) {
   const lineBudget = LINE_BUDGETS[complexity.level]
   const codeBlocks = parseCodeBlocks(text)
   const maxCodeBlocks = Math.ceil(totalLines / 100) * 2
-  const errors: any[] = []
-  const warnings: any[] = []
+  const errors: LintIssue[] = []
+  const warnings: LintIssue[] = []
 
   for (const group of REQUIRED_SECTION_GROUPS) {
     if (!hasRequiredSection(sections, explicitMappings, group)) {
@@ -686,7 +802,7 @@ export function lintPlan({ plan, projectRoot }: any) {
 
   let implementationCodeBlocks = 0
   let implementationCodeLines = 0
-  const codeBlockMetrics = codeBlocks.map((block: any) => {
+  const codeBlockMetrics = codeBlocks.map((block): CodeBlockMetric => {
     const sectionTitle = precedingHeading(sections, block.start_line)
     const classification = classifyCodeBlock(block, sectionTitle)
     if (!classification.allowed && classification.reliable) {
@@ -751,7 +867,7 @@ export function lintPlan({ plan, projectRoot }: any) {
   }
 
   for (const section of sections) {
-    const allowed = UNCERTAINTY_ALLOWED_SECTIONS.some((pattern: any) => pattern.test(section.title))
+    const allowed = UNCERTAINTY_ALLOWED_SECTIONS.some((pattern) => pattern.test(section.title))
     if (allowed) {
       continue
     }
@@ -786,8 +902,8 @@ export function lintPlan({ plan, projectRoot }: any) {
       total_chars: text.length,
       section_count: Math.max(0, sections.length - 1),
       existing_code_ref_count: refs.length,
-      structured_existing_code_ref_count: refs.filter((item: any) => item.source !== 'inline').length,
-      inline_existing_code_ref_count: refs.filter((item: any) => item.source === 'inline').length,
+      structured_existing_code_ref_count: refs.filter((item) => item.source !== 'inline').length,
+      inline_existing_code_ref_count: refs.filter((item) => item.source === 'inline').length,
       code_block_count: codeBlocks.length,
       implementation_code_blocks: implementationCodeBlocks,
       implementation_code_lines: implementationCodeLines,
