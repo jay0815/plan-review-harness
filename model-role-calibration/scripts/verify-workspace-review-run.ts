@@ -12,7 +12,152 @@ const JSON_VALIDATOR_TOOL = 'mcp__json_validator__validate_json_output'
 const INCOMPLETE_STATUSES = new Set(['queued', 'running'])
 const DEFAULT_WORKSPACE_RUNS_DIR = path.join(os.homedir(), '.claude', 'plan-review-harness', 'mcp', 'workspace-runs')
 
-export function resolveRunDir(args: any, options: any = {}) {
+type ParsedArgsLike = Record<string, string | true | undefined>
+type CheckStatus = 'pass' | 'warn' | 'pending' | 'fail'
+type JsonRecord = Record<string, unknown>
+
+interface ResolveRunDirOptions {
+  workspaceRunsDir?: string
+}
+
+interface StateArtifact {
+  run_id?: string
+  status?: string
+  project_root?: string
+  started_at?: string
+  finished_at?: string
+  roles?: string[]
+  infra_errors?: InfraError[]
+  error?: string
+}
+
+interface ReportArtifact {
+  outcome?: {
+    status?: string
+    message?: string
+  }
+  infra_errors?: InfraError[]
+  fact_check?: {
+    summary?: JsonRecord
+  }
+}
+
+interface CompactionArtifact extends JsonRecord {
+  original_chars?: number
+  compacted_chars?: number
+  saved_chars?: number
+}
+
+interface ResolvedExecutionRecord {
+  latest_status?: string | null
+  attempt_history?: unknown[]
+}
+
+interface RunManifest {
+  version?: number
+  run_id?: string
+  status?: string
+  declared_runtime?: {
+    route_profile?: unknown
+    prompt_set_hash?: string
+    schema_set_hash?: string
+  }
+  resolved_execution?: Record<string, ResolvedExecutionRecord | undefined>
+}
+
+interface ReadBoundary {
+  mode?: string
+  file_count?: number
+}
+
+interface FactCheckSummary {
+  strictness_signal?: string
+  status_counts?: unknown
+}
+
+interface UsageSummary {
+  max_input_tokens?: number | null
+}
+
+interface RoleSummary {
+  role: string
+  model: string | null
+  status: string | null
+  elapsed_ms: number | null
+  tools: string[]
+  tool_counts: Record<string, number>
+  read_files: string[]
+  out_of_boundary_read_files: string[]
+  failed_out_of_boundary_read_files: string[]
+  read_boundary: ReadBoundary | null
+  fact_check_summary: FactCheckSummary | null
+  usage: UsageSummary | null
+}
+
+interface InspectSummary {
+  run_id: string
+  run_dir: string
+  roles: RoleSummary[]
+}
+
+interface InfraError {
+  role?: string
+  model?: string
+  type?: string
+  message?: string
+}
+
+interface CheckResult {
+  id: string
+  status: CheckStatus
+  message: string
+  details?: unknown
+}
+
+interface RoleTiming {
+  model: string | null
+  elapsed_ms: number | null
+  max_input_tokens: number | null
+  read_count: number
+  out_of_boundary_read_count: number
+  failed_out_of_boundary_read_count: number
+}
+
+interface VerifyResult {
+  run_id: string
+  run_dir: string
+  run_status: string | null
+  ready: boolean
+  project_root: string | null
+  logs: {
+    execution_log: string
+    runner_stdout_log: string
+    runner_stderr_log: string
+  }
+  infra_errors: InfraError[]
+  outcome: ReportArtifact['outcome'] | null
+  valid: boolean | null
+  counts: Record<CheckStatus, number>
+  timings: {
+    total_elapsed_ms: number | null
+    roles: Record<string, RoleTiming>
+  }
+  plan_compaction: CompactionArtifact | null
+  checks: CheckResult[]
+}
+
+interface BuildResultOptions {
+  absoluteRunDir: string
+  state: StateArtifact | null
+  report: ReportArtifact | null
+  inspected: InspectSummary
+  compaction: CompactionArtifact | null
+  totalElapsedMs: number | null
+  results: CheckResult[]
+  ready: boolean
+}
+
+export function resolveRunDir(args: ParsedArgsLike, options: ResolveRunDirOptions = {}): string {
   const hasRunDir = args['run-dir'] && args['run-dir'] !== true
   const hasRunId = args['run-id'] && args['run-id'] !== true
   if (hasRunDir && hasRunId) {
@@ -31,18 +176,18 @@ export function resolveRunDir(args: any, options: any = {}) {
   throw new Error('Missing required argument: --run-id or --run-dir.')
 }
 
-function readJsonIfExists(file: any) {
+function readJsonIfExists<T>(file: string): T | null {
   if (!fs.existsSync(file)) {
     return null
   }
-  return JSON.parse(fs.readFileSync(file, 'utf8'))
+  return JSON.parse(fs.readFileSync(file, 'utf8')) as T
 }
 
-function readTextIfExists(file: any) {
+function readTextIfExists(file: string): string {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
 }
 
-function durationMs(start: any, end: any) {
+function durationMs(start: string | null | undefined, end: string | null | undefined): number | null {
   if (!start || !end) {
     return null
   }
@@ -50,20 +195,26 @@ function durationMs(start: any, end: any) {
   return Number.isFinite(value) ? value : null
 }
 
-function roleByName(inspectSummary: any) {
-  return Object.fromEntries(inspectSummary.roles.map((role: any) => [role.role, role]))
+function roleByName(inspectSummary: InspectSummary): Record<string, RoleSummary | undefined> {
+  return Object.fromEntries(inspectSummary.roles.map((role) => [role.role, role]))
 }
 
-function expectedExecutionRoles(state: any) {
+function expectedExecutionRoles(state: StateArtifact | null): string[] {
   const reviewers = Array.isArray(state?.roles) && state.roles.length ? state.roles : REVIEWER_ROLES
   return [...new Set([...reviewers, 'fact_check', 'synthesis'])]
 }
 
-function metadataStatus(runDir: any, role: any) {
-  return readJsonIfExists(path.join(runDir, 'roles', role, 'metadata.json'))?.status || null
+function metadataStatus(runDir: string, role: string): string | null {
+  return readJsonIfExists<{ status?: string }>(path.join(runDir, 'roles', role, 'metadata.json'))?.status || null
 }
 
-function check(results: any, id: any, status: any, message: any, details: any = null) {
+function check(
+  results: CheckResult[],
+  id: string,
+  status: CheckStatus,
+  message: string,
+  details: unknown = null,
+): void {
   results.push({
     id,
     status,
@@ -72,25 +223,25 @@ function check(results: any, id: any, status: any, message: any, details: any = 
   })
 }
 
-function pass(results: any, id: any, message: any, details: any = null) {
+function pass(results: CheckResult[], id: string, message: string, details: unknown = null): void {
   check(results, id, 'pass', message, details)
 }
 
-function warn(results: any, id: any, message: any, details: any = null) {
+function warn(results: CheckResult[], id: string, message: string, details: unknown = null): void {
   check(results, id, 'warn', message, details)
 }
 
-function pending(results: any, id: any, message: any, details: any = null) {
+function pending(results: CheckResult[], id: string, message: string, details: unknown = null): void {
   check(results, id, 'pending', message, details)
 }
 
-function fail(results: any, id: any, message: any, details: any = null) {
+function fail(results: CheckResult[], id: string, message: string, details: unknown = null): void {
   check(results, id, 'fail', message, details)
 }
 
-function summarizeRoles(inspected: any) {
+function summarizeRoles(inspected: InspectSummary): Record<string, RoleTiming> {
   return Object.fromEntries(
-    inspected.roles.map((role: any) => [
+    inspected.roles.map((role) => [
       role.role,
       {
         model: role.model,
@@ -104,7 +255,7 @@ function summarizeRoles(inspected: any) {
   )
 }
 
-function inspectIfReady(runDir: any) {
+function inspectIfReady(runDir: string): InspectSummary {
   const rolesDir = path.join(runDir, 'roles')
   if (!fs.existsSync(rolesDir)) {
     return {
@@ -113,10 +264,10 @@ function inspectIfReady(runDir: any) {
       roles: [],
     }
   }
-  return inspect(runDir)
+  return inspect(runDir) as InspectSummary
 }
 
-function infraErrorsFrom(report: any, state: any) {
+function infraErrorsFrom(report: ReportArtifact | null, state: StateArtifact | null): InfraError[] {
   if (Array.isArray(report?.infra_errors)) {
     return report.infra_errors
   }
@@ -138,7 +289,7 @@ function infraErrorsFrom(report: any, state: any) {
   return []
 }
 
-function shellQuote(value: any) {
+function shellQuote(value: string): string {
   const text = String(value)
   if (/^[A-Za-z0-9_./:-]+$/.test(text)) {
     return text
@@ -146,20 +297,29 @@ function shellQuote(value: any) {
   return `'${text.replace(/'/g, "'\\''")}'`
 }
 
-function shellCommand(parts: any) {
+function shellCommand(parts: string[]): string {
   return parts.map(shellQuote).join(' ')
 }
 
-function backfillManifestCommand(runDir: any) {
+function backfillManifestCommand(runDir: string): string {
   return shellCommand(['node', ...runtimeNodeScriptArgs('backfill-workspace-run-manifest', '--run-dir', runDir)])
 }
 
-function buildResult({ absoluteRunDir, state, report, inspected, compaction, totalElapsedMs, results, ready }: any) {
+function buildResult({
+  absoluteRunDir,
+  state,
+  report,
+  inspected,
+  compaction,
+  totalElapsedMs,
+  results,
+  ready,
+}: BuildResultOptions): VerifyResult {
   const counts = {
-    pass: results.filter((item: any) => item.status === 'pass').length,
-    warn: results.filter((item: any) => item.status === 'warn').length,
-    fail: results.filter((item: any) => item.status === 'fail').length,
-    pending: results.filter((item: any) => item.status === 'pending').length,
+    pass: results.filter((item) => item.status === 'pass').length,
+    warn: results.filter((item) => item.status === 'warn').length,
+    fail: results.filter((item) => item.status === 'fail').length,
+    pending: results.filter((item) => item.status === 'pending').length,
   }
   return {
     run_id: path.basename(absoluteRunDir),
@@ -185,19 +345,19 @@ function buildResult({ absoluteRunDir, state, report, inspected, compaction, tot
   }
 }
 
-export function verifyRun(runDir: any) {
+export function verifyRun(runDir: string): VerifyResult {
   const absoluteRunDir = path.resolve(runDir)
-  const results: any[] = []
-  const state = readJsonIfExists(path.join(absoluteRunDir, 'state.json'))
-  const report = readJsonIfExists(path.join(absoluteRunDir, 'report.json'))
-  const compaction = readJsonIfExists(path.join(absoluteRunDir, 'plan-compaction.json'))
-  const manifest = readJsonIfExists(path.join(absoluteRunDir, 'run-manifest.json'))
+  const results: CheckResult[] = []
+  const state = readJsonIfExists<StateArtifact>(path.join(absoluteRunDir, 'state.json'))
+  const report = readJsonIfExists<ReportArtifact>(path.join(absoluteRunDir, 'report.json'))
+  const compaction = readJsonIfExists<CompactionArtifact>(path.join(absoluteRunDir, 'plan-compaction.json'))
+  const manifest = readJsonIfExists<RunManifest>(path.join(absoluteRunDir, 'run-manifest.json'))
   const executionLog = readTextIfExists(path.join(absoluteRunDir, 'execution.log'))
   const inspected = inspectIfReady(absoluteRunDir)
   const roles = roleByName(inspected)
   const runStatus = state?.status || null
   const ready = runStatus === 'completed'
-  const incomplete = INCOMPLETE_STATUSES.has(runStatus)
+  const incomplete = typeof runStatus === 'string' && INCOMPLETE_STATUSES.has(runStatus)
 
   if (ready) {
     pass(results, 'state.completed', 'run 状态为 completed')
@@ -248,18 +408,18 @@ export function verifyRun(runDir: any) {
     if (ready) {
       const resolvedExecution = manifest.resolved_execution || {}
       const expectedRoles = expectedExecutionRoles(state)
-      const missingRoles = expectedRoles.filter((role: any) => !resolvedExecution[role])
-      const emptyAttempts = expectedRoles.filter((role: any) => {
+      const missingRoles = expectedRoles.filter((role) => !resolvedExecution[role])
+      const emptyAttempts = expectedRoles.filter((role) => {
         const attempts = resolvedExecution[role]?.attempt_history
         return resolvedExecution[role] && (!Array.isArray(attempts) || attempts.length === 0)
       })
       const statusMismatches = expectedRoles
-        .map((role: any) => ({
+        .map((role) => ({
           role,
           manifest_status: resolvedExecution[role]?.latest_status || null,
           metadata_status: metadataStatus(absoluteRunDir, role),
         }))
-        .filter((item: any) => item.manifest_status !== item.metadata_status)
+        .filter((item) => item.manifest_status !== item.metadata_status)
       if (missingRoles.length || emptyAttempts.length || statusMismatches.length) {
         fail(results, 'manifest.resolved_execution', 'manifest resolved execution 与角色产物不一致', {
           expected_roles: expectedRoles,
@@ -387,10 +547,10 @@ export function verifyRun(runDir: any) {
       })
     }
     const grantedNonReadTools = (factCheck.tools || []).filter(
-      (name: any) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL,
+      (name) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL,
     )
     const usedToolNames = Object.keys(factCheck.tool_counts || {})
-    const usedNonReadTools = usedToolNames.filter((name: any) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL)
+    const usedNonReadTools = usedToolNames.filter((name) => name !== 'Read' && name !== JSON_VALIDATOR_TOOL)
     if (grantedNonReadTools.length === 0 && usedNonReadTools.length === 0) {
       pass(results, 'fact_check.read_only', 'Fact Check 只获得并使用 Read 工具', {
         tools: factCheck.tools,
@@ -430,7 +590,8 @@ export function verifyRun(runDir: any) {
     }
     if (factCheck.fact_check_summary) {
       pass(results, 'fact_check.summary_present', 'Fact Check strictness summary 存在', factCheck.fact_check_summary)
-      if (['all_verified', 'no_issues_checked'].includes(factCheck.fact_check_summary.strictness_signal)) {
+      const strictnessSignal = factCheck.fact_check_summary.strictness_signal || ''
+      if (['all_verified', 'no_issues_checked'].includes(strictnessSignal)) {
         warn(
           results,
           'fact_check.strictness_signal',
@@ -465,9 +626,9 @@ export function verifyRun(runDir: any) {
         status: synthesis.status,
       })
     }
-    const synthesisProjectTools = (synthesis.tools || []).filter((name: any) => name !== JSON_VALIDATOR_TOOL)
+    const synthesisProjectTools = (synthesis.tools || []).filter((name) => name !== JSON_VALIDATOR_TOOL)
     const synthesisProjectToolCalls = Object.keys(synthesis.tool_counts || {}).filter(
-      (name: any) => name !== JSON_VALIDATOR_TOOL,
+      (name) => name !== JSON_VALIDATOR_TOOL,
     )
     if (synthesisProjectTools.length === 0 && synthesisProjectToolCalls.length === 0) {
       pass(results, 'synthesis.no_tools', 'Synthesis 未获得工程读取工具，仅允许 JSON validator')
@@ -514,8 +675,8 @@ export function verifyRun(runDir: any) {
   })
 }
 
-function formatDuration(ms: any) {
-  if (!Number.isFinite(ms)) {
+function formatDuration(ms: number | null | undefined): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) {
     return '-'
   }
   const seconds = Math.round(ms / 1000)
@@ -524,7 +685,7 @@ function formatDuration(ms: any) {
   return minutes ? `${minutes}m${String(rest).padStart(2, '0')}s` : `${rest}s`
 }
 
-function printMarkdown(result: any) {
+function printMarkdown(result: VerifyResult): void {
   console.log(`# Plan Review Run Verification: ${result.run_id}`)
   console.log('')
   console.log(`Run dir: ${result.run_dir}`)
@@ -556,7 +717,7 @@ function printMarkdown(result: any) {
   console.log('')
   console.log('| Role | Model | Elapsed | Reads | Out-of-boundary | Max input tokens |')
   console.log('|---|---|---:|---:|---:|---:|')
-  for (const [role, value] of Object.entries(result.timings.roles) as [string, any][]) {
+  for (const [role, value] of Object.entries(result.timings.roles)) {
     console.log(
       [
         `| ${role}`,
@@ -588,8 +749,8 @@ function main() {
 if (isMainScript(__filename)) {
   try {
     main()
-  } catch (error: any) {
-    console.error(error.stack || error.message)
+  } catch (error: unknown) {
+    console.error(error instanceof Error ? error.stack || error.message : String(error))
     process.exitCode = 1
   }
 }
