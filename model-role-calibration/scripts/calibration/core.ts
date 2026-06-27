@@ -12,20 +12,20 @@ export function parseList(value: ListOptionValue, fallback: string[] | null = nu
     ...new Set(
       String(value)
         .split(',')
-        .map((item: any) => item.trim())
+        .map((item) => item.trim())
         .filter(Boolean),
     ),
   ]
 }
 
-export function compactUtcTimestamp(date: any = new Date()): string {
+export function compactUtcTimestamp(date: Date = new Date()): string {
   return date
     .toISOString()
     .replace(/[-:]/g, '')
     .replace(/\.\d{3}Z$/, 'Z')
 }
 
-export function uniqueRunId(prefix: string, rootDir: string, date: any = new Date()): string {
+export function uniqueRunId(prefix: string, rootDir: string, date: Date = new Date()): string {
   const base = `${prefix}-${compactUtcTimestamp(date)}`
   let run = base
   let suffix = 2
