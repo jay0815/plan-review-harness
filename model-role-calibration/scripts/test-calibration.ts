@@ -9,16 +9,39 @@ import {
   DEFAULT_CONCURRENCY as ROLE_DEFAULT_CONCURRENCY,
   RoleCalibrationExecutor,
 } from './calibration/role-executor.js'
-import { evaluationSchemaFile, validateEvaluationScore as validateEvaluationScoreTyped } from './evaluation-lib.js'
+import { evaluationSchemaFile, validateEvaluationScore } from './evaluation-lib.js'
 import { ROOT, loadConfig, loadCaseInput, schemaForProbe } from './lib.js'
 import { DEFAULT_CASE } from './run-calibration.js'
 import { MAX_CONCURRENCY, mergeRequestedJobs } from './run-agent-pool.js'
 import { buildCliArgs, parseAssistantOutput, parseJsonEnvelope } from './run-model.js'
-import { roleRecommendation as roleRecommendationTyped } from './summarize-results.js'
+import { roleRecommendation } from './summarize-results.js'
 import { validateJsonText } from './json-validator-mcp.js'
 
-const validateEvaluationScore = validateEvaluationScoreTyped as unknown as (score: any, expected: any) => any
-const roleRecommendation = roleRecommendationTyped as unknown as (probe: string, modelStats: any[], config: any) => any
+type Probe = 'planner' | 'risk' | 'architecture' | 'execution' | 'rebuttal' | 'synthesis'
+
+interface RecommendationConfig {
+  minimum_average_score: number
+  minimum_case_score: number
+  maximum_standard_deviation: number
+  minimum_comparable_models: number
+}
+
+interface CalibrationConfig {
+  primary_cases: string[]
+  models: string[]
+  role_recommendation: RecommendationConfig
+}
+
+interface ModelStatsFixture {
+  model: string
+  byProbeCase: Partial<Record<Probe, Record<string, number>>>
+  suggested_roles: string[]
+  unsuitable_roles: string[]
+  failure_modes: string[]
+  failure_modes_by_probe: Partial<Record<Probe, string[]>>
+}
+
+type EvaluationScoreFixture = Parameters<typeof validateEvaluationScore>[0]
 
 const EXECUTION_BOUNDARIES = [
   'main_path',
@@ -36,7 +59,7 @@ const EXECUTION_BOUNDARIES = [
 ]
 
 function executionCoverage() {
-  return EXECUTION_BOUNDARIES.map((boundary: any) => ({
+  return EXECUTION_BOUNDARIES.map((boundary) => ({
     boundary,
     status: 'covered',
     evidence_basis: 'plan_text',
@@ -44,12 +67,14 @@ function executionCoverage() {
   }))
 }
 
-function modelStats(model: any, plannerCases: any) {
+function modelStats(model: string, plannerCases: Record<string, number>): ModelStatsFixture {
   return {
     model,
     byProbeCase: {
       planner: plannerCases,
     },
+    suggested_roles: [],
+    unsuitable_roles: [],
     failure_modes: [],
     failure_modes_by_probe: {
       planner: [],
@@ -57,8 +82,12 @@ function modelStats(model: any, plannerCases: any) {
   }
 }
 
+function assertPresent<T>(value: T): asserts value is NonNullable<T> {
+  assert(value)
+}
+
 function main() {
-  const config = loadConfig<any>()
+  const config = loadConfig<CalibrationConfig>()
   const [caseA, caseB, caseC] = config.primary_cases
 
   assert.equal(MAX_CONCURRENCY, 3)
@@ -97,7 +126,7 @@ function main() {
     ).stage,
     'schema',
   )
-  const evaluationScore = {
+  const evaluationScore: EvaluationScoreFixture = {
     case_id: 'synthetic/event-reporting',
     model: 'kimi',
     probe: 'risk',
@@ -109,18 +138,13 @@ function main() {
       false_positive_cost: 4,
     },
     total: 20,
-    dimension_assessments: Object.fromEntries(
-      ['hit_rate', 'contract_closure', 'actionability', 'evidence_discipline', 'false_positive_cost'].map(
-        (dimension: any) => [
-          dimension,
-          {
-            score: 4,
-            rationale: '测试',
-            evidence: [],
-          },
-        ],
-      ),
-    ),
+    dimension_assessments: {
+      hit_rate: { score: 4, rationale: '测试', evidence: [] },
+      contract_closure: { score: 4, rationale: '测试', evidence: [] },
+      actionability: { score: 4, rationale: '测试', evidence: [] },
+      evidence_discipline: { score: 4, rationale: '测试', evidence: [] },
+      false_positive_cost: { score: 4, rationale: '测试', evidence: [] },
+    },
     matched_known_issues: [],
     missed_known_issues: [],
     valuable_new_findings: [],
@@ -233,6 +257,7 @@ function main() {
   )
 
   const singleCase = roleRecommendation('planner', [modelStats('kimi', { [caseA]: 25 })], config)
+  assertPresent(singleCase)
   assert.equal(singleCase.status, 'insufficient_coverage')
   assert.equal(singleCase.recommended, null)
   assert.equal(singleCase.comparable_models, 0)
@@ -245,6 +270,7 @@ function main() {
     ],
     config,
   )
+  assertPresent(oneCompleteModel)
   assert.equal(oneCompleteModel.status, 'insufficient_coverage')
   assert.equal(oneCompleteModel.comparable_models, 1)
 
@@ -256,12 +282,16 @@ function main() {
     ],
     config,
   )
+  assertPresent(comparableModels)
+  assertPresent(comparableModels.recommended_stability)
   assert.equal(comparableModels.status, 'candidate')
   assert.equal(comparableModels.recommended, 'kimi')
   assert.equal(comparableModels.comparable_models, 2)
   assert.equal(comparableModels.recommended_stability.minimum, 23)
   assert.equal(comparableModels.recommended_stability.maximum, 24)
-  assert(comparableModels.recommended_stability.standard_deviation > 0)
+  const comparableStandardDeviation = comparableModels.recommended_stability.standard_deviation
+  assertPresent(comparableStandardDeviation)
+  assert(comparableStandardDeviation > 0)
 
   const stableFallback = roleRecommendation(
     'planner',
@@ -271,12 +301,16 @@ function main() {
     ],
     config,
   )
+  assertPresent(stableFallback)
+  assertPresent(stableFallback.top_stability)
   assert.equal(stableFallback.status, 'candidate')
   assert.equal(stableFallback.top_model, 'kimi')
   assert.equal(stableFallback.recommended, 'deepseek')
   assert.equal(stableFallback.top_stability.minimum, 18)
   assert.equal(stableFallback.top_stability.maximum, 25)
-  assert(stableFallback.top_stability.standard_deviation > config.role_recommendation.maximum_standard_deviation)
+  const fallbackStandardDeviation = stableFallback.top_stability.standard_deviation
+  assertPresent(fallbackStandardDeviation)
+  assert(fallbackStandardDeviation > config.role_recommendation.maximum_standard_deviation)
   assert.equal(stableFallback.backup, null)
 
   const unstable = roleRecommendation(
@@ -287,6 +321,7 @@ function main() {
     ],
     config,
   )
+  assertPresent(unstable)
   assert.equal(unstable.status, 'unstable')
   assert.equal(unstable.recommended, null)
   assert.equal(unstable.top_model, 'kimi')
@@ -300,6 +335,7 @@ function main() {
     ],
     config,
   )
+  assertPresent(belowThreshold)
   assert.equal(belowThreshold.status, 'below_quality_threshold')
   assert.equal(belowThreshold.recommended, null)
   assert.equal(belowThreshold.top_model, 'kimi')
@@ -479,7 +515,7 @@ function main() {
   assert.deepEqual(wrappedFactCheckEnvelope.output.checked_issues, [])
 
   const largeStream = [
-    ...Array.from({ length: 140 }, (_: any, index: any) =>
+    ...Array.from({ length: 140 }, (_, index) =>
       JSON.stringify({
         type: 'assistant',
         sequence: index,
