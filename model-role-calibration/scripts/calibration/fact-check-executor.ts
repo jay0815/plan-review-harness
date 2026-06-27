@@ -24,7 +24,7 @@ import {
 } from '../workspace-review-lib.js'
 import { ensureDir, parseJsonFile, positiveInteger, readText, slug, writeFileNew, writeGenerated } from './core.js'
 
-type JsonObject = Record<string, any>
+type JsonObject = Record<string, unknown>
 
 interface CalibrationConfig {
   models: string[]
@@ -137,8 +137,8 @@ const renderFactCheckPrompt = renderFactCheckPromptUntyped as (fixture: JsonObje
 const scoreOutput = scoreOutputUntyped as (options: { run: string; caseId: string; model: string }) => ScoreResult
 const summarizeFactCheckRun = summarizeFactCheckRunUntyped as (run: string) => object
 
-const buildFactCheckReadScope = buildFactCheckReadScopeUntyped as (...args: any[]) => unknown
-const copyScopedWorkspace = copyScopedWorkspaceUntyped as (...args: any[]) => unknown
+const buildFactCheckReadScope = buildFactCheckReadScopeUntyped as (...args: unknown[]) => unknown
+const copyScopedWorkspace = copyScopedWorkspaceUntyped as (...args: unknown[]) => unknown
 void buildFactCheckReadScope
 void copyScopedWorkspace
 
@@ -187,6 +187,14 @@ function sha256(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex')
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function promptPaths(run: string, caseId: string): string {
   return path.join(FACT_CHECK_ROOT, 'runs', run, caseId, 'prompts')
 }
@@ -212,9 +220,9 @@ function nextAttempt(paths: ArtifactPaths): AttemptPaths {
   ensureDir(paths.attemptsDir)
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name: any) => /^attempt-(\d+)\.meta\.json$/.exec(name))
-    .filter((match: any): match is RegExpExecArray => Boolean(match))
-    .map((match: any) => Number(match[1]))
+    .map((name) => /^attempt-(\d+)\.meta\.json$/.exec(name))
+    .filter((match): match is RegExpExecArray => Boolean(match))
+    .map((match) => Number(match[1]))
   const number = attempts.length ? Math.max(...attempts) + 1 : 1
   const label = `attempt-${String(number).padStart(3, '0')}`
   return {
@@ -239,15 +247,13 @@ function log(message: string): void {
 
 function renderScopedPrompt(fixture: JsonObject, projectRoot: string, readBoundary: ReadBoundary): string {
   const fileList = readBoundary.files?.length
-    ? readBoundary.files.map((file: any) => `- ${file}`).join('\n')
+    ? readBoundary.files.map((file) => `- ${file}`).join('\n')
     : '- （无可读取工程文件）'
   const blocked = readBoundary.blocked_refs?.length
-    ? ['', '已阻止的外部路径引用：', ...readBoundary.blocked_refs.map((item: any) => `- ${item}`)].join('\n')
+    ? ['', '已阻止的外部路径引用：', ...readBoundary.blocked_refs.map((item) => `- ${item}`)].join('\n')
     : ''
   const skipped = readBoundary.skipped_refs?.length
-    ? ['', '未暴露或不存在的引用：', ...readBoundary.skipped_refs.slice(0, 30).map((item: any) => `- ${item}`)].join(
-        '\n',
-      )
+    ? ['', '未暴露或不存在的引用：', ...readBoundary.skipped_refs.slice(0, 30).map((item) => `- ${item}`)].join('\n')
     : ''
   return [
     '# 工程读取能力',
@@ -279,20 +285,28 @@ function extractValidatorCandidate(stdout: string): ParsedAssistantOutput | null
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     let event: JsonObject
     try {
-      event = JSON.parse(lines[index] as string)
+      const parsed = JSON.parse(lines[index] as string) as unknown
+      if (!isRecord(parsed)) {
+        continue
+      }
+      event = parsed
     } catch {
       continue
     }
-    const content = event.message?.content
+    const message = isRecord(event.message) ? event.message : null
+    const content = message?.content
     if (!Array.isArray(content)) {
       continue
     }
     for (let contentIndex = content.length - 1; contentIndex >= 0; contentIndex -= 1) {
       const block = content[contentIndex]
+      if (!isRecord(block) || !isRecord(block.input)) {
+        continue
+      }
       if (
-        block?.type === 'tool_use' &&
+        block.type === 'tool_use' &&
         block.name === 'mcp__json_validator__validate_json_output' &&
-        typeof block.input?.candidate_text === 'string'
+        typeof block.input.candidate_text === 'string'
       ) {
         try {
           return parseAssistantOutput(block.input.candidate_text, CALIBRATION_PROBE)
@@ -368,7 +382,7 @@ export class FactCheckExecutor {
     return {
       promptDir,
       promptHash: sha256(prompt),
-      prompts: models.map((model: any) => ({
+      prompts: models.map((model) => ({
         model,
         probe: CALIBRATION_PROBE,
         file: path.join(promptDir, `${slug(model)}-fact_check.md`),
@@ -377,7 +391,7 @@ export class FactCheckExecutor {
   }
 
   buildJobs({ run, caseId, models }: { run: string; caseId: string; models: string[] }): FactCheckJob[] {
-    return models.map((model: any) => ({
+    return models.map((model) => ({
       run,
       caseId,
       model,
@@ -501,12 +515,12 @@ export class FactCheckExecutor {
     let parsed: ParsedAssistantOutput
     try {
       parsed = parseAssistantOutput(child.stdout, CALIBRATION_PROBE)
-    } catch (error: any) {
-      metadata.error = error.message
+    } catch (error) {
+      metadata.error = errorMessage(error)
       writeFileNew(attempt.rawTextFile, child.stdout)
       writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n')
       log(`[fail] ${model}: invalid JSON output`)
-      return { model, status: 'failed', error: error.message }
+      return { model, status: 'failed', error: errorMessage(error) }
     }
 
     metadata.status = 'completed'
