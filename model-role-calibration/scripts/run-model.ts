@@ -30,7 +30,141 @@ const CALIBRATION_SYSTEM_PROMPT = [
 ].join(' ')
 const HEARTBEAT_MS = 30000
 
-function extractJsonObjects(text: any): string[] {
+type JsonRecord = Record<string, unknown>
+
+interface OutputCandidate {
+  output: JsonRecord
+  matched: boolean
+}
+
+interface ToolResultCandidate {
+  toolUseId: string
+  result: JsonRecord
+}
+
+interface AttemptFiles {
+  rawJsonFile: string
+  rawTextFile: string
+  resultFile: string
+  metadataFile: string
+  validatorLogFile: string
+}
+
+interface AttemptPaths extends AttemptFiles {
+  number: number
+  label: string
+}
+
+interface DynamicEnvelope extends JsonRecord {
+  structured_output: JsonRecord
+  result?: unknown
+  probe?: unknown
+  type?: unknown
+  is_error?: unknown
+  error?: unknown
+}
+
+type AssistantEnvelope = (DynamicEnvelope | unknown[]) & { length?: number }
+
+interface AgentPaths {
+  outputDir: string
+  resultFile: string
+  rawFile: string
+  metadataFile: string
+  attemptsDir: string
+}
+
+interface CalibrationConfig {
+  models: string[]
+  agent_execution: {
+    timeout_ms: number
+    alias_resolution_timeout_ms: number
+    max_buffer_bytes: number
+  }
+}
+
+interface CliArgsOptions {
+  persistSession: boolean
+  jsonValidator?: boolean
+  run: string
+  model: string
+  probe: string
+  schemaFile?: string
+  validatorLogFile?: string | null
+  attemptLabel?: string
+  tools?: string
+  permissionMode?: string
+  addDir?: string
+}
+
+interface WrapperCommand {
+  command: string
+  args: string[]
+}
+
+interface RunCommandOptions {
+  cwd: string
+  input: string
+  timeoutMs: number
+  killSignal: NodeJS.Signals
+  maxBuffer: number
+  validatorLogFile?: string | null
+  env: NodeJS.ProcessEnv
+}
+
+interface RunCommandResult {
+  stdout: string
+  stderr: string
+  status: number | null
+  signal: NodeJS.Signals | null
+  error: (Error & { code?: string }) | null
+}
+
+interface AttemptMetadata {
+  [key: string]: unknown
+  run: string
+  case_id: string
+  model: string
+  probe: string
+  attempt: number
+  started_at: string
+  finished_at?: string
+  timeout_ms: number
+  timed_out?: boolean
+  exit_code?: number | null
+  signal?: NodeJS.Signals | null
+  command?: string | null
+  command_args?: string[]
+  persist_session?: boolean
+  session_name?: string | null
+  prompt_file: string
+  schema_file: string
+  stderr?: string
+  error?: string | null
+  status?: string
+}
+
+interface ParsedAssistantOutput {
+  envelope: AssistantEnvelope
+  output: JsonRecord
+}
+
+interface ValidatorLogEvent {
+  event?: string
+  valid?: boolean
+  stage?: string
+  error_count?: number
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function extractJsonObjects(text: string): string[] {
   const objects: string[] = []
   let start = -1
   let depth = 0
@@ -73,32 +207,33 @@ function extractJsonObjects(text: any): string[] {
   return objects
 }
 
-function parseJsonEnvelope(stdout: any): any {
+function parseJsonEnvelope<T = DynamicEnvelope>(stdout: unknown): T {
   const text = String(stdout || '').trim()
-  let parseError: any
+  let parseError: unknown
   try {
-    return JSON.parse(text)
-  } catch (error: any) {
+    return JSON.parse(text) as T
+  } catch (error: unknown) {
     parseError = error
     const candidates = extractJsonObjects(text)
-    const parsedCandidates: any[] = []
+    const parsedCandidates: unknown[] = []
     for (const candidate of candidates) {
       try {
         parsedCandidates.push(JSON.parse(candidate))
-      } catch (candidateError: any) {
+      } catch (candidateError: unknown) {
         parseError = candidateError
         // Continue collecting complete stream-json events.
       }
     }
     if (parsedCandidates.length === 1) {
-      return parsedCandidates[0]
+      return parsedCandidates[0] as T
     }
     if (parsedCandidates.length > 1) {
-      return parsedCandidates
+      return parsedCandidates as T
     }
   }
-  const detail = parseError ? `: ${parseError.message}` : ''
-  const match = parseError?.message ? /position (\d+)/.exec(parseError.message) : null
+  const message = parseError instanceof Error ? parseError.message : ''
+  const detail = message ? `: ${message}` : ''
+  const match = message ? /position (\d+)/.exec(message) : null
   const position = match ? Number(match[1]) : null
   const context =
     position !== null && Number.isInteger(position)
@@ -107,8 +242,8 @@ function parseJsonEnvelope(stdout: any): any {
   throw new Error(`Claude Code output does not contain a valid JSON object${detail}${context}`)
 }
 
-function parseOutputValue(value: any) {
-  if (value && typeof value === 'object') {
+function parseOutputValue(value: unknown): unknown {
+  if (isRecord(value) || Array.isArray(value)) {
     return value
   }
   if (typeof value !== 'string') {
@@ -121,12 +256,12 @@ function parseOutputValue(value: any) {
   return parseJsonEnvelope(result)
 }
 
-function findOutputCandidate(value: any, probe: any): any {
-  if (!value || typeof value !== 'object') {
+function findOutputCandidate(value: unknown, probe: string): OutputCandidate | null {
+  if (!isRecord(value) && !Array.isArray(value)) {
     return null
   }
   if (Array.isArray(value)) {
-    let fallback = null
+    let fallback: OutputCandidate | null = null
     for (let index = value.length - 1; index >= 0; index -= 1) {
       const candidate = findOutputCandidate(value[index], probe)
       if (!candidate) {
@@ -141,14 +276,14 @@ function findOutputCandidate(value: any, probe: any): any {
   }
   if (Object.prototype.hasOwnProperty.call(value, 'probe')) {
     return {
-      output: value,
+      output: value as JsonRecord,
       matched: value.probe === probe,
     }
   }
   if (value.structured_output && typeof value.structured_output === 'object') {
     return (
       findOutputCandidate(value.structured_output, probe) || {
-        output: value.structured_output,
+        output: value.structured_output as JsonRecord,
         matched: false,
       }
     )
@@ -159,16 +294,16 @@ function findOutputCandidate(value: any, probe: any): any {
     if (candidate) {
       return candidate
     }
-    if (parsedResult && typeof parsedResult === 'object') {
+    if (isRecord(parsedResult)) {
       return {
         output: parsedResult,
         matched: false,
       }
     }
   }
-  const content = value.message?.content
+  const content = isRecord(value.message) ? value.message.content : undefined
   if (Array.isArray(content)) {
-    let fallback = null
+    let fallback: OutputCandidate | null = null
     for (let index = content.length - 1; index >= 0; index -= 1) {
       const block = content[index]
       if (block?.type !== 'text' || typeof block.text !== 'string') {
@@ -190,30 +325,34 @@ function findOutputCandidate(value: any, probe: any): any {
   return null
 }
 
-function parseToolResultBlock(block: any): any {
-  if (!block || block.type !== 'tool_result' || !block.tool_use_id) {
+function parseToolResultBlock(block: unknown): ToolResultCandidate | null {
+  if (!isRecord(block) || block.type !== 'tool_result' || typeof block.tool_use_id !== 'string') {
     return null
   }
   const content = Array.isArray(block.content)
-    ? block.content.map((item: any) => (typeof item?.text === 'string' ? item.text : '')).join('\n')
+    ? block.content.map((item) => (isRecord(item) && typeof item.text === 'string' ? item.text : '')).join('\n')
     : String(block.content || '')
   if (!content.trim()) {
     return null
   }
   try {
+    const result = parseJsonEnvelope(content)
+    if (!isRecord(result)) {
+      return null
+    }
     return {
       toolUseId: block.tool_use_id,
-      result: parseJsonEnvelope(content),
+      result,
     }
   } catch {
     return null
   }
 }
 
-function validatedToolUseIds(envelope: any) {
-  const ids = new Set()
+function validatedToolUseIds(envelope: unknown[]): Set<string> {
+  const ids = new Set<string>()
   for (const item of envelope) {
-    const content = item?.message?.content
+    const content = isRecord(item) && isRecord(item.message) ? item.message.content : undefined
     if (!Array.isArray(content)) {
       continue
     }
@@ -227,23 +366,27 @@ function validatedToolUseIds(envelope: any) {
   return ids
 }
 
-function findValidatedToolCandidate(envelope: any, probe: any) {
+function findValidatedToolCandidate(envelope: unknown[], probe: string): JsonRecord | null {
   const validIds = validatedToolUseIds(envelope)
   if (!validIds.size) {
     return null
   }
   for (let itemIndex = envelope.length - 1; itemIndex >= 0; itemIndex -= 1) {
-    const content = envelope[itemIndex]?.message?.content
+    const item = envelope[itemIndex]
+    const content = isRecord(item) && isRecord(item.message) ? item.message.content : undefined
     if (!Array.isArray(content)) {
       continue
     }
     for (let blockIndex = content.length - 1; blockIndex >= 0; blockIndex -= 1) {
       const block = content[blockIndex]
       if (
-        block?.type !== 'tool_use' ||
+        !isRecord(block) ||
+        block.type !== 'tool_use' ||
         block.name !== 'mcp__json_validator__validate_json_output' ||
+        typeof block.id !== 'string' ||
         !validIds.has(block.id) ||
-        typeof block.input?.candidate_text !== 'string'
+        !isRecord(block.input) ||
+        typeof block.input.candidate_text !== 'string'
       ) {
         continue
       }
@@ -257,21 +400,21 @@ function findValidatedToolCandidate(envelope: any, probe: any) {
   return null
 }
 
-function parseArrayEnvelope(envelope: any, probe: any): any {
-  let fallback: any = null
-  let parseError: any = null
+function parseArrayEnvelope(envelope: unknown[], probe: string): JsonRecord | null {
+  let fallback: JsonRecord | null = null
+  let parseError: unknown = null
   for (let index = envelope.length - 1; index >= 0; index -= 1) {
     const item = envelope[index]
     if (!item || typeof item !== 'object') {
       continue
     }
-    if (item.type === 'result' && item.is_error) {
-      throw new Error(`Claude Code result is_error: ${item.result || item.error || 'unknown'}`)
+    if (isRecord(item) && item.type === 'result' && item.is_error) {
+      throw new Error(`Claude Code result is_error: ${String(item.result || item.error || 'unknown')}`)
     }
-    let candidate: any = null
+    let candidate: OutputCandidate | null = null
     try {
       candidate = findOutputCandidate(item, probe)
-    } catch (error: any) {
+    } catch (error: unknown) {
       parseError ||= error
       continue
     }
@@ -293,28 +436,28 @@ function parseArrayEnvelope(envelope: any, probe: any): any {
   return null
 }
 
-function parseAssistantOutput(stdout: any, probe: any): any {
-  const envelope = parseJsonEnvelope(stdout)
-  let output
+function parseAssistantOutput(stdout: unknown, probe: string): ParsedAssistantOutput {
+  const envelope = parseJsonEnvelope<AssistantEnvelope>(stdout)
+  let output: unknown
 
   if (Array.isArray(envelope)) {
     output = parseArrayEnvelope(envelope, probe)
-  } else if (envelope?.type === 'result' && envelope.is_error) {
-    throw new Error(`Claude Code result is_error: ${envelope.result || envelope.error || 'unknown'}`)
-  } else if (envelope && typeof envelope === 'object' && envelope.probe) {
+  } else if (isRecord(envelope) && envelope.type === 'result' && envelope.is_error) {
+    throw new Error(`Claude Code result is_error: ${String(envelope.result || envelope.error || 'unknown')}`)
+  } else if (isRecord(envelope) && envelope.probe) {
     output = envelope
-  } else if (envelope && typeof envelope.structured_output === 'object') {
+  } else if (isRecord(envelope) && isRecord(envelope.structured_output)) {
     output = envelope.structured_output
-  } else if (envelope && typeof envelope.result === 'object') {
+  } else if (isRecord(envelope) && isRecord(envelope.result)) {
     output = findOutputCandidate(envelope.result, probe)?.output || envelope.result
-  } else if (envelope && typeof envelope.result === 'string') {
+  } else if (isRecord(envelope) && typeof envelope.result === 'string') {
     const parsedResult = parseOutputValue(envelope.result)
     output = findOutputCandidate(parsedResult, probe)?.output || parsedResult
   } else {
     throw new Error('Claude Code JSON output does not contain result or structured_output')
   }
 
-  if (!output || typeof output !== 'object') {
+  if (!isRecord(output)) {
     throw new Error('Claude Code JSON output does not contain result or structured_output')
   }
   if (output.probe !== probe) {
@@ -323,7 +466,7 @@ function parseAssistantOutput(stdout: any, probe: any): any {
   return { envelope, output }
 }
 
-function resolveWrapperCommand(shell: any, model: any, timeoutMs: any, maxBuffer: any) {
+function resolveWrapperCommand(shell: string, model: string, timeoutMs: number, maxBuffer: number): WrapperCommand {
   const resolver = [
     'alias_value=${aliases[$MODEL]-}',
     'if [[ -z $alias_value ]]; then',
@@ -365,13 +508,13 @@ function resolveWrapperCommand(shell: any, model: any, timeoutMs: any, maxBuffer
   }
 }
 
-function nextAttempt(paths: any) {
+function nextAttempt(paths: AgentPaths): AttemptPaths {
   ensureDir(paths.attemptsDir)
   const attempts = fs
     .readdirSync(paths.attemptsDir)
-    .map((name: any) => /^attempt-(\d+)\.meta\.json$/.exec(name))
-    .filter((match: any): match is RegExpExecArray => Boolean(match))
-    .map((match: any) => Number(match[1]))
+    .map((name) => /^attempt-(\d+)\.meta\.json$/.exec(name))
+    .filter((match): match is RegExpExecArray => Boolean(match))
+    .map((match) => Number(match[1]))
   const number = attempts.length ? Math.max(...attempts) + 1 : 1
   const label = `attempt-${String(number).padStart(3, '0')}`
   return {
@@ -385,7 +528,7 @@ function nextAttempt(paths: any) {
   }
 }
 
-function attemptFiles(paths: any, label: any) {
+function attemptFiles(paths: AgentPaths, label: string): AttemptFiles {
   if (!/^attempt-\d{3}$/.test(label)) {
     throw new Error(`Invalid attempt label "${label}". Expected attempt-001.`)
   }
@@ -398,7 +541,7 @@ function attemptFiles(paths: any, label: any) {
   }
 }
 
-function positiveInteger(value: any, name: any) {
+function positiveInteger(value: unknown, name: string): number {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(`${name} must be a positive integer`)
@@ -406,7 +549,7 @@ function positiveInteger(value: any, name: any) {
   return parsed
 }
 
-function buildCliArgs(wrapperArgs: any, schema: any, options: any) {
+function buildCliArgs(wrapperArgs: string[], schema: unknown, options: CliArgsOptions): string[] {
   const maxTurns = options.jsonValidator ? '4' : '1'
   const tools = options.tools === undefined ? '' : options.tools
   const cliArgs = [
@@ -476,18 +619,18 @@ function buildCliArgs(wrapperArgs: any, schema: any, options: any) {
   return cliArgs
 }
 
-function logProgress(message: any) {
+function logProgress(message: string): void {
   console.error(`[run-model] ${new Date().toISOString()} ${message}`)
 }
 
-function durationLabel(ms: any) {
+function durationLabel(ms: number): string {
   const seconds = Math.floor(ms / 1000)
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
   return minutes ? `${minutes}m${String(remainder).padStart(2, '0')}s` : `${remainder}s`
 }
 
-function validatorLogSummary(file: any) {
+function validatorLogSummary(file: string | null | undefined): string {
   if (!file) {
     return ''
   }
@@ -499,10 +642,11 @@ function validatorLogSummary(file: any) {
     const text = fs.readFileSync(file, 'utf8').trim()
     const lines = text ? text.split(/\n+/) : []
     let calls = 0
-    let last: any = null
+    let last: ValidatorLogEvent | null = null
     for (const line of lines) {
       try {
-        const event = JSON.parse(line)
+        const parsed = JSON.parse(line) as unknown
+        const event = isRecord(parsed) ? (parsed as ValidatorLogEvent) : { event: 'json_value' }
         if (event.event === 'tool_call') {
           calls += 1
         }
@@ -518,12 +662,12 @@ function validatorLogSummary(file: any) {
       lastLabel = last.event
     }
     return `validatorLog=${stats.size}B calls=${calls} last=${lastLabel}`
-  } catch (error: any) {
-    return `validatorLog=error:${error.message}`
+  } catch (error: unknown) {
+    return `validatorLog=error:${errorMessage(error)}`
   }
 }
 
-function summarizeArgs(args: any) {
+function summarizeArgs(args: string[]): string {
   const redactedValueFlags = new Set(['--json-schema', '--system-prompt', '--mcp-config'])
   const summary: string[] = []
   for (let index = 0; index < args.length; index += 1) {
@@ -537,13 +681,13 @@ function summarizeArgs(args: any) {
   return summary.join(' ')
 }
 
-function runCommand(command: any, args: any, options: any): Promise<any> {
-  return new Promise((resolve: any) => {
+function runCommand(command: string, args: string[], options: RunCommandOptions): Promise<RunCommandResult> {
+  return new Promise((resolve) => {
     const stdoutChunks: Buffer[] = []
     const stderrChunks: Buffer[] = []
     let stdoutBytes = 0
     let stderrBytes = 0
-    let error: any = null
+    let error: RunCommandResult['error'] = null
     let killed = false
     const startedAt = Date.now()
 
@@ -571,7 +715,7 @@ function runCommand(command: any, args: any, options: any): Promise<any> {
       child.kill(options.killSignal)
     }, options.timeoutMs)
 
-    function appendChunk(target: any, chunk: any) {
+    function appendChunk(target: 'stdout' | 'stderr', chunk: Buffer): void {
       if (target === 'stdout') {
         stdoutChunks.push(chunk)
         stdoutBytes += chunk.length
@@ -589,14 +733,14 @@ function runCommand(command: any, args: any, options: any): Promise<any> {
       }
     }
 
-    child.stdout.on('data', (chunk: any) => appendChunk('stdout', chunk))
-    child.stderr.on('data', (chunk: any) => appendChunk('stderr', chunk))
-    child.on('error', (spawnError: any) => {
+    child.stdout.on('data', (chunk: Buffer) => appendChunk('stdout', chunk))
+    child.stderr.on('data', (chunk: Buffer) => appendChunk('stderr', chunk))
+    child.on('error', (spawnError: Error) => {
       if (!error) {
         error = spawnError
       }
     })
-    child.on('close', (code: any, signal: any) => {
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       clearInterval(heartbeat)
       clearTimeout(timeout)
       const validatorStatus = validatorLogSummary(options.validatorLogFile)
@@ -614,7 +758,7 @@ function runCommand(command: any, args: any, options: any): Promise<any> {
       })
     })
 
-    child.stdin.on('error', (stdinError: any) => {
+    child.stdin.on('error', (stdinError: NodeJS.ErrnoException) => {
       if (stdinError.code !== 'EPIPE' && !error) {
         error = stdinError
       }
@@ -623,7 +767,13 @@ function runCommand(command: any, args: any, options: any): Promise<any> {
   })
 }
 
-function writeCompletedArtifacts(paths: any, attempt: any, metadata: any, envelope: any, output: any) {
+function writeCompletedArtifacts(
+  paths: AgentPaths,
+  attempt: AttemptPaths,
+  metadata: AttemptMetadata,
+  envelope: unknown,
+  output: JsonRecord,
+): void {
   metadata.status = 'completed'
   metadata.error = null
   writeFileNew(attempt.rawJsonFile, JSON.stringify(envelope, null, 2) + '\n')
@@ -634,7 +784,13 @@ function writeCompletedArtifacts(paths: any, attempt: any, metadata: any, envelo
   writeGenerated(paths.resultFile, JSON.stringify(output, null, 2) + '\n')
 }
 
-function reparseAttempt(paths: any, sourceLabel: any, newAttempt: any, metadataBase: any, probe: any) {
+function reparseAttempt(
+  paths: AgentPaths,
+  sourceLabel: string,
+  newAttempt: AttemptPaths,
+  metadataBase: AttemptMetadata,
+  probe: string,
+): { sourceRawFile: string; output: JsonRecord } {
   const source = attemptFiles(paths, sourceLabel)
   const sourceRawFile = fs.existsSync(source.rawTextFile) ? source.rawTextFile : source.rawJsonFile
   if (!fs.existsSync(sourceRawFile)) {
@@ -642,11 +798,11 @@ function reparseAttempt(paths: any, sourceLabel: any, newAttempt: any, metadataB
   }
   const stdout = readText(sourceRawFile)
   const parsed = parseAssistantOutput(stdout, probe)
-  let sourceMetadata: any = {}
+  let sourceMetadata: Partial<AttemptMetadata> = {}
   if (fs.existsSync(source.metadataFile)) {
-    sourceMetadata = parseJsonFile<any>(source.metadataFile)
+    sourceMetadata = parseJsonFile<Partial<AttemptMetadata>>(source.metadataFile)
   }
-  const metadata = {
+  const metadata: AttemptMetadata = {
     ...metadataBase,
     started_at: sourceMetadata.started_at || metadataBase.started_at,
     finished_at: new Date().toISOString(),
@@ -678,7 +834,7 @@ async function main() {
   assertSafeCaseId(caseId)
   assertProbe(probe)
 
-  const config: any = loadConfig()
+  const config = loadConfig<CalibrationConfig>()
   if (!config.models.includes(model)) {
     throw new Error(`Invalid model "${model}". Expected one of: ${config.models.join(', ')}`)
   }
@@ -699,7 +855,7 @@ async function main() {
   ensureDir(paths.outputDir)
 
   const schemaFile = schemaForProbe(probe)
-  const schema = parseJsonFile<any>(schemaFile)
+  const schema = parseJsonFile<unknown>(schemaFile)
   const executionConfig = config.agent_execution
   const timeoutMs = positiveInteger(
     args['timeout-ms'] && args['timeout-ms'] !== true ? args['timeout-ms'] : executionConfig.timeout_ms,
@@ -714,7 +870,7 @@ async function main() {
     args['reparse-attempt'] && args['reparse-attempt'] !== true ? String(args['reparse-attempt']) : null
   if (reparseAttemptLabel) {
     const attempt = nextAttempt(paths)
-    const metadataBase = {
+    const metadataBase: AttemptMetadata = {
       run,
       case_id: caseId,
       model,
@@ -768,7 +924,7 @@ async function main() {
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-role-calibration-'))
   const startedAt = new Date().toISOString()
-  let child
+  let child: RunCommandResult
   try {
     logProgress(`temporary cwd=${workDir}`)
     child = await runCommand(wrapper.command, cliArgs, {
@@ -792,7 +948,7 @@ async function main() {
   }
 
   const timedOut = child.error?.code === 'ETIMEDOUT'
-  const metadata = {
+  const metadata: AttemptMetadata = {
     run,
     case_id: caseId,
     model,
@@ -828,16 +984,18 @@ async function main() {
     throw new Error(`Model command ${reason} for ${model}/${probe}; retry will create a new attempt`)
   }
 
-  let parsed
+  let parsed: ParsedAssistantOutput
   try {
     parsed = parseAssistantOutput(child.stdout, probe)
-  } catch (error: any) {
-    metadata.error = error.message
+  } catch (error: unknown) {
+    metadata.error = errorMessage(error)
     writeFileNew(attempt.rawTextFile, child.stdout)
     writeFileNew(attempt.metadataFile, JSON.stringify(metadata, null, 2) + '\n')
     logProgress(`raw CLI output saved: ${attempt.rawTextFile}`)
     logProgress(`metadata saved: ${attempt.metadataFile}`)
-    throw new Error(`Invalid model output for ${model}/${probe}: ${error.message}; retry will create a new attempt`)
+    throw new Error(
+      `Invalid model output for ${model}/${probe}: ${errorMessage(error)}; retry will create a new attempt`,
+    )
   }
 
   const { envelope, output } = parsed
@@ -850,8 +1008,8 @@ async function main() {
 }
 
 if (isMainScript(__filename)) {
-  main().catch((error: any) => {
-    console.error(error.stack || error.message)
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.stack || error.message : String(error))
     process.exitCode = 1
   })
 }
