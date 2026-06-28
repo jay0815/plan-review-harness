@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert'
+import { spawnSync } from 'node:child_process'
+import type { SpawnSyncReturns } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { isMainScript } from '../lib/lib.js'
+import { ROOT, isMainScript, nodeScriptArgs, runtimeScript } from '../lib/lib.js'
 import { doctorWorkspaceReviewRun } from '../workspace/doctor-workspace-review-run.js'
 import { resolveRunDir, verifyRun } from '../workspace/verify-workspace-review-run.js'
 import {
@@ -86,6 +88,14 @@ function writeJson(file: string, value: unknown): void {
 function writeJsonl(file: string, events: unknown[]): void {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, events.map((event) => JSON.stringify(event)).join('\n') + '\n', 'utf8')
+}
+
+function runNode(script: string, args: string[]): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
+    cwd: path.resolve(ROOT, '..'),
+    encoding: 'utf8',
+    timeout: 10000,
+  })
 }
 
 function writeRunManifest(runDir: string, runId: string, status: string, roles: string[] = []): void {
@@ -809,6 +819,25 @@ function main() {
     assert.equal(doctor.fact_check.strictness_signal, 'all_verified')
     assert.equal(doctor.synthesis.revision_instruction_count, 0)
     assert(doctor.next_actions.some((item) => item.kind === 'record_regression_sample'))
+
+    const inspectScript = runtimeScript('workspace/inspect-workspace-run')
+    let inspectResult = runNode(inspectScript, ['--run-dir', runDir, '--format', 'json'])
+    assert.equal(inspectResult.status, 0, inspectResult.stderr)
+    const inspectSummary = JSON.parse(inspectResult.stdout) as {
+      run_id: string
+      roles: Array<{ role: string; model: string | null; read_files: string[] }>
+    }
+    assert.equal(inspectSummary.run_id, 'workspace-review-test')
+    assert(inspectSummary.roles.some((item) => item.role === 'risk' && item.model === 'test-model'))
+    assert(inspectSummary.roles.some((item) => item.role === 'fact_check' && item.model === 'deepseek'))
+
+    inspectResult = runNode(inspectScript, ['--run-dir', runDir, '--json'])
+    assert.equal(inspectResult.status, 0, inspectResult.stderr)
+    assert.equal(JSON.parse(inspectResult.stdout).run_id, 'workspace-review-test')
+
+    inspectResult = runNode(inspectScript, ['--run-dir', runDir, '--format', 'xml'])
+    assert.notEqual(inspectResult.status, 0)
+    assert.match(inspectResult.stderr, /Invalid --format "xml"/)
 
     writeJsonl(
       path.join(runDir, 'roles', 'risk', 'stdout.jsonl'),

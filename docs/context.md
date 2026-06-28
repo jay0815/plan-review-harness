@@ -2,11 +2,11 @@
 
 ## 本轮目标
 
-补齐 workspace review reviewer 失败分支的离线 orchestration 回归测试。
+为 workspace review inspect 工具增加机器可读 JSON 输出。
 
 ## 当前状态
 
-- 已完成：架构修复计划已提交；reviewer 失败分支离线回归测试已补齐
+- 已完成：架构修复计划已提交；reviewer 失败分支离线回归测试和 inspect JSON 输出已补齐
 - 进行中：后续 workspace review 可靠性与评审质量提升
 - 总进度：架构修复 13/13 完成
 
@@ -42,7 +42,7 @@
 
 ## 待完成
 
-当前架构修复计划已完成。剩余 backlog 聚焦 workspace review 可观测性和部分重试能力。
+当前架构修复计划已完成。剩余 backlog 聚焦 reviewer 失败时的部分重试能力。
 
 ## 方案文档索引
 
@@ -50,9 +50,8 @@
 
 ## 下一步
 
-1. 为 `scripts/workspace/inspect-workspace-run.ts` 增加 `--format json` 输出
-2. 评估 reviewer 失败时按角色部分重试的实现范围
-3. 进入 reviewer prompt、fact check 覆盖率、synthesis 报告结构化等后续规划
+1. 评估 reviewer 失败时按角色部分重试的实现范围
+2. 进入 reviewer prompt、fact check 覆盖率、synthesis 报告结构化等后续规划
 
 ## 阻塞项
 

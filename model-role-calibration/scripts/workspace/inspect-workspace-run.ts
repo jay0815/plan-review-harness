@@ -99,6 +99,8 @@ type RunSummary = {
   roles: RoleSummary[]
 }
 
+type OutputFormat = 'text' | 'json'
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -369,6 +371,26 @@ function printText(summary: RunSummary): void {
   }
 }
 
+function outputFormat(args: Record<string, unknown>): OutputFormat {
+  const format = args.format
+  if (args.json === true) {
+    if (format && format !== true && format !== 'json') {
+      throw new Error('Use either --json or --format json, not both with different formats')
+    }
+    return 'json'
+  }
+  if (!format) {
+    return 'text'
+  }
+  if (format === true) {
+    throw new Error('Missing value for --format. Expected text or json.')
+  }
+  if (format !== 'text' && format !== 'json') {
+    throw new Error(`Invalid --format "${String(format)}". Expected text or json.`)
+  }
+  return format
+}
+
 export function inspect(runDir: string): RunSummary {
   const absoluteRunDir = path.resolve(runDir)
   const rolesDir = path.join(absoluteRunDir, 'roles')
@@ -390,7 +412,7 @@ export function inspect(runDir: string): RunSummary {
 function main() {
   const args = parseArgs(process.argv)
   const summary = inspect(requireArg(args, 'run-dir'))
-  if (args.json) {
+  if (outputFormat(args) === 'json') {
     console.log(JSON.stringify(summary, null, 2))
   } else {
     printText(summary)

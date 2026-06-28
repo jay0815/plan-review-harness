@@ -450,6 +450,14 @@ node ~/.claude/plan-review-harness/mcp/scripts/workspace/inspect-workspace-run.j
   --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id>
 ```
 
+如需机器可读输出：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/workspace/inspect-workspace-run.js \
+  --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id> \
+  --format json
+```
+
 生成标准化验证报告：
 
 ```bash

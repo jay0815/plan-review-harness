@@ -305,6 +305,14 @@ node ~/.claude/plan-review-harness/mcp/scripts/workspace/inspect-workspace-run.j
 输出会列出每个角色的模型、耗时、prompt/output/stdout 大小、工具调用次数、
 最大输入 token、读取边界、越界读取文件，以及读取过的文件列表。
 
+如需机器可读输出：
+
+```bash
+node ~/.claude/plan-review-harness/mcp/scripts/workspace/inspect-workspace-run.js \
+  --run-dir ~/.claude/plan-review-harness/mcp/workspace-runs/<run-id> \
+  --format json
+```
+
 标准化验证报告使用：
 
 ```bash
