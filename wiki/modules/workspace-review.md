@@ -6,13 +6,13 @@ Workspace Review 负责评审产物的管理、验证和诊断。
 
 ## 核心文件
 
-| 文件                               | 职责                     | 设计原因                 |
-| ---------------------------------- | ------------------------ | ------------------------ |
-| workspace-review-manifest.js       | manifest 读写、backfill  | 需要统一的产物管理接口   |
-| verify-workspace-review-run.js     | 验证 run 完整性          | 自动化检查，减少人工排查 |
-| inspect-workspace-run.js           | 检查 run 详情            | 调试和分析用             |
-| doctor-workspace-review-run.js     | 诊断问题并给建议         | 降低排查门槛             |
-| backfill-workspace-run-manifest.js | 为旧版 run 补写 manifest | 兼容历史产物             |
+| 文件                                                   | 职责                     | 设计原因                 |
+| ------------------------------------------------------ | ------------------------ | ------------------------ |
+| `scripts/lib/workspace-review-manifest.ts`             | manifest 读写、backfill  | 需要统一的产物管理接口   |
+| `scripts/workspace/verify-workspace-review-run.ts`     | 验证 run 完整性          | 自动化检查，减少人工排查 |
+| `scripts/workspace/inspect-workspace-run.ts`           | 检查 run 详情            | 调试和分析用             |
+| `scripts/workspace/doctor-workspace-review-run.ts`     | 诊断问题并给建议         | 降低排查门槛             |
+| `scripts/workspace/backfill-workspace-run-manifest.ts` | 为旧版 run 补写 manifest | 兼容历史产物             |
 
 ## 验证流程
 

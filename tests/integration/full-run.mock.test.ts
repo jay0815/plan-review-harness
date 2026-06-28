@@ -75,13 +75,15 @@ describe('full mock run artifact contract', () => {
         roundLimitReached: false,
       })
 
-      for (const role of ['architecture-reviewer', 'execution-reviewer', 'risk-reviewer', 'reviser', 'regression']) {
+      const reviewerRoles = ['architecture-reviewer', 'execution-reviewer', 'risk-reviewer']
+      const allRoles = [...reviewerRoles, 'reviser', 'regression']
+
+      for (const role of allRoles) {
         const workerDir = path.join(roundDir, 'workers', role)
         expect(existsSync(path.join(workerDir, 'task', 'task.md'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'task', 'input-manifest.json'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'task', 'output-schema.json'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'input'))).toBe(true)
-        expect(existsSync(path.join(workerDir, 'output', 'result.json'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'logs', 'stdout.log'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'logs', 'stderr.log'))).toBe(true)
         expect(existsSync(path.join(workerDir, 'meta', 'run-result.json'))).toBe(true)
@@ -96,7 +98,12 @@ describe('full mock run artifact contract', () => {
           startedAt: expect.any(String),
           finishedAt: expect.any(String),
         })
+      }
 
+      // result.json is written by blindReview for reviewer roles only
+      for (const role of reviewerRoles) {
+        const workerDir = path.join(roundDir, 'workers', role)
+        expect(existsSync(path.join(workerDir, 'output', 'result.json'))).toBe(true)
         const output = await readJson(path.join(workerDir, 'output', 'result.json'))
         expect(output).toMatchObject({
           meta: {

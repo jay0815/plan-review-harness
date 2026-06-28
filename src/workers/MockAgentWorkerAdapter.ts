@@ -55,16 +55,8 @@ export class MockAgentWorkerAdapter implements AgentWorkerAdapter<unknown, unkno
     const startedAt = new Date(0).toISOString()
     const raw = await this.readFixture(fixturePath)
     const output = this.schemaForRole().parse(JSON.parse(raw))
-    await atomicWriteJson(path.join(context.outputDir, 'result.json'), {
-      meta: {
-        runId: context.runId,
-        round: context.round,
-        role: context.role,
-        producedBy: context.role,
-        createdAt: startedAt,
-      },
-      result: output,
-    })
+    // result.json is written by the caller (blindReview or runtime), not the adapter.
+    // The adapter only returns the parsed output; persistence is the caller's responsibility.
     await atomicWriteJson(path.join(context.workerDir, 'meta', 'adapter.json'), {
       kind: this.kind,
       role: this.role,
@@ -105,6 +97,17 @@ export class MockAgentWorkerAdapter implements AgentWorkerAdapter<unknown, unkno
       return await readFile(fixturePath, 'utf8')
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        // Regression fixture fallback: if roundN doesn't exist, try round1
+        if (this.role === 'regression' && /\.round\d+\.json$/.test(fixturePath)) {
+          const fallbackPath = fixturePath.replace(/\.round\d+\.json$/, '.round1.json')
+          if (fallbackPath !== fixturePath) {
+            try {
+              return await readFile(fallbackPath, 'utf8')
+            } catch {
+              // fallback also failed — throw original error
+            }
+          }
+        }
         throw new Error(`Mock fixture not found: ${fixturePath}`)
       }
       throw error

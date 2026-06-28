@@ -32,6 +32,22 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 
 编码前先回答三件事：这是真实问题吗？有没有更简单方案？这个改动会破坏什么？优先实现最小但完整、可测试的方案，不为假设中的未来需求提前扩展。确定性逻辑应放进 TypeScript 实现和 schema 校验，不依赖 prompt 约束。
 
+### 完成后文档更新
+
+- 更新 `docs/backlog.md`（移动到"已完成"，加日期）
+- 更新 `docs/roadmap.md`（如有进度变化）
+- **强制检查 `docs/context.md`**：
+  - "当前状态"是否仍准确？
+  - "下一步"是否仍有效？
+  - "阻塞项"是否需要更新？
+
+### context.md 维护规则
+
+- 每次迭代开始时：更新"本轮目标"和"当前状态"
+- 每次迭代结束时：更新"当前状态"、"下一步"和"阻塞项"
+- 发现信息过时时：立即更新，不要等到迭代结束
+- "已完成"列表超过 10 条时：归档旧项，只保留最近 5 条
+
 涉及行为变更时，优先按 TDD 推进：先写能失败的测试，再写最小实现，通过后再重构。文档或纯配置修改可不强制 TDD，但仍需说明未运行测试的原因。
 
 ## 常用命令
@@ -63,4 +79,4 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 
 ## Commit 与 Pull Request
 
-当前 Git 历史只有 `init`，尚无严格提交约定。使用简短祈使句提交标题，例如 `Add regression artifact validation`。PR 需说明 workflow 影响、列出已运行验证命令，并标注是否改变 schema、fixtures 或生成 artifact。
+Git 历史使用简短祈使句提交标题，例如 `Tighten model runner typing` 或 `Add regression artifact validation`。PR 需说明 workflow 影响、列出已运行验证命令，并标注是否改变 schema、fixtures 或生成 artifact。

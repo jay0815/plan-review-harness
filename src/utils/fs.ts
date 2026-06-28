@@ -1,6 +1,14 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+export interface Clock {
+  now(): string
+}
+
+export const systemClock: Clock = {
+  now: () => new Date().toISOString(),
+}
+
 export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true })
 }

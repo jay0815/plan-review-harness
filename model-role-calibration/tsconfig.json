@@ -9,8 +9,9 @@
     "emitDeclarationOnly": false,
     "noEmit": true,
     "noImplicitAny": true,
+    "noFallthroughCasesInSwitch": true,
     "rootDir": "."
   },
-  "include": ["scripts/**/*.ts", "types/**/*.d.ts"],
+  "include": ["scripts/**/*.ts"],
   "exclude": ["dist", "node_modules", "outputs", "workspace-runs"]
 }

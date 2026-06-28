@@ -6,7 +6,7 @@
 
 ## 模块职责
 
-- `src/cli/`：`plan-review start` 的 CLI 入口、参数解析和用户可见输出。
+- `src/cli/`：`plan-review start` / `plan-review resume` 的 CLI 入口、参数解析和用户可见输出。
 - `src/graph/`：workflow runtime、节点状态 patch 和阶段迁移。
 - `src/graph/nodes/`：workflow 节点，例如 blind review。
 - `src/workers/`：worker adapter 接口、registry 和 mock adapter。
@@ -14,13 +14,13 @@
 - `src/artifacts/`：artifact 路径构造和相关工具。
 - `src/state/`：基于文件的 state 持久化。
 - `src/utils/`：文件系统工具，例如原子写 JSON 和文本。
-- `model-role-calibration/`：历史 CommonJS 校准工具链，保留独立 `package.json` 作为模块类型边界。
+- `model-role-calibration/`：校准与 workspace review 工具链。源码位于 `scripts/**/*.ts`，本地通过 `node --import tsx` 直接执行；独立 `package.json` 只保留 CommonJS 模块边界。
 
 ## Worker 边界
 
 Worker 实现 `AgentWorkerAdapter<I, O>`，接收 `AgentWorkerTask` 和 `AgentWorkerContext`。context 提供 run、round、role、worker 目录、输出目录和日志路径。
 
-当前可运行 adapter 是 `MockAgentWorkerAdapter`。它读取 fixture JSON，按 role schema 校验输出，并写入 task metadata、result JSON、日志和 adapter metadata。mock worker 不应访问网络，也不应依赖真实 API key。
+当前可运行 adapter 是 `MockAgentWorkerAdapter`。它读取 fixture JSON，按 role schema 校验输出，并写入 task metadata、日志和 adapter metadata。review 的 `output/result.json` 由 `blindReview` 节点统一持久化。mock worker 不应访问网络，也不应依赖真实 API key。
 
 ## Schema 边界
 

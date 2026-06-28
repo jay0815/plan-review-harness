@@ -1,4 +1,5 @@
 import path from 'node:path'
+import type { AgentWorkerContext, AgentWorkerRole } from '../workers/AgentWorkerAdapter.js'
 
 export class ArtifactPathBuilder {
   constructor(private readonly runRoot = 'runs') {}
@@ -89,5 +90,19 @@ export class ArtifactPathBuilder {
 
   getFinalReportPath(runId: string): string {
     return path.join(this.getRunDir(runId), 'final', 'final-report.json')
+  }
+
+  buildWorkerContext(runId: string, round: number, role: AgentWorkerRole, nodeName: string): AgentWorkerContext {
+    return {
+      runId,
+      round,
+      nodeName,
+      role,
+      runDir: this.getRunDir(runId),
+      workerDir: this.getWorkerDir(runId, round, role),
+      inputDir: this.getWorkerInputDir(runId, round, role),
+      outputDir: this.getWorkerOutputDir(runId, round, role),
+      logDir: this.getWorkerLogDir(runId, round, role),
+    }
   }
 }

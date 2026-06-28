@@ -40,7 +40,7 @@ describe('MockAgentWorkerAdapter', () => {
     vi.restoreAllMocks()
   })
 
-  it('reads fixture output and writes worker result.json', async () => {
+  it('reads fixture output and returns parsed result (no result.json write)', async () => {
     const runRoot = await tempRoot('mock-worker-run-')
     const fixtureDir = await tempRoot('mock-worker-fixtures-')
     try {
@@ -54,8 +54,9 @@ describe('MockAgentWorkerAdapter', () => {
       )
 
       expect(PlannerResultSchema.parse(output)).toEqual({ planMarkdown: '# Fixture plan' })
+      // result.json is NOT written by adapter — caller is responsible
       expect(existsSync(path.join(runRoot, 'run-1', 'round-001', 'workers', 'planner', 'output', 'result.json'))).toBe(
-        true,
+        false,
       )
     } finally {
       await cleanup(runRoot)

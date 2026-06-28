@@ -20,7 +20,7 @@ Runtime 读取所有 review 输出，把 issue 合并到 issue ledger，为 bloc
 
 ## Resume
 
-`LangGraphWorkflowRuntime.resume()` 会加载等待中的 run，校验用户决策是否匹配 decision queue，写入 `decisions/user-decisions.json`，然后从 revision 继续。该能力当前存在于 runtime API 中，尚未暴露为 CLI 命令。
+`LangGraphWorkflowRuntime.resume()` 会加载等待中的 run，校验用户决策是否匹配 decision queue，写入 `decisions/user-decisions.json`，然后从 revision 继续。CLI 通过 `plan-review resume --run-id <run-id> --decisions <file>` 暴露该能力。
 
 ## Revision、Regression 与 Convergence
 

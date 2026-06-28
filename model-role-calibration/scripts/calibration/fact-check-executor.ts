@@ -11,13 +11,13 @@ import {
   renderFactCheckPrompt as renderFactCheckPromptUntyped,
   scoreOutput as scoreOutputUntyped,
   summarizeRun as summarizeFactCheckRunUntyped,
-} from '../fact-check-calibration-lib.js'
+} from '../cli/fact-check-calibration-lib.js'
 import {
   buildCliArgs as buildCliArgsUntyped,
   parseAssistantOutput as parseAssistantOutputUntyped,
   resolveWrapperCommand as resolveWrapperCommandUntyped,
   runCommand as runCommandUntyped,
-} from '../run-model.js'
+} from '../cli/run-model.js'
 import {
   buildFactCheckReadScope as buildFactCheckReadScopeUntyped,
   copyScopedWorkspace as copyScopedWorkspaceUntyped,

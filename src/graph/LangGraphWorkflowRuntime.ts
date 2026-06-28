@@ -12,17 +12,16 @@ import { RevisionResultSchema, type ReviewResult } from '../schemas/worker.js'
 import { type PlanReviewState } from '../schemas/state.js'
 import { DisagreementLedgerSchema, IssueLedgerSchema } from '../schemas/ledger.js'
 import { FileStateStore } from '../state/FileStateStore.js'
-import { atomicWriteJson, atomicWriteText, ensureDir } from '../utils/fs.js'
+import { atomicWriteJson, atomicWriteText, ensureDir, systemClock, type Clock } from '../utils/fs.js'
 import { WorkerRegistry } from '../workers/WorkerRegistry.js'
 import type { AgentWorkerAdapter } from '../workers/AgentWorkerAdapter.js'
 import { blindReview } from './nodes/blindReview.js'
-
-const createdAt = '2026-01-01T00:00:00.000Z'
 
 export interface HarnessConfig {
   runDir: string
   maxRounds: number
   workers: AgentWorkerAdapter[]
+  clock?: Clock
 }
 
 export interface StartPlanReviewInput {
@@ -42,15 +41,28 @@ export interface WorkflowRunHandle {
   state: PlanReviewState
 }
 
+export class WorkflowError extends Error {
+  readonly stage: string
+  readonly runId: string
+  constructor(message: string, options: { cause?: unknown; stage: string; runId: string }) {
+    super(message, { cause: options.cause })
+    this.name = 'WorkflowError'
+    this.stage = options.stage
+    this.runId = options.runId
+  }
+}
+
 export class LangGraphWorkflowRuntime {
   private readonly paths: ArtifactPathBuilder
   private readonly states: FileStateStore
   private readonly workers: WorkerRegistry
+  private readonly clock: Clock
 
   constructor(private readonly config: HarnessConfig) {
     this.paths = new ArtifactPathBuilder(config.runDir)
     this.states = new FileStateStore(this.paths)
     this.workers = new WorkerRegistry()
+    this.clock = config.clock ?? systemClock
     for (const worker of config.workers) this.workers.register(worker)
   }
 
@@ -64,8 +76,8 @@ export class LangGraphWorkflowRuntime {
 
     let state: PlanReviewState = {
       runId,
-      createdAt,
-      updatedAt: createdAt,
+      createdAt: this.clock.now(),
+      updatedAt: this.clock.now(),
       stage: 'blind_review',
       status: 'running',
       round,
@@ -95,11 +107,20 @@ export class LangGraphWorkflowRuntime {
       errors: [],
     }
 
-    const reviewPatch = await blindReview({ paths: this.paths, workers: this.workers }, state)
-    state = this.merge(state, reviewPatch)
-    state = await this.synthesizeAndMaybePause(state)
-    await this.states.save(state)
-    return this.handle(state)
+    try {
+      const reviewPatch = await blindReview({ paths: this.paths, workers: this.workers }, state)
+      state = this.merge(state, reviewPatch)
+      state = await this.synthesizeAndMaybePause(state)
+      await this.states.save(state)
+      return this.handle(state)
+    } catch (error) {
+      await this.saveFailedState(state, error)
+      throw new WorkflowError(`${state.stage} failed: ${error instanceof Error ? error.message : String(error)}`, {
+        cause: error,
+        stage: state.stage,
+        runId: state.runId,
+      })
+    }
   }
 
   async resume(runId: string, input: ResumePlanReviewInput): Promise<WorkflowRunHandle> {
@@ -116,7 +137,7 @@ export class LangGraphWorkflowRuntime {
       runId,
       round: state.round,
       decisions: userDecisions.decisions,
-      createdAt,
+      createdAt: this.clock.now(),
     })
 
     state = this.merge(state, {
@@ -135,9 +156,18 @@ export class LangGraphWorkflowRuntime {
       },
     })
 
-    state = await this.runRevisionRegressionFinal(state)
-    await this.states.save(state)
-    return this.handle(state)
+    try {
+      state = await this.runRevisionRegressionFinal(state)
+      await this.states.save(state)
+      return this.handle(state)
+    } catch (error) {
+      await this.saveFailedState(state, error)
+      throw new WorkflowError(`${state.stage} failed: ${error instanceof Error ? error.message : String(error)}`, {
+        cause: error,
+        stage: state.stage,
+        runId: state.runId,
+      })
+    }
   }
 
   private validateUserDecisions(
@@ -179,13 +209,7 @@ export class LangGraphWorkflowRuntime {
       }),
     )
     const issues = reviews.flatMap((review) => review.issues)
-    const mergedIssues = issues.map((issue) => ({
-      ...issue,
-      id: `MERGED-${issue.id}`,
-      supportedBy: [issue.sourceWorkerId ?? 'unknown'],
-      status: 'single_point' as const,
-      relatedIssueIds: [issue.id],
-    }))
+    const mergedIssues = this.mergeIssues(issues)
     const issueLedgerPath = this.paths.getIssueLedgerPath(state.runId, state.round)
     await atomicWriteJson(
       issueLedgerPath,
@@ -193,27 +217,30 @@ export class LangGraphWorkflowRuntime {
         runId: state.runId,
         round: state.round,
         issues: mergedIssues,
-        createdAt,
+        createdAt: this.clock.now(),
       }),
     )
 
-    const l3Issues = issues.filter((issue) => issue.severity === 'blocker')
-    const disagreements = l3Issues.map((issue) => ({
-      id: `disagreement-${issue.id}`,
-      issueId: `MERGED-${issue.id}`,
-      title: issue.title,
-      level: 'L3' as const,
-      positions: [
-        {
-          workerId: issue.sourceWorkerId ?? 'unknown',
-          claim: issue.claim,
-          confidence: issue.confidence,
-          reasoning: issue.suggestion,
-        },
-      ],
-      humanDecisionRequired: true,
-      createdAt,
-    }))
+    // Derive disagreements and decisionQueue from mergedIssues, not raw issues
+    const l3MergedIssues = mergedIssues.filter((issue) => issue.severity === 'blocker')
+    const disagreements = l3MergedIssues.map((mergedIssue) => {
+      // Find the original issue for claim/confidence/suggestion
+      const original = issues.find((i) => mergedIssue.relatedIssueIds.includes(i.id))
+      return {
+        id: `disagreement-${mergedIssue.id}`,
+        issueId: mergedIssue.id,
+        title: mergedIssue.title,
+        level: 'L3' as const,
+        positions: mergedIssue.supportedBy.map((workerId) => ({
+          workerId,
+          claim: original?.claim ?? '',
+          confidence: original?.confidence ?? 0,
+          reasoning: original?.suggestion ?? '',
+        })),
+        humanDecisionRequired: true,
+        createdAt: this.clock.now(),
+      }
+    })
     const disagreementLedgerPath = this.paths.getDisagreementLedgerPath(state.runId, state.round)
     await atomicWriteJson(
       disagreementLedgerPath,
@@ -221,36 +248,37 @@ export class LangGraphWorkflowRuntime {
         runId: state.runId,
         round: state.round,
         disagreements,
-        createdAt,
+        createdAt: this.clock.now(),
       }),
     )
     const queue: DecisionQueue = {
       runId: state.runId,
       round: state.round,
-      items: l3Issues.map((issue) => ({
-        id: `decision-${issue.id}`,
-        disagreementId: `disagreement-${issue.id}`,
-        title: issue.title,
-        description: issue.claim,
-        options: [
-          { key: 'adopt', label: 'Adopt', description: 'Adopt the issue suggestion.' },
-          { key: 'reject', label: 'Reject', description: 'Reject the issue suggestion.' },
-        ],
-        context: {
-          positions: [
-            {
-              workerId: issue.sourceWorkerId ?? 'unknown',
-              claim: issue.claim,
-              confidence: issue.confidence,
-              reasoning: issue.suggestion,
-            },
+      items: l3MergedIssues.map((mergedIssue) => {
+        const original = issues.find((i) => mergedIssue.relatedIssueIds.includes(i.id))
+        return {
+          id: `decision-${mergedIssue.id}`,
+          disagreementId: `disagreement-${mergedIssue.id}`,
+          title: mergedIssue.title,
+          description: original?.claim ?? '',
+          options: [
+            { key: 'adopt', label: 'Adopt', description: 'Adopt the issue suggestion.' },
+            { key: 'reject', label: 'Reject', description: 'Reject the issue suggestion.' },
           ],
-          relatedIssues: [`MERGED-${issue.id}`],
-          impactSummary: issue.impact,
-        },
-        createdAt,
-      })),
-      createdAt,
+          context: {
+            positions: mergedIssue.supportedBy.map((workerId) => ({
+              workerId,
+              claim: original?.claim ?? '',
+              confidence: original?.confidence ?? 0,
+              reasoning: original?.suggestion ?? '',
+            })),
+            relatedIssues: [mergedIssue.id],
+            impactSummary: original?.impact ?? '',
+          },
+          createdAt: this.clock.now(),
+        }
+      }),
+      createdAt: this.clock.now(),
     }
     const queuePath = this.paths.getDecisionQueuePath(state.runId, state.round)
     await atomicWriteJson(queuePath, queue)
@@ -286,12 +314,12 @@ export class LangGraphWorkflowRuntime {
     })
     synthesizedState.confirmedIssues = mergedIssues.map((issue) => ({
       issueId: issue.id,
-      severity: issue.severity,
+      severity: issue.severity as 'blocker' | 'high' | 'medium' | 'low',
       status: issue.status,
       ledgerPath: issueLedgerPath,
       round: state.round,
     }))
-    if (l3Issues.length === 0) {
+    if (l3MergedIssues.length === 0) {
       return this.runRevisionRegressionFinal({ ...synthesizedState, stage: 'revision', status: 'running' })
     }
     return synthesizedState
@@ -305,7 +333,7 @@ export class LangGraphWorkflowRuntime {
           type: 'revise_plan',
           input: { decisions: state.decisions },
         },
-        this.workerContext(state, 'reviser', 'revision'),
+        this.paths.buildWorkerContext(state.runId, state.round, 'reviser', 'revision'),
       ),
     )
     const planPath = this.paths.getRevisionPlanPath(state.runId, state.round)
@@ -318,7 +346,7 @@ export class LangGraphWorkflowRuntime {
         .getRequiredOne('regression')
         .execute(
           { taskId: `regression-${state.runId}-${state.round}`, type: 'regression_review', input: { planPath } },
-          this.workerContext(state, 'regression', 'regression'),
+          this.paths.buildWorkerContext(state.runId, state.round, 'regression', 'regression'),
         ),
     )
     const regressionPath = this.paths.getRegressionReportPath(state.runId, state.round)
@@ -378,7 +406,7 @@ export class LangGraphWorkflowRuntime {
       runId: state.runId,
       status: convergence.nextAction === 'blocked' ? 'blocked' : 'completed',
       round: state.round,
-      createdAt,
+      createdAt: this.clock.now(),
     })
 
     return this.merge(state, {
@@ -440,7 +468,7 @@ export class LangGraphWorkflowRuntime {
         blockerCount,
         highCount,
         roundLimitReached: false,
-        createdAt,
+        createdAt: this.clock.now(),
       }
     }
     if (state.round < state.maxRounds) {
@@ -453,7 +481,7 @@ export class LangGraphWorkflowRuntime {
         blockerCount,
         highCount,
         roundLimitReached: false,
-        createdAt,
+        createdAt: this.clock.now(),
       }
     }
     return {
@@ -465,21 +493,77 @@ export class LangGraphWorkflowRuntime {
       blockerCount,
       highCount,
       roundLimitReached: true,
-      createdAt,
+      createdAt: this.clock.now(),
     }
   }
 
-  private workerContext(state: PlanReviewState, role: 'reviser' | 'regression', nodeName: string) {
-    return {
-      runId: state.runId,
-      round: state.round,
-      nodeName,
-      role,
-      runDir: this.paths.getRunDir(state.runId),
-      workerDir: this.paths.getWorkerDir(state.runId, state.round, role),
-      inputDir: this.paths.getWorkerInputDir(state.runId, state.round, role),
-      outputDir: this.paths.getWorkerOutputDir(state.runId, state.round, role),
-      logDir: this.paths.getWorkerLogDir(state.runId, state.round, role),
+  private mergeIssues(issues: ReviewResult['issues']): Array<{
+    id: string
+    title: string
+    dimension: string
+    type: string
+    severity: string
+    confidence: number
+    planRef: string
+    claim: string
+    evidence: string[]
+    impact: string
+    suggestion: string
+    worstCase?: string
+    sourceWorkerId?: string
+    createdAt: string
+    supportedBy: string[]
+    status: 'consensus' | 'single_point'
+    relatedIssueIds: string[]
+  }> {
+    const normalizeTitle = (title: string): string =>
+      title
+        .toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+    const groups = new Map<string, ReviewResult['issues']>()
+    for (const issue of issues) {
+      const key = normalizeTitle(issue.title)
+      const existing = groups.get(key)
+      if (existing) existing.push(issue)
+      else groups.set(key, [issue])
+    }
+
+    return Array.from(groups.values()).map((group) => {
+      const first = group[0]
+      const supporters = [...new Set(group.map((i) => i.sourceWorkerId ?? 'unknown'))]
+      const status = supporters.length >= 2 ? 'consensus' : 'single_point'
+      return {
+        ...first,
+        id: `MERGED-${first.id}`,
+        supportedBy: supporters,
+        status: status as 'consensus' | 'single_point',
+        relatedIssueIds: group.map((i) => i.id),
+      }
+    })
+  }
+
+  private async saveFailedState(state: PlanReviewState, error: unknown): Promise<void> {
+    try {
+      const message = error instanceof Error ? error.message : String(error)
+      const stack = error instanceof Error ? error.stack : undefined
+      const failedState = this.merge(state, {
+        status: 'failed',
+        errors: [
+          ...state.errors,
+          {
+            stage: state.stage,
+            message,
+            stack,
+            createdAt: this.clock.now(),
+          },
+        ],
+      })
+      await this.states.save(failedState)
+    } catch {
+      // Saving failed state itself failed — do not mask the original error
     }
   }
 
@@ -490,7 +574,7 @@ export class LangGraphWorkflowRuntime {
     return {
       ...state,
       ...patch,
-      updatedAt: createdAt,
+      updatedAt: this.clock.now(),
       artifacts: { ...state.artifacts, ...patch.artifacts },
     }
   }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-export const SeveritySchema = z.enum(['blocker', 'high', 'medium', 'low'])
+export const SEVERITY_VALUES = ['blocker', 'high', 'medium', 'low'] as const
+export const SeveritySchema = z.enum(SEVERITY_VALUES)
 export type Severity = z.infer<typeof SeveritySchema>
 
 export const IssueTypeSchema = z.enum(['defect', 'risk', 'assumption', 'open_question', 'preference'])

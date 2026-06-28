@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { spawn } from 'node:child_process'
 
-import { generatePrompts as generateRolePrompts } from '../generate-prompts.js'
+import { generatePrompts as generateRolePrompts } from '../cli/generate-prompts.js'
 import {
   ROOT,
   agentOutputPaths,
@@ -11,7 +11,7 @@ import {
   nodeScriptArgs,
   parseJsonFile,
   runtimeScript,
-} from '../lib.js'
+} from '../lib/lib.js'
 import { slug, uniqueRunId as createUniqueRunId } from './core.js'
 
 interface CalibrationConfig {
@@ -167,7 +167,7 @@ export function runModelJob(
   options: RunModelJobOptions = {},
 ): Promise<CompletedRoleJobResult | FailedRoleJobResult> {
   return new Promise((resolve) => {
-    const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('run-model')
+    const runner = process.env.MODEL_ROLE_CALIBRATION_RUNNER || runtimeScript('cli/run-model')
     const startedAt = new Date().toISOString()
     const runnerArgs = [
       '--run',

@@ -30,7 +30,8 @@ export async function blindReview(ctx: NodeContext, state: PlanReviewState): Pro
 
   const reviewEntries = await Promise.all(
     reviewerRoles.map(async (role) => {
-      const outputDir = ctx.paths.getWorkerOutputDir(state.runId, state.round, role)
+      const workerCtx = ctx.paths.buildWorkerContext(state.runId, state.round, role as AgentWorkerRole, 'blindReview')
+      const outputDir = workerCtx.outputDir
       const result = await workerByRole[role].execute(
         {
           taskId: `review-${role}-${state.runId}-${state.round}`,
@@ -43,17 +44,7 @@ export async function blindReview(ctx: NodeContext, state: PlanReviewState): Pro
             round: state.round,
           },
         },
-        {
-          runId: state.runId,
-          round: state.round,
-          nodeName: 'blindReview',
-          role: role as AgentWorkerRole,
-          runDir: ctx.paths.getRunDir(state.runId),
-          workerDir: ctx.paths.getWorkerDir(state.runId, state.round, role),
-          inputDir: ctx.paths.getWorkerInputDir(state.runId, state.round, role),
-          outputDir,
-          logDir: ctx.paths.getWorkerLogDir(state.runId, state.round, role),
-        },
+        workerCtx,
       )
 
       const parsedResult = ReviewResultSchema.parse(result)

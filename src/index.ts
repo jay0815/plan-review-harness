@@ -1,5 +1,5 @@
 export { ArtifactPathBuilder } from './artifacts/paths.js'
-export { LangGraphWorkflowRuntime } from './graph/LangGraphWorkflowRuntime.js'
+export { LangGraphWorkflowRuntime, WorkflowError } from './graph/LangGraphWorkflowRuntime.js'
 export { FileStateStore } from './state/FileStateStore.js'
 export { MockAgentWorkerAdapter } from './workers/MockAgentWorkerAdapter.js'
 export { WorkerRegistry } from './workers/WorkerRegistry.js'
