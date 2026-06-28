@@ -45,13 +45,14 @@ function writeJson(file: string, value: unknown): void {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', 'utf8')
 }
 
-function runNode(script: string, args: string[]): SpawnSyncReturns<string> {
+function runNode(script: string, args: string[], env: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
   return spawnSync(process.execPath, nodeScriptArgs(script, ...args), {
     cwd: path.resolve(ROOT, '..'),
     encoding: 'utf8',
     timeout: 15000,
     env: {
       ...process.env,
+      ...env,
     },
   })
 }
@@ -64,6 +65,7 @@ function main() {
   const projectRoot = path.join(tempDir, 'project')
   const runDir = path.join(tempDir, 'workspace-runs', 'reviewer-failure')
   const runWorkspaceReview = runtimeScript('workspace/run-workspace-review')
+  const retryWorkspaceReview = runtimeScript('workspace/retry-workspace-review-stage')
 
   fs.writeFileSync(
     fakeClaude,
@@ -81,11 +83,53 @@ if (configIndex >= 0) {
 for await (const _chunk of process.stdin) {
   // Drain stdin so the parent never sees EPIPE on short fake runs.
 }
-if (role === "architecture") {
+if (role === "architecture" && process.env.FAKE_FAIL_ARCHITECTURE === "1") {
   process.stderr.write("simulated architecture reviewer failure\\n");
   process.exit(7);
 }
-const output = {
+const outputByRole = {
+  risk: {
+    probe: "risk",
+    issues: [],
+    missing_questions: [],
+    false_positive_risks: []
+  },
+  architecture: {
+    probe: "architecture",
+    issues: [],
+    missing_questions: [],
+    false_positive_risks: []
+  },
+  fact_check: {
+    probe: "fact_check",
+    checked_issues: [],
+    source_summaries: [],
+    limits: []
+  },
+  synthesis: {
+    probe: "synthesis",
+    source_findings: [],
+    process_map: {
+      title: "retry test",
+      mermaid: "flowchart TD\\n  A[Retry]",
+      nodes: [
+        {
+          id: "A",
+          label: "Retry",
+          stage: "test",
+          status: "normal",
+          related_issue_titles: [],
+          evidence: "No retained findings."
+        }
+      ]
+    },
+    consensus_issues: [],
+    disagreements: [],
+    likely_false_positives: [],
+    revision_instructions: []
+  }
+};
+const output = outputByRole[role] || {
   probe: role,
   issues: [],
   missing_questions: [],
@@ -156,7 +200,9 @@ process.stdout.write(JSON.stringify({
       createdAt: request.created_at,
     })
 
-    const result = runNode(runWorkspaceReview, ['--run-dir', runDir, '--config', configFile])
+    let result = runNode(runWorkspaceReview, ['--run-dir', runDir, '--config', configFile], {
+      FAKE_FAIL_ARCHITECTURE: '1',
+    })
     assert.notEqual(result.status, 0)
     assert.match(result.stderr, /Reviewer stage failed before fact_check/)
     assert.match(result.stderr, /architecture\/fake/)
@@ -190,6 +236,47 @@ process.stdout.write(JSON.stringify({
     assert.match(executionLog, /run_failed/)
     assert(!executionLog.includes('fact_check_started'))
     assert(!executionLog.includes('synthesis_started'))
+
+    result = runNode(retryWorkspaceReview, ['--run-dir', runDir, '--config', configFile, '--stage', 'reviewers'])
+    assert.equal(result.status, 0, result.stderr)
+    const retryResult = JSON.parse(result.stdout) as {
+      status: string
+      retried_reviewers: string[]
+      retry_counts: Record<string, number>
+    }
+    assert.equal(retryResult.status, 'completed')
+    assert.deepEqual(retryResult.retried_reviewers, ['architecture'])
+    assert.equal(retryResult.retry_counts.risk, 0)
+    assert.equal(retryResult.retry_counts.architecture, 1)
+
+    const retriedState = parseJsonFile<WorkspaceState>(path.join(runDir, 'state.json'))
+    assert.equal(retriedState.status, 'completed')
+    assert.equal(retriedState.report_file, 'report.json')
+    assert.deepEqual(retriedState.infra_errors, [])
+
+    const retriedManifest = parseJsonFile<RunManifest>(path.join(runDir, 'run-manifest.json'))
+    assert.equal(retriedManifest.status, 'completed')
+    assert.equal(retriedManifest.infra_errors?.length || 0, 0)
+
+    assert(!fs.existsSync(path.join(runDir, 'roles', 'risk-attempts')))
+    assert.equal(fs.readdirSync(path.join(runDir, 'roles', 'architecture-attempts')).length, 1)
+    assert.equal(
+      parseJsonFile<WorkspaceState>(path.join(runDir, 'roles', 'architecture', 'metadata.json')).status,
+      'completed',
+    )
+    assert.equal(
+      parseJsonFile<WorkspaceState>(path.join(runDir, 'roles', 'fact_check', 'metadata.json')).status,
+      'completed',
+    )
+    assert.equal(
+      parseJsonFile<WorkspaceState>(path.join(runDir, 'roles', 'synthesis', 'metadata.json')).status,
+      'completed',
+    )
+    assert(fs.existsSync(path.join(runDir, 'report.json')))
+
+    const retriedExecutionLog = fs.readFileSync(path.join(runDir, 'execution.log'), 'utf8')
+    assert.match(retriedExecutionLog, /stage_retry_started/)
+    assert.match(retriedExecutionLog, /stage_retry_completed/)
 
     console.log('Workspace review orchestration tests passed')
   } finally {

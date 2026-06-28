@@ -2,12 +2,12 @@
 
 ## 本轮目标
 
-为 workspace review inspect 工具增加机器可读 JSON 输出。
+清理 workspace review 可靠性 backlog。
 
 ## 当前状态
 
-- 已完成：架构修复计划已提交；reviewer 失败分支离线回归测试和 inspect JSON 输出已补齐
-- 进行中：后续 workspace review 可靠性与评审质量提升
+- 已完成：架构修复计划已提交；workspace review 可靠性 backlog 已清空
+- 进行中：后续评审质量提升规划
 - 总进度：架构修复 13/13 完成
 
 ## 已完成的 Fix
@@ -42,7 +42,7 @@
 
 ## 待完成
 
-当前架构修复计划已完成。剩余 backlog 聚焦 reviewer 失败时的部分重试能力。
+当前架构修复计划和 workspace review 可靠性 backlog 已完成。后续进入评审质量提升规划。
 
 ## 方案文档索引
 
@@ -50,8 +50,8 @@
 
 ## 下一步
 
-1. 评估 reviewer 失败时按角色部分重试的实现范围
-2. 进入 reviewer prompt、fact check 覆盖率、synthesis 报告结构化等后续规划
+1. 进入 reviewer prompt、fact check 覆盖率、synthesis 报告结构化等后续规划
+2. 需要新工程任务时，先补充到 `docs/backlog.md` 并标注优先级和估算
 
 ## 阻塞项
 

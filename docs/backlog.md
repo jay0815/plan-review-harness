@@ -2,9 +2,7 @@
 
 ## 待处理
 
-### 其他
-
-- [ ] reviewer 失败时支持按角色部分重试 [P2] [1d] @workspace-review
+（暂无）
 
 ## 进行中
 
@@ -27,6 +25,7 @@
 - [x] Fix-015: backlog 结构化改进 → 优先级和估算 [P1] [0.5d] @docs # 2026-06-27
 - [x] 增加 reviewer 失败分支的离线 orchestration 回归测试 [P1] [0.5d] @workspace-review # 2026-06-28
 - [x] `scripts/workspace/inspect-workspace-run.ts` 增加 `--format json` 输出 [P2] [0.5d] @workspace-review # 2026-06-28
+- [x] reviewer 失败时支持按角色部分重试，并补 CLI 离线回归覆盖 [P2] [0.5d] @workspace-review # 2026-06-28
 - [x] 增加 workspace run manifest backfill 脚本 # 2026-06-26
 - [x] 改进 reviewer 阶段失败的错误处理（reviewerStageError） # 2026-06-26
 - [x] 支持中文计划的显式章节映射 # 2026-06-26
