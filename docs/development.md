@@ -13,6 +13,7 @@ pnpm lint:fix
 pnpm fmt
 pnpm fmt:check
 pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fixtures/sample-plan.md
+pnpm plan-review -- prompt-eval --cases evals/cases --observed-dir evals/observed --output-dir runs/prompt-eval/eval-1
 ```
 
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 `tsc -p tsconfig.build.json --emitDeclarationOnly` 生成声明文件。
@@ -22,6 +23,7 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 - `pnpm lint` / `pnpm lint:fix`：使用根级 `.oxlintrc.json` 检查或修复 `src/`、`tests/` 和配置文件。
 - `pnpm fmt` / `pnpm fmt:check`：使用 oxfmt 格式化或检查源文件、文档、fixtures 和配置。
 - `pnpm plan-review -- start ...`：使用 mock workers 执行一次本地 review run。
+- `pnpm plan-review -- prompt-eval ...`：从 JSON case 和 observed output 文件运行 prompt eval dry-run，并写入 manifest、results 和 report。
 
 ## 编码风格
 

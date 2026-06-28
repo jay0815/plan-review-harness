@@ -2,13 +2,22 @@
 
 ## 本轮目标
 
-清理 workspace review 可靠性 backlog。
+建立跨项目 prompt 评估迭代基础。当前仓库作为 dry-run 原型，长期目标是迁移到 `harness-kit`，供 plan review、change-assurance 和后续 agent workflow 共享。
 
 ## 当前状态
 
 - 已完成：架构修复计划已提交；workspace review 可靠性 backlog 已清空
-- 进行中：后续评审质量提升规划
+- 进行中：prompt eval foundation 本轮收尾验证
 - 总进度：架构修复 13/13 完成
+
+## Prompt Eval 方向
+
+- 核心只拥有通用 schema、评分、runner、文件型 dry-run 和 report 语义。
+- 项目通过 adapter 接入模型调用、case discovery、输入读取和输出归一化。
+- 当前文件型 dry-run 支持 JSON case discovery、observed output 读取、manifest/results/report 持久化。
+- 已补充 `change-assurance` 和 `harness-kit` 的 adapter 分层接入计划。
+- baseline 对比只在存在历史结果时计算 regressions/improvements；单纯失败不等于回归。
+- 后续迁移到 `harness-kit` 时，不携带当前 plan-review runtime 或 `model-role-calibration/` 的历史结构。
 
 ## 已完成的 Fix
 
@@ -42,7 +51,7 @@
 
 ## 待完成
 
-当前架构修复计划和 workspace review 可靠性 backlog 已完成。后续进入评审质量提升规划。
+当前架构修复计划、workspace review 可靠性 backlog 和 prompt eval foundation 待办已完成。后续可以进入 reviewer prompt、fact check 覆盖率和 synthesis 报告结构化等质量提升任务。
 
 ## 方案文档索引
 

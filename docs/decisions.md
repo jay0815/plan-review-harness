@@ -1,5 +1,12 @@
 # 决策记录
 
+## Prompt eval core 保持项目无关
+
+- **决策**: 将 prompt eval 抽象为 case、observed output、check、result、manifest 和 report；项目只通过 adapter 接入
+- **原因**: plan review、change-assurance 和后续 agent workflow 都需要同一套 prompt 迭代工程，核心不能依赖当前 runtime、calibration 脚本或特定 artifact 目录
+- **替代方案**: 为每个项目维护独立评测脚本，但会导致 case 格式、baseline 语义和回归判断分裂
+- **日期**: 2026-06-28
+
 ## 使用 manifest 而非 state.json 作为验证主源
 
 - **决策**: 用 `run-manifest.json` 做验证，`state.json` 只记录运行状态

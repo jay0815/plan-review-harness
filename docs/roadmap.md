@@ -42,12 +42,18 @@
 - Phase 4: 8/8 ✅
 - 总计: 13/13 完成
 
-## 下一阶段：评审质量提升
+## 下一阶段：Prompt Eval 驱动的评审质量提升
 
-目标：提高 reviewer 输出的准确性和实用性。
+目标：先建立可复用的 prompt 评估地基，再用 case、baseline 和回归报告驱动 reviewer 输出质量提升。当前实现位于 `src/prompt-eval/`，作为未来迁移到 `harness-kit` 的 dry-run 原型。
 
 ### 待规划
 
 - reviewer prompt 优化
 - fact check 覆盖率提升
 - synthesis 报告结构化改进
+
+### 已完成
+
+- `src/prompt-eval/` 通用 schema、deterministic scoring、adapter runner 和 report 契约
+- 文件型 JSON case discovery、observed output adapter 和 manifest/results/report 持久化 CLI
+- `change-assurance` 和 `harness-kit` 的 adapter 分层接入计划

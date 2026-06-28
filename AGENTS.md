@@ -15,6 +15,7 @@ Plan Review Harness 是一个用于编排 plan review workflow 的 TypeScript ru
 - `src/graph/`：LangGraph workflow runtime、节点编排和流程状态推进。
 - `src/workers/`：agent worker adapter；mock adapter 只能读取 fixture，不应访问网络或真实 LLM API。
 - `src/artifacts/`、`src/state/`：artifact 路径、哈希、状态读写和持久化规则。
+- `src/prompt-eval/`：跨项目 prompt 评估契约、确定性评分、文件型 dry-run 和 report 持久化；保持项目无关，后续迁移到 `harness-kit`。
 - `fixtures/`：示例需求、计划和 mock worker 输出。
 - `tests/unit/`：模块级行为测试；`tests/integration/`：CLI、workflow 和 artifact 合同测试。
 - `model-role-calibration/`：校准工具链。源码位于 `scripts/**/*.ts`，package scripts 通过 `node --import tsx` 直接执行 TS；Claude Code 分发包会在打包时临时编译自包含 JS。
@@ -62,6 +63,7 @@ pnpm lint
 pnpm fmt:check
 pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fixtures/sample-plan.md
 pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fixtures/sample-plan.md --run-dir /tmp/plan-runs
+pnpm plan-review -- prompt-eval --cases evals/cases --observed-dir evals/observed --output-dir runs/prompt-eval/eval-1
 ```
 
 - `pnpm build`：使用 Vite 构建 ESM 输出，并用 TypeScript 生成声明文件。
@@ -72,6 +74,7 @@ pnpm plan-review -- start --requirement fixtures/sample-requirement.md --plan fi
 - `pnpm lint`：使用根级 `.oxlintrc.json` 检查 `src/`、`tests/` 和配置文件，禁用 nested config lookup。
 - `pnpm fmt:check`：使用 oxfmt 检查源文件、文档、fixtures 和配置格式。
 - `pnpm plan-review -- start ...`：使用 mock workers 运行 harness 并写入 artifacts。
+- `pnpm plan-review -- prompt-eval ...`：从 JSON case 和 observed output 文件运行 prompt eval dry-run，并写入 manifest、results 和 report。
 
 ## 编码与命名
 

@@ -21,3 +21,4 @@ export type {
   WorkerTaskType,
 } from './workers/AgentWorkerAdapter.js'
 export * from './schemas/index.js'
+export * from './prompt-eval/index.js'

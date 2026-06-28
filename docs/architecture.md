@@ -13,6 +13,7 @@
 - `src/schemas/`：state、artifact、worker、issue、decision、ledger、revision、regression 的 Zod schema。
 - `src/artifacts/`：artifact 路径构造和相关工具。
 - `src/state/`：基于文件的 state 持久化。
+- `src/prompt-eval/`：跨项目 prompt 评估契约、确定性评分和 adapter runner；当前是未来迁移到 `harness-kit` 的 dry-run 原型。
 - `src/utils/`：文件系统工具，例如原子写 JSON 和文本。
 - `model-role-calibration/`：校准与 workspace review 工具链。源码位于 `scripts/**/*.ts`，本地通过 `node --import tsx` 直接执行；独立 `package.json` 只保留 CommonJS 模块边界。
 

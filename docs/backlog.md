@@ -26,6 +26,9 @@
 - [x] 增加 reviewer 失败分支的离线 orchestration 回归测试 [P1] [0.5d] @workspace-review # 2026-06-28
 - [x] `scripts/workspace/inspect-workspace-run.ts` 增加 `--format json` 输出 [P2] [0.5d] @workspace-review # 2026-06-28
 - [x] reviewer 失败时支持按角色部分重试，并补 CLI 离线回归覆盖 [P2] [0.5d] @workspace-review # 2026-06-28
+- [x] 抽离通用 prompt eval foundation：schema、deterministic scoring、adapter runner、report 契约 [P1] [1d] @prompt-eval # 2026-06-28
+- [x] 增加文件型 case discovery / report 持久化 CLI，复用 `src/prompt-eval/` 契约 [P2] [1d] @prompt-eval # 2026-06-28
+- [x] 为 `change-assurance` 和 `harness-kit` 制定 prompt eval adapter 接入计划 [P2] [1d] @prompt-eval # 2026-06-28
 - [x] 增加 workspace run manifest backfill 脚本 # 2026-06-26
 - [x] 改进 reviewer 阶段失败的错误处理（reviewerStageError） # 2026-06-26
 - [x] 支持中文计划的显式章节映射 # 2026-06-26
