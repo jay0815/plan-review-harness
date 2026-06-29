@@ -40,6 +40,9 @@ const UNCERTAINTY_ALLOWED_SECTIONS = [
   /风险/,
   /非阻塞问题/,
 ]
+const CODE_TODO_PATTERN = /(?:代码|源码|实现|注释|标注).{0,30}\bTODO\b|\bTODO\b.{0,30}(?:代码|源码|实现|注释|标注)/i
+const TODO_MARKER_PATTERN = /\bTODO\b/i
+const TODO_CLOSURE_PATTERN = /关闭标准|责任人|owner|tracking|tracked/i
 
 type PlanComplexityLevel = 'single_file' | 'feature' | 'cross_feature' | 'architecture'
 type ComplexitySource = 'explicit' | 'inferred'
@@ -202,6 +205,19 @@ export function parseSections(plan: unknown): PlanSection[] {
 
 function sectionMatches(section: PlanSection, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(section.title))
+}
+
+function hasTodoTracking(sections: PlanSection[], currentLine: string): boolean {
+  if (TODO_MARKER_PATTERN.test(currentLine) && TODO_CLOSURE_PATTERN.test(currentLine)) {
+    return true
+  }
+  return sections.some((section) => {
+    if (!UNCERTAINTY_ALLOWED_SECTIONS.some((pattern) => pattern.test(section.title))) {
+      return false
+    }
+    const sectionText = section.lines.map((line) => line.text).join('\n')
+    return TODO_MARKER_PATTERN.test(sectionText) && TODO_CLOSURE_PATTERN.test(sectionText)
+  })
 }
 
 function explicitSectionMappings(plan: unknown): Set<string> {
@@ -874,6 +890,19 @@ export function lintPlan({ plan, projectRoot }: LintPlanOptions): LintPlanResult
     for (const line of section.lines) {
       const matches = [...line.text.matchAll(UNCERTAIN_PATTERN)]
       for (const match of matches) {
+        if (
+          match[0].toUpperCase() === 'TODO' &&
+          CODE_TODO_PATTERN.test(line.text) &&
+          hasTodoTracking(sections, line.text)
+        ) {
+          warnings.push(
+            issue('tracked_todo_placeholder', '代码 TODO 占位已在待确认/阻塞决策中跟踪；请确认责任人或关闭标准仍有效', {
+              line: line.number,
+              section: section.title,
+            }),
+          )
+          continue
+        }
         warnings.push(
           issue('uncertain_wording_outside_decision_section', `待确认措辞“${match[0]}”不在允许章节中`, {
             line: line.number,

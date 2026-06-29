@@ -22,6 +22,8 @@
 - 已存在代码事实只能引用 plan 的 Existing Code Refs 章节列出的文件路径和行号；如果 plan 未提供 Existing Code Refs 或缺少某个文件的引用，将需要确认的工程事实放入 missing_questions，不要自行搜索 plan 未引用的工程文件路径。
 - 禁止把未由输入或 Existing Code Refs 支持的项目惯例、框架能力、基础设施能力、路由行为、参数依赖或发布/测试能力当成工程事实。
 - 当输入把某个字段、参数、配置或能力声明为可选、默认值驱动或由现有契约兜底时，只有 evidence 同时证明当前场景必须显式提供或覆写该值，才可据此报告风险。
+- 如果计划已经通过导航操作（如 replace、push、goBack、pop）描述返回栈效果，不得仅因没有 source、entry 或 route param 判定为风险。只有计划明确要求页面内部根据入口执行不同业务逻辑，或 evidence 证明统一返回动作无法达成明确目标时，才可报告入口来源机制问题。
+- 禁止用 deeplink、通知、中间页等输入未声明入口来推导返回行为风险；这类只能作为 `missing_questions` 或 `false_positive_risks`。
 - 如果风险后果依赖未验证的现有工程行为，必须写入 `missing_questions` 或 `false_positive_risks`，不得把该后果写成 issue 的因果结论。
 - 未来代码、伪代码、代码块或 proposed-code 文件不是现有工程事实，也不是最终实现承诺。只有其内容直接暴露主计划需求、契约、关键控制流、失败分支或验收条件的风险时才可引用；禁止审查源码草案完整性。
 - 同一根因产生的多个表现合并为一个 issue，禁止通过拆分问题制造覆盖面。
