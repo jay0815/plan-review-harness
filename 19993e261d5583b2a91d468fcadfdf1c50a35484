@@ -1,0 +1,80 @@
+model-role-calibration/scripts/test/test-claude-distribution.ts
+  ec820a72c008c564 27-39,63-68
+model-role-calibration/cases/synthetic/tracked-todo-placeholder/rubric.md
+  b7574a55d3873dcc 1-31
+model-role-calibration/scripts/cli/package-claude-distribution.ts
+  b7574a55d3873dcc 133,420-450,465,519-526,535,538
+model-role-calibration/prompts/probe-risk.md
+  b7574a55d3873dcc 25-26
+model-role-calibration/cases/synthetic/navigation-stack-return/rubric.md
+  b7574a55d3873dcc 1-31
+model-role-calibration/prompts/probe-execution.md
+  b7574a55d3873dcc 23-24
+model-role-calibration/scripts/test/test-plan-review-mcp.ts
+  b7574a55d3873dcc 1042-1132
+model-role-calibration/cases/synthetic/navigation-stack-return/inputs/review.md
+  b7574a55d3873dcc 1-62
+model-role-calibration/cases/synthetic/tracked-todo-placeholder/inputs/planner.md
+  b7574a55d3873dcc 1-12
+docs/backlog.md
+  b7574a55d3873dcc 16-18
+model-role-calibration/scripts/test/test-calibration.ts
+  b7574a55d3873dcc 195-228
+model-role-calibration/scripts/workspace/plan-authoring-lint.ts
+  b7574a55d3873dcc 43-45,210-222,893-905
+model-role-calibration/cases/synthetic/tracked-todo-placeholder/inputs/review.md
+  b7574a55d3873dcc 1-58
+model-role-calibration/scripts/workspace/run-workspace-review.ts
+  b7574a55d3873dcc 193-208,339,452-456
+model-role-calibration/prompts/probe-fact_check.md
+  b7574a55d3873dcc 27
+docs/context.md
+  b7574a55d3873dcc 5-6,10-16,19,21-29,54-56
+model-role-calibration/cases/synthetic/navigation-stack-return/inputs/planner.md
+  b7574a55d3873dcc 1-13
+model-role-calibration/cases/synthetic/tracked-todo-placeholder/inputs/synthesis.md
+  b7574a55d3873dcc 1-217
+model-role-calibration/prompts/probe-synthesis.md
+  b7574a55d3873dcc 29-30,48,110
+model-role-calibration/cases/synthetic/navigation-stack-return/inputs/synthesis.md
+  b7574a55d3873dcc 1-217
+model-role-calibration/prompts/evaluate-synthesis.md
+  b7574a55d3873dcc 149-150
+model-role-calibration/scripts/test/test-plan-authoring-lint.ts
+  b7574a55d3873dcc 246-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "19993e261d5583b2a91d468fcadfdf1c50a35484",
+  "prompts": {
+    "b7574a55d3873dcc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f131f-dc79-7342-bb52-dc5436675794",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 919,
+      "total_deletions": 36,
+      "accepted_lines": 917,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/b785100caacea7f9842fb6a1a7a374455c08f41c6c872e1d67fe3175ac0b161c"
+    },
+    "ec820a72c008c564": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f125f-62ee-7f42-9db1-c7b40399efc0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "guanchengqian",
+      "messages": [],
+      "total_additions": 22,
+      "total_deletions": 3,
+      "accepted_lines": 19,
+      "overriden_lines": 0,
+      "messages_url": "http://10.1.138.136:9188/cas/d78e4f58a9fdc622aea7b3f6a8f7a5565d3db559f7e5e24adb6c162001cdeb52"
+    }
+  }
+}
