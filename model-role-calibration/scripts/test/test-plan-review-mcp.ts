@@ -1039,6 +1039,97 @@ async function main() {
       validateWorkspaceOutput('synthesis', verifiedSynthesis, { factCheckOutput: verifiedFactCheck }),
     )
 
+    const quotedTitleFactCheck = {
+      ...verifiedFactCheck,
+      checked_issues: [
+        {
+          ...verifiedFactCheck.checked_issues[0],
+          issue_title: 'decideRoute 的职责在“纯函数”与“执行导航”之间不一致',
+        },
+      ],
+    }
+    assert.doesNotThrow(() =>
+      validateWorkspaceOutput(
+        'synthesis',
+        {
+          ...verifiedSynthesis,
+          source_findings: [
+            {
+              ...verifiedSynthesis.source_findings[0],
+              source_title: 'decideRoute 的职责在"纯函数"与"执行导航"之间不一致',
+            },
+          ],
+        },
+        { factCheckOutput: quotedTitleFactCheck },
+      ),
+    )
+    assert.doesNotThrow(() =>
+      validateWorkspaceOutput(
+        'synthesis',
+        {
+          ...verifiedSynthesis,
+          source_findings: [
+            {
+              ...verifiedSynthesis.source_findings[0],
+              source_title: 'decideRoute 的职责在纯函数与执行导航之间不一致',
+            },
+          ],
+        },
+        { factCheckOutput: quotedTitleFactCheck },
+      ),
+    )
+    assert.throws(
+      () =>
+        validateWorkspaceOutput(
+          'synthesis',
+          {
+            ...verifiedSynthesis,
+            source_findings: [
+              {
+                ...verifiedSynthesis.source_findings[0],
+                source_title: 'decideRoute 的职责在"副作用"与"执行导航"之间不一致',
+              },
+            ],
+          },
+          { factCheckOutput: quotedTitleFactCheck },
+        ),
+      /source_title/,
+    )
+
+    assert.throws(
+      () =>
+        validateWorkspaceOutput(
+          'synthesis',
+          {
+            ...verifiedSynthesis,
+            consensus_issues: [
+              {
+                ...verifiedSynthesis.consensus_issues[0],
+                required_plan_change: '',
+              },
+            ],
+          },
+          { factCheckOutput: verifiedFactCheck },
+        ),
+      /substantive required_plan_change/,
+    )
+    assert.throws(
+      () =>
+        validateWorkspaceOutput(
+          'synthesis',
+          {
+            ...verifiedSynthesis,
+            consensus_issues: [
+              {
+                ...verifiedSynthesis.consensus_issues[0],
+                required_plan_change: '无需新增修订',
+              },
+            ],
+          },
+          { factCheckOutput: verifiedFactCheck },
+        ),
+      /substantive required_plan_change/,
+    )
     assert.throws(
       () =>
         validateWorkspaceOutput(

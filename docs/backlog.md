@@ -13,6 +13,9 @@
 
 ## 已完成
 
+- [x] 收紧 synthesis 无修订共识、导航栈返回和已跟踪 TODO 误报边界 [P1] [1d] @workspace-review # 2026-06-29
+- [x] 修复 synthesis 镜像标题因中文/ASCII/省略引号差异被判 invalid output [P1] [0.5d] @workspace-review # 2026-06-29
+- [x] 收敛 Claude Code 分发包实际文件集合，避免打包测试/校准 CLI 等 manifest 外文件 [P1] [0.5d] @workspace-review # 2026-06-29
 - [x] Fix-001: createdAt 硬编码常量 → Clock 接口 + 注入时钟 [P0] [0.5d] @core # 2026-06-27
 - [x] Fix-002: merge 函数 updatedAt 处理 → 联动 Fix-001 [P0] [0.5d] @core # 2026-06-27
 - [x] Fix-003: blindReview 双重写入 → 移除 adapter result.json [P0] [0.5d] @core # 2026-06-27

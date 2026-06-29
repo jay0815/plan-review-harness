@@ -88,7 +88,7 @@ done
 command -v "$NODE_BIN" >/dev/null 2>&1 || fail "找不到 Node.js：$NODE_BIN"
 command -v "$CLAUDE_BIN" >/dev/null 2>&1 || fail "找不到 Claude Code CLI：$CLAUDE_BIN"
 
-	"$NODE_BIN" "$PACKAGE_ROOT/mcp/scripts/mcp/plan-review-mcp.js" \\
+"$NODE_BIN" "$PACKAGE_ROOT/mcp/scripts/mcp/plan-review-mcp.js" \\
   --settings-dir "$SETTINGS_DIR" \\
   --claude-bin "$CLAUDE_BIN" \\
   --validate-only >/dev/null
@@ -120,7 +120,7 @@ if [ -d "$RUNS_BACKUP" ]; then
   mv "$RUNS_BACKUP" "$MCP_TARGET/workspace-runs"
 fi
 
-	"$NODE_BIN" "$MCP_TARGET/scripts/mcp/plan-review-mcp.js" \\
+"$NODE_BIN" "$MCP_TARGET/scripts/mcp/plan-review-mcp.js" \\
   --settings-dir "$SETTINGS_DIR" \\
   --claude-bin "$CLAUDE_BIN" \\
   --validate-only >/dev/null
@@ -130,7 +130,7 @@ if "$CLAUDE_BIN" mcp get plan-review-harness >/dev/null 2>&1; then
 fi
 
 "$CLAUDE_BIN" mcp add --scope user plan-review-harness -- \\
-	  "$NODE_BIN" "$MCP_TARGET/scripts/mcp/plan-review-mcp.js" \\
+  "$NODE_BIN" "$MCP_TARGET/scripts/mcp/plan-review-mcp.js" \\
   --settings-dir "$SETTINGS_DIR" \\
   --claude-bin "$CLAUDE_BIN"
 
@@ -417,6 +417,37 @@ function writeExecutable(file: string, content: string): void {
   fs.chmodSync(file, 0o755)
 }
 
+function listPackageFiles(root: string, dir = root): string[] {
+  const files: string[] = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...listPackageFiles(root, full))
+    } else {
+      files.push(path.relative(root, full))
+    }
+  }
+  return files
+}
+
+function assertPackageFileSet(packageDir: string, expectedFiles: string[]): void {
+  const actual = listPackageFiles(packageDir).sort()
+  const expected = [...expectedFiles].sort()
+  const actualSet = new Set(actual)
+  const expectedSet = new Set(expected)
+  const extra = actual.filter((file) => !expectedSet.has(file))
+  const missing = expected.filter((file) => !actualSet.has(file))
+  if (extra.length || missing.length) {
+    const details = [
+      extra.length ? `Extra files:\n${extra.map((file) => `  - ${file}`).join('\n')}` : '',
+      missing.length ? `Missing files:\n${missing.map((file) => `  - ${file}`).join('\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+    throw new Error(`Distribution package file set does not match manifest.\n${details}`)
+  }
+}
+
 function compileRuntimeScripts(packageDir: string): void {
   const configFile = path.join(packageDir, '.tsconfig.runtime.json')
   const config = {
@@ -431,6 +462,7 @@ function compileRuntimeScripts(packageDir: string): void {
       typeRoots: [path.resolve(ROOT, '..', 'node_modules', '@types')],
     },
     files: RUNTIME_SCRIPT_SOURCES.map((file) => path.join(ROOT, file)),
+    include: [],
   }
   fs.writeFileSync(configFile, JSON.stringify(config, null, 2) + '\n', 'utf8')
   const tscBin = path.resolve(ROOT, '..', 'node_modules', 'typescript', 'bin', 'tsc')
@@ -484,6 +516,14 @@ export function buildDistribution(options: BuildDistributionOptions = {}) {
   writeExecutable(path.join(packageDir, 'uninstall.sh'), uninstallScript())
   fs.writeFileSync(path.join(packageDir, 'README.md'), packageReadme(), 'utf8')
 
+  const manifestFiles = [
+    ...RUNTIME_FILES.map((file) => `mcp/${file}`),
+    'mcp/workspace-runs/.gitkeep',
+    'skill/plan-review/SKILL.md',
+    'install.sh',
+    'uninstall.sh',
+    'README.md',
+  ]
   const manifest = {
     name: PACKAGE_NAME,
     format_version: 1,
@@ -492,16 +532,10 @@ export function buildDistribution(options: BuildDistributionOptions = {}) {
       mcp: 'claude mcp add --scope user',
       skill: 'direct-copy',
     },
-    files: [
-      ...RUNTIME_FILES.map((file) => `mcp/${file}`),
-      'mcp/workspace-runs/.gitkeep',
-      'skill/plan-review/SKILL.md',
-      'install.sh',
-      'uninstall.sh',
-      'README.md',
-    ],
+    files: manifestFiles,
   }
   fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+  assertPackageFileSet(packageDir, [...manifestFiles, 'manifest.json'])
 
   return {
     outputDir,

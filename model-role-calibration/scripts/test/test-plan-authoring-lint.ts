@@ -243,6 +243,26 @@ function main() {
     })
     assert(!codes(todoBlocking).warnings.includes('uncertain_wording_outside_decision_section'))
 
+    const trackedCodeTodo = lintPlan({
+      plan: requiredPlan({
+        tasks: '- 实现时在代码中标注 TODO，等待 SmsType.RFC 正式枚举值确认后替换。',
+        blocking: '- SmsType.RFC 正式枚举值待确认；关闭标准：后端确认枚举值后替换代码 TODO。',
+      }),
+      projectRoot,
+    })
+    assert(codes(trackedCodeTodo).warnings.includes('tracked_todo_placeholder'))
+    assert(!codes(trackedCodeTodo).warnings.includes('uncertain_wording_outside_decision_section'))
+
+    const unclosedCodeTodo = lintPlan({
+      plan: requiredPlan({
+        tasks: '- 实现时在代码中标注 TODO，等待 SmsType.RFC 正式枚举值确认后替换。',
+        blocking: '- TODO confirm SmsType.RFC later.',
+      }),
+      projectRoot,
+    })
+    assert(codes(unclosedCodeTodo).warnings.includes('uncertain_wording_outside_decision_section'))
+    assert(!codes(unclosedCodeTodo).warnings.includes('tracked_todo_placeholder'))
+
     const missingRef = lintPlan({
       plan: requiredPlan({
         existingRefs: ['- path: src/missing.ts', '  lines: 1-2', '  symbol: missingSymbol', '  reason: test'].join(

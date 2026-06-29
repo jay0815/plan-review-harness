@@ -24,6 +24,19 @@ function modelSettings(model: string) {
   }
 }
 
+function listPackageFiles(root: string, dir = root): string[] {
+  const files: string[] = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...listPackageFiles(root, full))
+    } else {
+      files.push(path.relative(root, full))
+    }
+  }
+  return files
+}
+
 function main() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-review-dist-test-'))
   try {
@@ -47,6 +60,12 @@ function main() {
       createArchive: false,
     })
     assert.equal(result.packageDir, path.join(outputDir, PACKAGE_NAME))
+    const manifest = JSON.parse(fs.readFileSync(path.join(result.packageDir, 'manifest.json'), 'utf8')) as {
+      files: string[]
+    }
+    const actualPackageFiles = listPackageFiles(result.packageDir).sort()
+    const expectedPackageFiles = [...manifest.files, 'manifest.json'].sort()
+    assert.deepEqual(actualPackageFiles, expectedPackageFiles)
     for (const file of RUNTIME_FILES) {
       assert(fs.statSync(path.join(result.packageDir, 'mcp', file)).isFile())
     }

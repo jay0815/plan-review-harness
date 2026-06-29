@@ -26,6 +26,8 @@
 - Fact Check 标记为 `unsupported`、`contradicted` 或 `unverifiable` 的 issue 不得进入共识、分歧或修订，只能进入 `likely_false_positives`。
 - Fact Check 标记为 `partially_verified` 的 issue 可以进入合成结果，但必须在 `reason` 中说明只有部分事实成立，严重度不得高于 Reviewer 原始严重度。
 - `partially_verified` 不能自动成为修订指令来源；只有当 Fact Check 明确确认“核心事实”和“阻塞性/直接后果”均有支持时，才可进入 `revision_instructions`。
+- `consensus_issues` 必须有实质性 `required_plan_change`。如果没有可执行的计划修订目标，或 `required_plan_change` 只能写成空字符串、无、无需新增修订、无需修改计划，该来源只能保留在 `source_findings`，不得进入 `consensus_issues`。
+- 如果 Fact Check 只支持“弱事实存在”，但阻塞性、直接后果或计划完成标准缺口不成立，且没有需要改计划的内容，只能留在 `source_findings`，不得进入 `consensus_issues` 或 `revision_instructions`。
 - 如果 Fact Check 对某 issue 的 `reason` 明确说明严重度、因果链、具体文件内容或阻塞性缺证据，但核心事实仍成立且范围内，应使用 `disposition: retained` 或 `merged`，可以降权进入低严重度 `consensus_issues`，也可以只保留在 `source_findings` 中不生成修订指令；不得放入 `likely_false_positives`。
 - `likely_false_positives` 只能引用 `disposition` 为 `duplicate`、`unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding。任何 `retained` 或 `merged` finding 都禁止出现在 `likely_false_positives`，即使它的阻塞性、严重度或因果链被 Fact Check 降权。
 - 如果一个 issue 的核心事实成立但“blocks_execution / blocker / 必须修订”被 Fact Check 判定为放大，正确做法是：保留该 finding、在 `reason` 中说明阻塞性被降权、不要生成 `revision_instructions`；只有当整个 issue 缺少证据、被反驳、不可验证、重复或超范围时，才进入 `likely_false_positives`。
@@ -43,7 +45,7 @@
 - 字段位置、字段语义或责任归属不一致属于必须关闭的契约问题，通常是 `L2_local_change`，不得以“双方都有道理”接受不一致。
 - 只有需求尚未裁定公共 API 或复用边界时，是否拆分公共 API、是否改变既有复用边界等互斥方向才可能是 `L3_direction_decision`。如果需求已明确要求复用现有 API 或禁止新增平行 API，要求拆分的意见属于 `out_of_scope`，不得升级为 L3。
 - 对需求未提供依据的数据库、消息系统、持久化队列、能力探测或功能开关建议应降权，不得自动进入修订指令。
-- `required_plan_change` 只保留合并后的最小决策或契约修订目标；不得指定源码形态。`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
+- `required_plan_change` 只保留合并后的最小决策或契约修订目标；不得指定源码形态；不得为空或写“无需修订”。`revision_instructions` 只描述最终应修改什么，避免重复罗列同一问题。
 - 每条共识、分歧、误报和修订指令都必须填写 `source_finding_ids`。被标记为 `unsupported`、`contradicted`、`unverifiable` 或 `out_of_scope` 的 finding id 禁止出现在共识、分歧或修订中。
 - 每个 `source_finding` 必须填写 `source_issue_id`，值为 Fact Check `checked_issues` 中对应条目的 `issue_id`。一个 `issue_id` 只能对应一个 `source_finding`，禁止多对一。
 - 修订指令之间必须一致，已判定为误报的内容不得再次进入修订指令。
@@ -105,7 +107,7 @@
       "affected_nodes": [],
       "source_finding_ids": [],
       "reason": "",
-      "required_plan_change": ""
+      "required_plan_change": "补充需要关闭的最小计划决策或契约"
     }
   ],
   "disagreements": [

@@ -190,6 +190,22 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 }
 
+function normalizeMirroredTitle(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFC')
+    .replace(/["“”„‟＂'‘’‚‛＇]/g, '')
+}
+
+function hasSubstantiveRequiredPlanChange(value: unknown): boolean {
+  const text = String(value ?? '').trim()
+  if (!text) {
+    return false
+  }
+  return !/^(?:无|无需|不需要|无需(?:新增)?(?:修订|修改计划|补充计划)?|none|n\/a|not applicable)[。.!！\s]*$/i.test(
+    text,
+  )
+}
+
 function asReviewerOutput(value: unknown): ReviewerOutput {
   return isRecord(value) ? (value as ReviewerOutput) : {}
 }
@@ -320,7 +336,7 @@ function validateSynthesisSemantics(
         `Synthesis semantic validation failed: ${finding.id} source ${finding.source} != ${checked.source} for issue_id ${checked.issue_id}`,
       )
     }
-    if (finding.source_title !== checked.issue_title) {
+    if (normalizeMirroredTitle(finding.source_title) !== normalizeMirroredTitle(checked.issue_title)) {
       throw new Error(
         `Synthesis semantic validation failed: ${finding.id} source_title ${finding.source_title} != ${checked.issue_title} for issue_id ${checked.issue_id}`,
       )
@@ -433,6 +449,11 @@ function validateSynthesisSemantics(
   }
 
   for (const item of recordArray(output.consensus_issues)) {
+    if (!hasSubstantiveRequiredPlanChange(item.required_plan_change)) {
+      throw new Error(
+        `Synthesis semantic validation failed: ${item.title} consensus issue must include substantive required_plan_change`,
+      )
+    }
     const sources = new Set<string>(
       stringArray(item.source_finding_ids)
         .map((id) => byId.get(id)?.source)
